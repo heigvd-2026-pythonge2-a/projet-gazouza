@@ -6,17 +6,16 @@
 
 Psice est un simulateur de circuits électroniques destiné aux étudiants de 1re et 2e année HEIG-VD, conçu comme une alternative plus simple à LTspice. Projet de groupe de 2e année (4 personnes, environ 90 h chacune), développé avec l'assistance de l'IA.
 
-**Problème :** LTspice demande beaucoup de temps de prise en main (interface datée, syntaxe SPICE, résultats peu lisibles, ). Ce temps est perdu pour l'essentiel : comprendre le comportement des composants vus en cours.
+**Problème :** LTspice demande beaucoup de temps de prise en main (interface datée, syntaxe SPICE, résultats peu lisibles, ). Ce temps est perdu pour l'essentiel. Comprendre le comportement des composants vus en cours est ,selon l'équipe de projet, plus important.
 
 **Besoin :** dessiner un circuit, le simuler et lire tensions et courants en quelques clics, sans connaître SPICE.
 
-**Valeur ajoutée:** Psice est open source et écrit en Python (langage enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent inspecter, comprendre et étendre tout en restant dans un cadre pertinant à la formation.
+**Valeur ajoutée:** Psice est open source et écrit en Python (language enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent décoder tout en restant dans un cadre pertinant à la formation.
 
 ## 2. Objectifs
-
-- Simuler un premier circuit (diviseur, RC) en moins de 10 minutes, sans formation préalable.
-- Lire la tension d'un fil ou le courant d'un composant d'un simple clic (sonde interactive).
-- Rendre visible le comportement du circuit : animation du sens et de l'intensité du courant.
+- Simuler un premier circuit (diviseur, RC) en moins de 15 minutes, sans formation préalable.
+- Mesurer la tension d'un fil ou le courant d'un composant d'un simple clic (sonde interactive).
+- Offrir une ergonomie adaptée aux débutants en masquant la complexité de LTspice (aucune directive texte à taper, menus contextuels plus petit et paramètres de simulation guidés).
 
 ## 3. Périmètre
 
@@ -32,7 +31,7 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 
 **Hors périmètre :** circuits numériques et logiques, conception de PCB, simulation RF, version macOS/Linux, hébergement en ligne.
 
-## 4. Exigences fonctionnelles
+## 4. Exigences
 
 | Priorité | Exigence |
 | --- | --- |
@@ -51,10 +50,9 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 - **Collaboration** code sur GitHub, une branche par tâche, chaque fusion relue par un autre membre ; liste des tâches suivie dans GitHub Issues.
 - **Exécution** tout fonctionne en local, sur Windows 10 et 11, sans connexion Internet.
 
-## 6. Livrables et jalons
+## 6. Livrables et Acceptation
 
-**Livrables :** code source sur GitHub ; tests automatisés du moteur (pytest, comparaison solveur maison / ngspice sur circuits de référence : diviseur, RC, RLC, redresseur) ; application Windows zippée ; rapport de projet ; démonstration orale.
+**Livrables :** code source sur GitHub ; tests automatisés du moteur (pytest, comparaison LTSpice / solveur utilisé sur circuits de référence : diviseur, RC, RLC, redresseur) ; application Windows zippée ; rapport de projet ; démonstration orale.
 
-
-**Critère d'acceptation :** les résultats des circuits de référence s'écartent impércèptiblement d'une simulation LTSpice.
-**Critère d'acceptation optionnel :** comparaison avec LTSpice au travers d'un sondage mener dans une classe pilote de première année en génie éléctrique.
+**Critère d'acceptation :** les résultats des circuits de référence s'écartent imperceptiblement d'une simulation LTSpice.
+**Critère d'acceptation optionnel :** comparaison avec LTSpice au travers d'un sondage mené dans une classe pilote de première année en génie électrique.
