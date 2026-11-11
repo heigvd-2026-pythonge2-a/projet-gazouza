@@ -39,9 +39,9 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 | Indispensable | Simulation ngspice : point de fonctionnement (`.op`) et temporelle (`.tran`) |
 | Indispensable | Affichage des tensions de nœuds et des courants de branches ; sonde avec le clic |
 | Indispensable | Courbes (zoom, curseurs) ; sauvegarde et ouverture des schémas |
+| Indispensable | Import `.asc` LTspice ; mesures (crête, moyenne, temps de montée) ; FFT ; export |
 | Important | Analyse fréquentielle (`.ac`, diagramme de Bode) et balayage DC (`.dc`, DC Sweep) |
 | Important | Animation du courant sur le schéma ; annuler / rétablir |
-| Bonus | Import `.asc` LTspice ; mesures (crête, moyenne, temps de montée) ; FFT ; export |
 
 ## 5. Contraintes
 
