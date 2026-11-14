@@ -78,7 +78,7 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 ## Structure du repo
 
 ```
-paprika/
+Psice/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          routes FastAPI
@@ -153,7 +153,7 @@ Le script :
 2. copie le résultat dans le backend ;
 3. lance PyInstaller avec ngspice et le front inclus.
 
-Résultat : `dist/Paprika/Paprika.exe`, à distribuer sous forme de dossier zippé.
+Résultat : `dist/Pscice/Psice.exe`, à distribuer sous forme de dossier zippé.
 Aucune installation n'est nécessaire sur la machine cible.
 
 > Au premier lancement, Windows SmartScreen peut afficher un avertissement car l'exécutable
