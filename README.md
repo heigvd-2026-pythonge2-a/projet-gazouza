@@ -78,7 +78,7 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 ## Structure du repo
 
 ```
-Psice/
+projet-gazouza/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          routes FastAPI
