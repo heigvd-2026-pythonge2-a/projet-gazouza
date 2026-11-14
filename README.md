@@ -165,6 +165,11 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 4 personnes, environ 90 h chacune.
 
+- **Antoine Bezençon** - @AntoineBezencon
+- Damiens Bignens - @BignensDamiens
+- Noé Guenin - @Guenin04
+- Noémi Voélin - @VoelinNoemi
+
 | Rôle | Responsabilité | Personne |
 |---|---|---|
 | Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | *à définir* |
