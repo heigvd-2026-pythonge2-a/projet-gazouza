@@ -165,10 +165,10 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 4 personnes, environ 90 h chacune.
 
-- **Antoine Bezençon** - @AntoineBezencon
-- Damiens Bignens - @BignensDamiens
-- Noé Guenin - @Guenin04
-- Noémi Voélin - @VoelinNoemi
+- **Antoine Bezençon** 
+- Damiens Bignens
+- Noé Guenin 
+- Noémi Voélin
 
 | Rôle | Responsabilité | Personne |
 |---|---|---|
