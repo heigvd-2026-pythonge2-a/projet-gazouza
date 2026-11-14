@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# psice
-=======
-# Psice *(nom provisoire)*
->>>>>>> 7cf41f7dbc12c8ec5504eac13e92339159c7a0d4
+# Psice 
 
 Simulateur de circuits électroniques inspiré de LTspice, avec une interface moderne
 et ngspice comme moteur de simulation.
