@@ -42,19 +42,19 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 
 ```
 ┌──────────────────────────── Fenêtre pywebview ─────────────────────────────┐
-│  Frontend React + TypeScript                                                │
-│  ┌──────────────────────┐   ┌────────────────────────┐                      │
-│  │ Éditeur de schéma    │   │ Courbes + sondes       │                      │
-│  │ (Konva / SVG)        │   │ (uPlot)                │                      │
-│  └──────────┬───────────┘   └───────────▲────────────┘                      │
-└─────────────┼───────────────────────────┼───────────────────────────────────┘
+│  Frontend React + TypeScript                                               │
+│  ┌──────────────────────┐   ┌────────────────────────┐                     │
+│  │ Éditeur de schéma    │   │ Courbes + sondes       │                     │
+│  │ (Konva / SVG)        │   │ (uPlot)                │                     │
+│  └──────────┬───────────┘   └───────────▲────────────┘                     │
+└─────────────┼───────────────────────────┼──────────────────────────────────┘
               │  schéma (JSON)            │  résultats (JSON)
               ▼                           │
-┌─────────────────────────── Backend Python (FastAPI) ────────────────────────┐
-│  netlist/     schéma JSON → netlist SPICE                                    │
-│  importers/   import .asc LTspice                                            │
-│  engines/     ngspice  │  solveur maison (MNA)                               │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────── Backend Python (FastAPI) ───────────────────────┐
+│  netlist/     schéma JSON → netlist SPICE                                  │
+│  importers/   import .asc LTspice                                          │
+│  engines/     ngspice  │  solveur maison (MNA)                             │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - Le **frontend** ne fait que l'affichage et l'édition. Toute la logique de simulation est dans le backend.
@@ -186,5 +186,10 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 ## Licence
 
-*À définir.* Attention : ngspice est distribué sous licence BSD modifiée ; vérifier la compatibilité
-avant de choisir la licence du projet.
+Ce projet est distribué sous les termes de la **licence MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+### Logiciels tiers et dépendances
+
+Psice intègre ou utilise des composants externes soumis à leurs propres licences :
+- **ngspice** (inclus dans les binaires Windows) : distribué sous licence **BSD 3-Clause**. Les mentions de copyright et les termes de la licence ngspice doivent être conservés lors de la distribution.
+- **Dépendances logicielles** : Les bibliothèques tierces (écosystèmes Python et Node.js, `pywebview`, etc.) sont régies par leurs licences respectives (MIT, Apache-2.0, ISC, etc.).
