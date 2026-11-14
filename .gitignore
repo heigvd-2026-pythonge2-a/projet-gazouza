@@ -1,0 +1,51 @@
+# ==========================================
+# Python
+# ==========================================
+# Cache bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environnements virtuels
+.venv/
+venv/
+ENV/
+env/
+
+# Outils de test et de build
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# ==========================================
+# Fichiers de sortie Ngspice / Simulations
+# ==========================================
+*.log
+*.raw
+*.out
+*.cir.out
+*.meas
+*.dat
+
+
+# ==========================================
+# IDEs et Éditeurs de code
+# ==========================================
+# VS Code
+.vscode/
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+
+# ==========================================
+# Système d'exploitation
+# ==========================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
