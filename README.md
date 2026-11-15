@@ -16,8 +16,6 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
   fréquentiel (`.ac`), balayage DC (`.dc`).
 - Afficher les résultats avec une **sonde interactive** : cliquer sur un fil affiche sa tension,
   cliquer sur un composant affiche son courant.
-- Proposer un **solveur maison** (analyse nodale modifiée, circuits linéaires en DC et en temporel)
-  sélectionnable dans l'interface, pour comparer ses résultats à ceux de ngspice.
 - Livrer une **application Windows** lançable d'un double-clic, sans installation.
 
 ### Fonctionnalités prévues
@@ -29,11 +27,10 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 | MVP | Génération de netlist SPICE et simulation via ngspice |
 | MVP | Visualiseur de courbes avec sonde interactive |
 | MVP | Sauvegarde et ouverture des schémas |
-| Ensuite | Diodes, transistors (BJT, MOSFET), modèles `.model` / `.subckt` |
-| Ensuite | Analyses AC (diagramme de Bode) et DC, balayage de paramètres |
-| Ensuite | Annuler / rétablir, copier-coller |
-| Ensuite | Solveur maison en mode pédagogique |
-| Bonus | Import des schémas LTspice (`.asc`) |
+| Important | Diodes, transistors (BJT, MOSFET), modèles `.model` / `.subckt` |
+| Important | Analyses AC (diagramme de Bode) et DC, balayage de paramètres |
+| Important | Annuler / rétablir, copier-coller |
+| Important | Import des schémas LTspice (`.asc`) |
 | Bonus | Mesures sur les courbes (crête, moyenne, temps de montée), FFT, export |
 
 ---
@@ -53,12 +50,12 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 ┌─────────────────────────── Backend Python (FastAPI) ───────────────────────┐
 │  netlist/     schéma JSON → netlist SPICE                                  │
 │  importers/   import .asc LTspice                                          │
-│  engines/     ngspice  │  solveur maison (MNA)                             │
+│  engines/     ngspice                                                      │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
 - Le **frontend** ne fait que l'affichage et l'édition. Toute la logique de simulation est dans le backend.
-- Le **contrat d'API** (format du schéma et des résultats) est défini en Python avec Pydantic.
+- Le **contrat d'API** (format du schéma et résultats) est défini en Python avec Pydantic.
   Les types TypeScript du front sont générés à partir du schéma OpenAPI de FastAPI
   (`openapi-typescript`), pour que les deux côtés restent synchronisés.
 - Tout tourne **en local** : aucun hébergement nécessaire.
@@ -85,7 +82,7 @@ projet-gazouza/
 │   │   ├── models/       modèles Pydantic (contrat d'API)
 │   │   ├── netlist/      génération de netlist SPICE
 │   │   ├── importers/    import .asc LTspice
-│   │   └── engines/      ngspice + solveur maison
+│   │   └── engines/      intégration ngspice
 │   ├── vendor/ngspice/   binaires ngspice Windows
 │   ├── launcher.py       démarre le serveur et ouvre la fenêtre
 │   ├── tests/
@@ -137,9 +134,6 @@ cd backend
 pytest
 ```
 
-Les tests de simulation comparent les résultats du solveur maison à ceux de ngspice
-sur une série de circuits de référence (diviseur de tension, RC, RLC, redresseur…).
-
 ---
 
 ## Build de l'application Windows
@@ -175,7 +169,7 @@ Aucune installation n'est nécessaire sur la machine cible.
 | Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | *à définir* |
 | Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | *à définir* |
 | Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | *à définir* |
-| Simulation | Intégration ngspice, analyses, solveur maison, packaging | *à définir* |
+| Simulation | Intégration ngspice, analyses, packaging | *à définir* |
 
 ### Jalons
 
@@ -184,7 +178,7 @@ Aucune installation n'est nécessaire sur la machine cible.
 | S1–2 | Repo, CI, contrat d'API, ngspice validé sur toutes les machines, prototype netlist → courbe |
 | S3–5 | Éditeur basique de bout en bout : dessiner un circuit RC et le simuler |
 | S6–8 | Analyses AC et DC, sonde interactive, diodes et transistors, sauvegarde |
-| S9–10 | Solveur maison, import `.asc`, annuler/rétablir, mesures |
+| S9–10 | Import `.asc`, annuler/rétablir, mesures |
 | S11–12 | Tests, stabilisation, build final, rapport et démo |
 
 ---
