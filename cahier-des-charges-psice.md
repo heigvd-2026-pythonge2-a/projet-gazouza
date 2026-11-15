@@ -6,26 +6,26 @@
 
 Psice est un simulateur de circuits électroniques destiné aux étudiants de 1re et 2e année HEIG-VD, conçu comme une alternative plus simple à LTspice. Projet de groupe de 2e année (4 personnes, environ 90 h chacune), développé avec l'assistance de l'IA.
 
-**Problème :** LTspice demande beaucoup de temps de prise en main (interface datée, syntaxe SPICE, résultats peu lisibles, ). Ce temps est perdu pour l'essentiel. Comprendre le comportement des composants vus en cours est ,selon l'équipe de projet, plus important.
+**Problème :** LTspice demande beaucoup de temps de prise en main (interface datée, syntaxe SPICE, résultats peu lisibles). Ce temps est perdu pour l'essentiel. Comprendre le comportement des composants vus en cours est, selon l'équipe de projet, plus important.
 
 **Besoin :** dessiner un circuit, le simuler et lire tensions et courants en quelques clics, sans connaître SPICE.
 
-**Valeur ajoutée:** Psice est open source (licence MIT) et écrit en Python (language enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent décoder tout en restant dans un cadre pertinant à la formation.
+**Valeur ajoutée:** Psice est open source (licence MIT) et écrit en Python (langage enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent décoder tout en restant dans un cadre pertinent à la formation.
 
 ## 2. Objectifs
 - Simuler un premier circuit (diviseur, RC) en moins de 15 minutes, sans formation préalable.
 - Mesurer la tension d'un fil ou le courant d'un composant d'un simple clic (sonde interactive).
-- Offrir une ergonomie adaptée aux débutants en masquant la complexité de LTspice (aucune directive texte à taper, menus contextuels plus petit et paramètres de simulation guidés).
+- Offrir une ergonomie adaptée aux débutants en masquant la complexité de LTspice (aucune directive texte à taper, menus contextuels plus petits et paramètres de simulation guidés).
 
 ## 3. Périmètre
 
-| Famille | Composants d'exemple |
+| Famille | Composants inclus |
 | --- | --- |
 | Passifs | R, C, L |
 | Sources | Tension et courant : AC, DC, PULSE, SIN ; masse |
-| Diodes | 1N4148 (signal), 1N4007 (redressement), Zener, LED |
-| Ampli-op | Modèle idéal + un modèle réel (TL081 ou LM741) |
-| Transistors | BJT NPN 2N3904 / PNP 2N3906 ; MOSFET canal N 2N7000 |
+| Diodes | Diodes de signal, de redressement, Zener, LED |
+| Ampli-op | Modèles idéaux et réels |
+| Transistors | Transistors BJT (NPN / PNP) et MOSFET (canal N) |
 
 Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers JSON + modèles SPICE `.model` / `.subckt`), extensible sans toucher au code.
 
@@ -49,16 +49,15 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 
 ## 5. Contraintes
 
-- **Technique** interface web (React + TypeScript) affichée dans une fenêtre pywebview, backend Python. Au moins 10 % du code en Python. Le moteur ngspice (bibliothèque partagée `ngspice.dll`) est embarqué dans l'application : aucune installation séparée n'est requise et la simulation fonctionne hors ligne.
-- **Normes** symboles graphiques selon CEI 60617, symboles et unités selon CEI 60027 et SI 
+- **Technique** interface web (React + TypeScript) affichée dans une fenêtre pywebview, backend Python. Les binaires de simulation ngspice sont embarqués dans l'application : aucune installation séparée n'est requise et la simulation fonctionne hors ligne.
+- **Normes** symboles graphiques selon CEI 60617, symboles et unités selon CEI 60027 et SI.
 - **Collaboration** code sur GitHub, une branche par tâche, chaque fusion relue par un autre membre ; liste des tâches suivie dans GitHub Issues.
 - **Intégration continue** GitHub Actions exécute les tests pytest et mesure la couverture à chaque pull request ; une fusion n'est possible que si les tests passent. Couverture visée : au moins 80 % du code du moteur Python.
 - **Exécution** tout fonctionne en local, sur Windows 10 et 11, sans connexion Internet.
 
 ## 6. Livrables et Acceptation
 
-**Livrables :** code source sur GitHub ; tests automatisés du moteur (pytest, comparaison LTSpice / solveur utilisé sur circuits de référence : diviseur, RC, RLC, redresseur) ; application Windows zippée (ngspice inclus) ; rapport de projet ; démonstration orale.
+**Livrables :** code source sur GitHub ; tests automatisés du moteur (pytest) ; application Windows zippée (ngspice inclus) ; rapport de projet ; démonstration orale.
 
 **Critères d'acceptation :**
-- Pour chaque circuit de référence, l'écart relatif entre Psice et LTspice est ≤ 1 % sur les tensions de nœuds et courants de branches (`.op`) et sur les points échantillonnés de la simulation temporelle (`.tran`).
-- Toutes les exigences « Indispensable » de la section 4 sont fonctionnelles dans l'application livrée.
+- Toutes les exigences « Indispensable » et « Important » de la section 4 sont fonctionnelles dans l'application livrée.
