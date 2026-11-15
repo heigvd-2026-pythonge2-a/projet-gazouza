@@ -64,8 +64,8 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 
 | Partie | Technologies |
 |---|---|
-| Frontend | React, TypeScript, Vite, Konva (ou SVG), uPlot, Zustand |
-| Backend | Python 3, FastAPI, Pydantic, NumPy / SciPy |
+| Frontend | React, TypeScript, Vite, Konva (ou SVG), uPlot, Zustand (géré avec **pnpm**) |
+| Backend | Python 3, FastAPI, Pydantic, NumPy / SciPy (géré avec **uv**) |
 | Simulation | ngspice (binaires Windows inclus dans le projet) |
 | Application | pywebview (fenêtre native), PyInstaller (packaging) |
 | Qualité | pytest, ESLint, GitHub Actions |
@@ -86,14 +86,16 @@ projet-gazouza/
 │   ├── vendor/ngspice/   binaires ngspice Windows
 │   ├── launcher.py       démarre le serveur et ouvre la fenêtre
 │   ├── tests/
-│   └── pyproject.toml
+│   ├── pyproject.toml
+│   └── uv.lock
 ├── frontend/
 │   ├── src/
 │   │   ├── editor/       éditeur de schéma
 │   │   ├── plot/         courbes et sondes
 │   │   ├── store/        état de l'application, annuler/rétablir
 │   │   └── api/          client vers le backend
-│   └── package.json
+│   ├── package.json
+│   └── pnpm-lock.yaml
 ├── build.ps1             build complet → application Windows
 └── README.md
 ```
@@ -105,8 +107,8 @@ projet-gazouza/
 ### Prérequis
 
 - Windows 10 ou 11
-- Python 3.12+
-- Node.js 20+
+- Python 3.12+ & **uv** (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
+- Node.js 20+ & **pnpm** (`corepack enable` ou `npm install -g pnpm`)
 - ngspice placé dans `backend/vendor/ngspice/` *(procédure à compléter)*
 
 ### Lancer en mode développement
@@ -114,15 +116,13 @@ projet-gazouza/
 ```powershell
 # Terminal 1 — backend
 cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uv sync
+uv run uvicorn app.main:app --reload
 
 # Terminal 2 — frontend
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Puis ouvrir http://localhost:5173.
@@ -131,7 +131,7 @@ Puis ouvrir http://localhost:5173.
 
 ```powershell
 cd backend
-pytest
+uv run pytest
 ```
 
 ---
@@ -143,11 +143,11 @@ pytest
 ```
 
 Le script :
-1. compile le frontend (`npm run build`) ;
+1. compile le frontend (`pnpm build`) ;
 2. copie le résultat dans le backend ;
-3. lance PyInstaller avec ngspice et le front inclus.
+3. lance PyInstaller avec ngspice et le front inclus (`uv run pyinstaller ...`).
 
-Résultat : `dist/Pscice/Psice.exe`, à distribuer sous forme de dossier zippé.
+Résultat : `dist/Psice/Psice.exe`, à distribuer sous forme de dossier zippé.
 Aucune installation n'est nécessaire sur la machine cible.
 
 > Au premier lancement, Windows SmartScreen peut afficher un avertissement car l'exécutable
