@@ -12,8 +12,7 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 ## Objectifs
 
 - Dessiner un schéma électronique dans un éditeur graphique (composants, fils, masse).
-- Simuler le circuit avec **ngspice** : point de fonctionnement (`.op`), temporel (`.tran`),
-  fréquentiel (`.ac`), balayage DC (`.dc`).
+- Simuler le circuit avec **ngspice** : point de fonctionnement (.op) et temporel (.tran) en priorité MVP (analyses AC et balayage DC prévues en phase « Important »).
 - Afficher les résultats avec une **sonde interactive** : cliquer sur un fil affiche sa tension,
   cliquer sur un composant affiche son courant.
 - Livrer une **application Windows** lançable d'un double-clic, sans installation.
@@ -30,7 +29,7 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 | Important | Diodes, amplis-op, transistors (BJT, MOSFET), modèles `.model` / `.subckt` |
 | Important | Analyses AC (diagramme de Bode) et DC, balayage de paramètres |
 | Important | Animation du courant sur le schéma, annuler / rétablir, copier-coller |
-| Important | Import des schémas LTspice (`.asc`) |
+| Important | Import des schémas LTspice (.asc) (restreint aux composants supportés du périmètre) |
 | Important | Mesures sur les courbes (crête, moyenne, temps de montée) et export (PNG, CSV, netlist) |
 | Bonus | FFT d'une courbe temporelle |
 
