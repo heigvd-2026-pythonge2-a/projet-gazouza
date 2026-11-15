@@ -41,11 +41,11 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 | Indispensable | Courbes (zoom, curseurs) ; sauvegarde et ouverture des schémas (format JSON) |
 | Important | Import des fichiers `.asc` LTspice contenant uniquement des composants du périmètre (section 3) |
 | Important | Mesures sur les courbes : crête, moyenne, temps de montée |
-| Important | FFT d'une courbe temporelle |
 | Important | Export : schéma en PNG, courbes en CSV, netlist SPICE |
 | Important | Analyse fréquentielle (`.ac`, diagramme de Bode) : l'utilisateur choisit la source d'entrée, l'excitation AC est configurée automatiquement |
 | Important | Balayage DC (`.dc`, DC Sweep) |
 | Important | Animation du courant sur le schéma ; annuler / rétablir |
+| Bonus | FFT d'une courbe temporelle |
 
 ## 5. Contraintes
 

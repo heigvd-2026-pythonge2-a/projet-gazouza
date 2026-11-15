@@ -27,11 +27,12 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 | MVP | Génération de netlist SPICE et simulation via ngspice |
 | MVP | Visualiseur de courbes avec sonde interactive |
 | MVP | Sauvegarde et ouverture des schémas |
-| Important | Diodes, transistors (BJT, MOSFET), modèles `.model` / `.subckt` |
+| Important | Diodes, amplis-op, transistors (BJT, MOSFET), modèles `.model` / `.subckt` |
 | Important | Analyses AC (diagramme de Bode) et DC, balayage de paramètres |
-| Important | Annuler / rétablir, copier-coller |
+| Important | Animation du courant sur le schéma, annuler / rétablir, copier-coller |
 | Important | Import des schémas LTspice (`.asc`) |
-| Bonus | Mesures sur les courbes (crête, moyenne, temps de montée), FFT, export |
+| Important | Mesures sur les courbes (crête, moyenne, temps de montée) et export (PNG, CSV, netlist) |
+| Bonus | FFT d'une courbe temporelle |
 
 ---
 
@@ -177,8 +178,8 @@ Aucune installation n'est nécessaire sur la machine cible.
 |---|---|
 | S1–2 | Repo, CI, contrat d'API, ngspice validé sur toutes les machines, prototype netlist → courbe |
 | S3–5 | Éditeur basique de bout en bout : dessiner un circuit RC et le simuler |
-| S6–8 | Analyses AC et DC, sonde interactive, diodes et transistors, sauvegarde |
-| S9–10 | Import `.asc`, annuler/rétablir, mesures |
+| S6–8 | Analyses AC et DC, sonde interactive, diodes, amplis-op et transistors, sauvegarde |
+| S9–10 | Import `.asc`, annuler/rétablir, mesures et export |
 | S11–12 | Tests, stabilisation, build final, rapport et démo |
 
 ---
