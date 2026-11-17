@@ -2,6 +2,8 @@
 
 *Simulateur de circuits électroniques — HEIG-VD, 10 novembre 2026*
 
+**Équipe :** Antoine Bezençon (chef de projet), Damien Bignens, Noé Guenin, Noémi Voélin
+
 ## 1. Contexte et besoin
 
 Psice est un simulateur de circuits électroniques destiné aux étudiants de 1re et 2e année HEIG-VD, conçu comme une alternative plus simple à LTspice. Projet de groupe de 2e année (4 personnes, environ 90 h chacune), développé avec l'assistance de l'IA.
@@ -10,7 +12,7 @@ Psice est un simulateur de circuits électroniques destiné aux étudiants de 1r
 
 **Besoin :** dessiner un circuit, le simuler et lire tensions et courants en quelques clics, sans connaître SPICE.
 
-**Valeur ajoutée:** Psice est open source (licence MIT) et écrit en Python (langage enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent décoder tout en restant dans un cadre pertinent à la formation.
+**Valeur ajoutée :** Psice est open source (licence MIT) et écrit en Python (langage enseigné à la HEIG-VD), ce qui transforme le simulateur d'une « boîte noire » en un outil transparent que les étudiants et enseignants peuvent décoder tout en restant dans un cadre pertinent à la formation.
 
 ## 2. Objectifs
 - Simuler un premier circuit (diviseur, RC) en moins de 15 minutes, sans formation préalable.
@@ -49,13 +51,35 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 
 ## 5. Contraintes
 
-- **Technique** interface web (React + TypeScript) affichée dans une fenêtre pywebview, backend Python. Les binaires de simulation ngspice sont embarqués dans l'application : aucune installation séparée n'est requise et la simulation fonctionne hors ligne.
-- **Normes** symboles graphiques selon CEI 60617, symboles et unités selon CEI 60027 et SI.
-- **Collaboration** code sur GitHub, une branche par tâche, chaque fusion relue par un autre membre ; liste des tâches suivie dans GitHub Issues.
-- **Intégration continue** GitHub Actions exécute les tests pytest et mesure la couverture à chaque pull request ; une fusion n'est possible que si les tests passent. Couverture visée : au moins 80 % du code du moteur Python.
-- **Exécution** tout fonctionne en local, sur Windows 10 et 11, sans connexion Internet.
+- **Technique :** interface web (React + TypeScript) affichée dans une fenêtre pywebview, backend Python. Les binaires de simulation ngspice sont embarqués dans l'application : aucune installation séparée n'est requise et la simulation fonctionne hors ligne.
+- **Normes :** symboles graphiques selon CEI 60617, symboles et unités selon CEI 60027 et SI.
+- **Collaboration :** code sur GitHub, une branche par tâche, chaque fusion relue par un autre membre ; liste des tâches suivie dans GitHub Issues.
+- **Intégration continue :** GitHub Actions exécute les tests pytest et mesure la couverture à chaque pull request ; une fusion n'est possible que si les tests passent. Couverture visée : au moins 80 % du code du moteur Python.
+- **Exécution :** tout fonctionne en local, sur Windows 10 et 11, sans connexion Internet.
 
-## 6. Livrables et Acceptation
+## 6. Organisation et planification
+
+Équipe de 4 personnes (environ 90 h chacune, soit environ 360 h au total), dirigée par Antoine Bezençon (chef de projet).
+
+| Rôle | Responsabilité | Personne | Heures estimées |
+| --- | --- | --- | --- |
+| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | *à définir* | env. 90 h |
+| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | *à définir* | env. 90 h |
+| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | *à définir* | env. 90 h |
+| Simulation | Intégration ngspice, analyses, packaging | *à définir* | env. 90 h |
+
+**Jalons :**
+
+| Semaines | Objectif | Heures estimées (équipe) |
+| --- | --- | --- |
+| S1–2 | Repo, CI, contrat d'API, ngspice validé sur toutes les machines, prototype netlist → courbe | env. 50 h |
+| S3–5 | Éditeur basique de bout en bout : dessiner un circuit RC et le simuler | env. 90 h |
+| S6–8 | Analyses AC et DC, sonde interactive, diodes, amplis-op et transistors, sauvegarde | env. 100 h |
+| S9–10 | Import `.asc`, annuler/rétablir, mesures et export | env. 60 h |
+| S11–12 | Tests, stabilisation, build final, rapport et démo | env. 60 h |
+| **Total** | | **env. 360 h** |
+
+## 7. Livrables et acceptation
 
 **Livrables :** code source sur GitHub ; tests automatisés du moteur (pytest) ; application Windows zippée (ngspice inclus) ; rapport de projet ; démonstration orale.
 
