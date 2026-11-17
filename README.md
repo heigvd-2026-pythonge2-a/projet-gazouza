@@ -159,8 +159,8 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 4 personnes, environ 90 h chacune.
 
-- **Antoine Bezençon** 
-- Damiens Bignens
+- **Antoine Bezençon** (chef de projet)
+- Damien Bignens
 - Noé Guenin 
 - Noémi Voélin
 
