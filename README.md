@@ -166,10 +166,10 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 | Rôle | Responsabilité | Personne |
 |---|---|---|
-| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | *à définir* |
-| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | *à définir* |
-| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | *à définir* |
-| Simulation | Intégration ngspice, analyses, packaging | *à définir* |
+| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | Noé Guenin  |
+| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | Noémi Voélin |
+| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | Damien Bignens |
+| Simulation | Intégration ngspice, analyses, packaging | **Antoine Bezençon** |
 
 ### Jalons
 
