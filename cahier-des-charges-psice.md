@@ -63,10 +63,10 @@ Les composants et leurs symboles sont stockés dans une bibliothèque (fichiers 
 
 | Rôle | Responsabilité | Personne | Heures estimées |
 | --- | --- | --- | --- |
-| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | *à définir* | env. 90 h |
-| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | *à définir* | env. 90 h |
-| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | *à définir* | env. 90 h |
-| Simulation | Intégration ngspice, analyses, packaging | *à définir* | env. 90 h |
+| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | Noé Guenin | env. 90 h |
+| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | Noémi Voélin | env. 90 h |
+| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | Damien Bignens | env. 90 h |
+| Simulation | Intégration ngspice, analyses, packaging | **Antoine Bezençon** | env. 90 h |
 
 **Jalons :**
 
