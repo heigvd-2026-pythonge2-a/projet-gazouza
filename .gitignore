@@ -56,3 +56,8 @@ frontend/dist/
 Thumbs.db
 ehthumbs.db
 desktop.ini
+# ==========================================
+# Assistants IA
+# ==========================================
+# Réglages personnels Claude Code (les réglages d'équipe .claude/settings.json sont commités)
+.claude/settings.local.json

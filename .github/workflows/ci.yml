@@ -6,23 +6,19 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'pyproject.toml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+      - 'shared/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'pyproject.toml'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
+      - 'shared/**'
       - '.github/workflows/ci.yml'
 
 jobs:
   backend:
-    name: Backend (uv, pytest & coverage)
+    name: Backend (uv, ruff, pytest & coverage)
     runs-on: windows-latest
 
     defaults:
@@ -45,11 +41,21 @@ jobs:
       - name: Installation des dépendances
         run: uv sync --locked --all-extras --dev
 
+      - name: Lint et formatage (ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
       - name: Exécution des tests et couverture (pytest)
         run: uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=80
 
+      - name: Contrat d'API à jour (shared/openapi.json)
+        run: |
+          uv run python scripts/export_openapi.py
+          git diff --exit-code -- ../shared/openapi.json
+
   frontend:
-    name: Frontend (pnpm, ESLint & Build)
+    name: Frontend (pnpm, ESLint, Prettier & Build)
     runs-on: windows-latest
 
     defaults:
@@ -60,23 +66,32 @@ jobs:
       - name: Checkout du dépôt
         uses: actions/checkout@v4
 
+      # La version de pnpm est lue dans le champ "packageManager" de frontend/package.json.
       - name: Installation de pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          package_json_file: frontend/package.json
 
-      - name: Configuration de Node.js 20
+      - name: Configuration de Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Installation des dépendances
         run: pnpm install --frozen-lockfile
 
+      - name: Types TypeScript à jour (src/api/schema.gen.ts)
+        run: |
+          pnpm gen:api
+          git diff --exit-code -- src/api/schema.gen.ts
+
       - name: Vérification du linter (ESLint)
         run: pnpm lint
+
+      - name: Vérification du formatage (Prettier)
+        run: pnpm format:check
 
       - name: Build de vérification
         run: pnpm build

@@ -1,0 +1,5 @@
+{
+  "kind": "tran",
+  "stop_time": 0.005,
+  "max_step": 1e-05
+}

@@ -96,6 +96,10 @@ projet-gazouza/
 │   │   └── api/          client vers le backend
 │   ├── package.json
 │   └── pnpm-lock.yaml
+├── shared/
+│   ├── openapi.json      contrat d'API exporté (généré)
+│   └── fixtures/         circuits de référence partagés front/back
+├── AGENTS.md             instructions pour les assistants IA (+ CLAUDE.md)
 ├── build.ps1             build complet → application Windows
 └── README.md
 ```
@@ -108,7 +112,7 @@ projet-gazouza/
 
 - Windows 10 ou 11
 - Python 3.12+ & **uv** (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
-- Node.js 20+ & **pnpm** (`corepack enable` ou `npm install -g pnpm`)
+- Node.js 22.12+ & **pnpm** (`corepack enable` : la version est fixée dans `frontend/package.json`)
 - ngspice placé dans `backend/vendor/ngspice/` *(procédure à compléter)*
 
 ### Lancer en mode développement
@@ -127,12 +131,35 @@ pnpm dev
 
 Puis ouvrir http://localhost:5173.
 
-### Tests
+### Vérifications avant commit
+
+Une fois par clone, activer les hooks (ruff et Prettier lancés automatiquement à chaque commit) :
 
 ```powershell
 cd backend
-uv run pytest
+uv run pre-commit install
 ```
+
+```powershell
+cd backend
+uv run pytest                     # tests + fixtures du contrat
+cd ../frontend
+pnpm lint ; pnpm build            # lint + vérification de types
+```
+
+### Modifier le contrat d'API
+
+Le contrat est défini dans `backend/app/models/`. Après une modification :
+
+```powershell
+cd backend
+uv run python scripts/export_openapi.py   # → shared/openapi.json
+cd ../frontend
+pnpm gen:api                              # → src/api/schema.gen.ts
+```
+
+La CI échoue si l'un de ces fichiers générés n'est pas à jour. Les règles de travail
+(propriété des modules, contrat, conventions) sont dans [AGENTS.md](AGENTS.md).
 
 ---
 
