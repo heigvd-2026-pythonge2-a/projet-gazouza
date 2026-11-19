@@ -1,0 +1,22 @@
+{
+  "netlist": "* divider_op\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n",
+  "nets": {
+    "in": [
+      "w1"
+    ],
+    "out": [
+      "w2"
+    ],
+    "0": [
+      "w3",
+      "w4"
+    ]
+  },
+  "components": {
+    "V1": "c1",
+    "R1": "c2",
+    "R2": "c3"
+  },
+  "errors": [],
+  "warnings": []
+}

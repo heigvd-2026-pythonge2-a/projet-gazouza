@@ -1,0 +1,22 @@
+# Normalise les fins de ligne : LF dans le dépôt et dans les copies de travail,
+# quel que soit l'éditeur ou l'assistant IA qui écrit le fichier.
+* text=auto eol=lf
+
+# Scripts Windows : CRLF obligatoire
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaires (ngspice embarqué, images, archives)
+*.exe binary
+*.dll binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+
+# Fichiers générés : diff replié dans les PR
+shared/openapi.json linguist-generated=true
+frontend/src/api/schema.gen.ts linguist-generated=true
+backend/uv.lock linguist-generated=true
+frontend/pnpm-lock.yaml linguist-generated=true

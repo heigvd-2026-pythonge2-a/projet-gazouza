@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "id": "c1",
+      "type": "voltage_source",
+      "name": "V1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "dc": "10"
+      }
+    },
+    {
+      "id": "c2",
+      "type": "resistor",
+      "name": "R1",
+      "position": {
+        "x": 4,
+        "y": -2
+      },
+      "rotation": 90,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c3",
+      "type": "resistor",
+      "name": "R2",
+      "position": {
+        "x": 8,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c4",
+      "type": "ground",
+      "name": "GND1",
+      "position": {
+        "x": 0,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    },
+    {
+      "id": "c5",
+      "type": "ground",
+      "name": "GND2",
+      "position": {
+        "x": 8,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "points": [
+        {
+          "x": 0,
+          "y": -1
+        },
+        {
+          "x": 0,
+          "y": -2
+        },
+        {
+          "x": 2,
+          "y": -2
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "points": [
+        {
+          "x": 6,
+          "y": -2
+        },
+        {
+          "x": 8,
+          "y": -2
+        },
+        {
+          "x": 8,
+          "y": -1
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "points": [
+        {
+          "x": 0,
+          "y": 1
+        },
+        {
+          "x": 0,
+          "y": 4
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "points": [
+        {
+          "x": 8,
+          "y": 1
+        },
+        {
+          "x": 8,
+          "y": 4
+        }
+      ]
+    }
+  ]
+}

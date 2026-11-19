@@ -1,0 +1,63 @@
+{
+  "analysis": "op",
+  "axis": null,
+  "traces": [
+    {
+      "name": "v(in)",
+      "kind": "voltage",
+      "unit": "V",
+      "net": "in",
+      "component_id": null,
+      "values": [
+        10.0
+      ],
+      "imag": null
+    },
+    {
+      "name": "v(out)",
+      "kind": "voltage",
+      "unit": "V",
+      "net": "out",
+      "component_id": null,
+      "values": [
+        5.0
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(V1)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c1",
+      "values": [
+        -0.005
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(R1)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c2",
+      "values": [
+        0.005
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(R2)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c3",
+      "values": [
+        0.005
+      ],
+      "imag": null
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

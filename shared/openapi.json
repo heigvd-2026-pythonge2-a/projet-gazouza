@@ -1,0 +1,692 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Psice API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/netlist": {
+      "post": {
+        "summary": "Generate Netlist",
+        "description": "Schematic -> SPICE netlist. Owner: Damien.",
+        "operationId": "generate_netlist_api_netlist_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Schematic"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetlistResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulate": {
+      "post": {
+        "summary": "Simulate",
+        "description": "Schematic + analysis -> results. Owners: Damien (route), Antoine (engine).",
+        "operationId": "simulate_api_simulate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcAnalysis": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "ac",
+            "title": "Kind",
+            "default": "ac"
+          },
+          "input_source_id": {
+            "type": "string",
+            "title": "Input Source Id",
+            "description": "Component id of the source used as AC input."
+          },
+          "start_frequency": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Start Frequency"
+          },
+          "stop_frequency": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Stop Frequency"
+          },
+          "points_per_decade": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Points Per Decade",
+            "default": 20
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_source_id",
+          "start_frequency",
+          "stop_frequency"
+        ],
+        "title": "AcAnalysis"
+      },
+      "Axis": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "'time', 'frequency' or the swept source name."
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "description": "'s', 'Hz', 'V' or 'A'."
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "unit",
+          "values"
+        ],
+        "title": "Axis",
+        "description": "Independent variable (time, frequency or swept value). Absent for `.op`."
+      },
+      "Component": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Stable unique id, generated by the editor (e.g. 'c1')."
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Library id of the component (e.g. 'resistor', 'ground')."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Reference shown to the user (e.g. 'R1')."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "rotation": {
+            "type": "integer",
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "title": "Rotation",
+            "default": 0
+          },
+          "mirror": {
+            "type": "boolean",
+            "title": "Mirror",
+            "default": false
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Params",
+            "description": "Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'})."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "name",
+          "position"
+        ],
+        "title": "Component",
+        "description": "A placed component instance."
+      },
+      "DcAnalysis": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "dc",
+            "title": "Kind",
+            "default": "dc"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "Component id of the swept source."
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "stop": {
+            "type": "number",
+            "title": "Stop"
+          },
+          "step": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "start",
+          "stop",
+          "step"
+        ],
+        "title": "DcAnalysis"
+      },
+      "Diagnostic": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id"
+          },
+          "wire_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wire Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "Diagnostic",
+        "description": "An error or warning, optionally pointing to the faulty element so the UI can\nhighlight it."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "NetlistResult": {
+        "properties": {
+          "netlist": {
+            "type": "string",
+            "title": "Netlist",
+            "description": "SPICE netlist, directly runnable by ngspice if no errors."
+          },
+          "nets": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Nets",
+            "description": "SPICE node name -> ids of the wires belonging to that node."
+          },
+          "components": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Components",
+            "description": "SPICE element name (e.g. 'R1') -> component id in the schematic."
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "netlist"
+        ],
+        "title": "NetlistResult"
+      },
+      "OpAnalysis": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "op",
+            "title": "Kind",
+            "default": "op"
+          }
+        },
+        "type": "object",
+        "title": "OpAnalysis"
+      },
+      "Point": {
+        "properties": {
+          "x": {
+            "type": "integer",
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "title": "Y"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Point",
+        "description": "Position on the grid, in grid units."
+      },
+      "Schematic": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Version",
+            "default": 1
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/Component"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "wires": {
+            "items": {
+              "$ref": "#/components/schemas/Wire"
+            },
+            "type": "array",
+            "title": "Wires"
+          }
+        },
+        "type": "object",
+        "title": "Schematic",
+        "description": "Root document, saved as-is on disk (`.psice.json`)."
+      },
+      "SimulationRequest": {
+        "properties": {
+          "schematic": {
+            "$ref": "#/components/schemas/Schematic"
+          },
+          "analysis": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OpAnalysis"
+              },
+              {
+                "$ref": "#/components/schemas/TranAnalysis"
+              },
+              {
+                "$ref": "#/components/schemas/AcAnalysis"
+              },
+              {
+                "$ref": "#/components/schemas/DcAnalysis"
+              }
+            ],
+            "title": "Analysis",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "ac": "#/components/schemas/AcAnalysis",
+                "dc": "#/components/schemas/DcAnalysis",
+                "op": "#/components/schemas/OpAnalysis",
+                "tran": "#/components/schemas/TranAnalysis"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "schematic",
+          "analysis"
+        ],
+        "title": "SimulationRequest"
+      },
+      "SimulationResult": {
+        "properties": {
+          "analysis": {
+            "type": "string",
+            "enum": [
+              "op",
+              "tran",
+              "ac",
+              "dc"
+            ],
+            "title": "Analysis"
+          },
+          "axis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Axis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "traces": {
+            "items": {
+              "$ref": "#/components/schemas/Trace"
+            },
+            "type": "array",
+            "title": "Traces"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Errors"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis"
+        ],
+        "title": "SimulationResult"
+      },
+      "Trace": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "ngspice vector name, e.g. 'v(out)' or 'i(R1)'."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "voltage",
+              "current"
+            ],
+            "title": "Kind"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "V",
+              "A"
+            ],
+            "title": "Unit"
+          },
+          "net": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net",
+            "description": "SPICE node name, for voltages."
+          },
+          "component_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Id",
+            "description": "Schematic id, for currents."
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Values",
+            "description": "Real part; one value per axis point (1 for .op)."
+          },
+          "imag": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imag",
+            "description": "Imaginary part, `.ac` only."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "unit",
+          "values"
+        ],
+        "title": "Trace",
+        "description": "One node voltage or branch current."
+      },
+      "TranAnalysis": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "tran",
+            "title": "Kind",
+            "default": "tran"
+          },
+          "stop_time": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Stop Time",
+            "description": "Simulation end, in seconds."
+          },
+          "max_step": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Step",
+            "description": "Optional, in seconds."
+          }
+        },
+        "type": "object",
+        "required": [
+          "stop_time"
+        ],
+        "title": "TranAnalysis"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "Wire": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/Point"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "points"
+        ],
+        "title": "Wire",
+        "description": "A wire drawn as a polyline. Its two ends may touch pins or other wires."
+      }
+    }
+  }
+}
