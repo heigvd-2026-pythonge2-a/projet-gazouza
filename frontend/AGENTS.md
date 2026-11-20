@@ -20,5 +20,9 @@ Complète le fichier [`AGENTS.md`](../AGENTS.md) à la racine.
 - Pour développer sans backend, importe les fichiers de `shared/fixtures/` comme données.
 - Tests : `pnpm test` (vitest). Un fichier `*.test.ts` à côté du module testé ; les circuits
   de `shared/fixtures/` sont disponibles via `src/store/testFixtures.ts`.
+- Composants : Testing Library (`render`, `screen`, `userEvent`) dans un DOM simulé (jsdom).
+  Cherche les éléments par rôle et par libellé, comme l'utilisateur les voit. `src/test/editorStore.ts`
+  remet le store à zéro. Le canvas Konva ne peut pas être rendu (jsdom n'a pas de `<canvas>`) :
+  remplace `SchematicCanvas` par un `vi.mock` (voir `App.test.tsx`).
 - Un module n'importe pas les fichiers internes d'un autre module : passer par `src/store/`
   ou par une fonction exportée explicitement.
