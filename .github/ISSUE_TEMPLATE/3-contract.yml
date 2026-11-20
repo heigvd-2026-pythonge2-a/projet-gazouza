@@ -1,0 +1,52 @@
+name: 📜 Contrat d'API
+description: Proposer une modification de backend/app/models/ (format des échanges).
+title: "[Contrat] "
+labels: ["area: contract", "status: à discuter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Le contrat est partagé par tous les modules : toute modification passe par une
+        **PR dédiée**, relue par les modules qui le consomment. Retire `status: à discuter`
+        une fois la proposition validée en équipe, et ajoute le label `type:` adéquat.
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Pourquoi le contrat actuel ne suffit pas.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Modification proposée
+      description: Modèles et champs ajoutés, modifiés ou supprimés (valeurs en unités SI).
+      render: python
+    validations:
+      required: true
+  - type: checkboxes
+    id: consumers
+    attributes:
+      label: Modules impactés (relecteurs à prévenir)
+      options:
+        - label: Éditeur (Noé)
+        - label: Courbes (Noémi)
+        - label: Backend / netlist (Damien)
+        - label: Moteur (Antoine)
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Compatibilité
+      options:
+        - Rétrocompatible (ajout d'un champ optionnel…)
+        - Cassant (renommage, suppression, changement de type…)
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: À faire dans la PR
+      options:
+        - label: "`uv run python scripts/export_openapi.py` (dans backend/)"
+        - label: "`pnpm gen:api` (dans frontend/)"
+        - label: Mise à jour de shared/fixtures/

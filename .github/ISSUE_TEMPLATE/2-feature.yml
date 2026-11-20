@@ -1,0 +1,61 @@
+name: ✨ Fonctionnalité
+description: Proposer une nouvelle fonctionnalité ou une amélioration.
+title: "[Feat] "
+labels: ["type: feat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vérifie d'abord que la demande entre dans le périmètre du cahier des charges
+        (`cahier-des-charges-psice.md`). Ajoute ensuite le label `area:` du module concerné.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Module concerné
+      options:
+        - Éditeur de schéma / store (area:editor)
+        - Courbes (area:plot)
+        - Netlist, importeurs, API (area:backend)
+        - Moteur ngspice, launcher, build (area:engine)
+        - Fixtures partagées (area:fixtures)
+        - client.ts, App.tsx, CI, configs racine (area:shared)
+        - Plusieurs modules
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Besoin
+      description: Quel problème cela résout-il, et pour qui ?
+      placeholder: En tant que débutant, je veux… afin de…
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+      description: Comportement souhaité, maquette éventuelle.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      description: Comment saura-t-on que c'est terminé ?
+      value: |
+        - [ ]
+        - [ ] Tests ajoutés
+    validations:
+      required: true
+  - type: checkboxes
+    id: impacts
+    attributes:
+      label: Impacts
+      options:
+        - label: Nécessite une modification du contrat d'API (ouvrir aussi une issue « Contrat d'API »)
+        - label: Nécessite de nouvelles fixtures dans shared/fixtures/
+        - label: Nécessite une nouvelle dépendance
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées (optionnel)

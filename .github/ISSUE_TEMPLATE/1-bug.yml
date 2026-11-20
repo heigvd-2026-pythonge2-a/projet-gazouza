@@ -1,0 +1,73 @@
+name: 🐛 Bug
+description: Quelque chose ne fonctionne pas comme prévu.
+title: "[Bug] "
+labels: ["type: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de signaler ce bug ! Ajoute ensuite le label `area:` du module concerné
+        (et `prio: haute` si ça bloque une démo ou un autre module).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Module concerné
+      options:
+        - Éditeur de schéma / store (area:editor)
+        - Courbes (area:plot)
+        - Netlist, importeurs, API (area:backend)
+        - Moteur ngspice, launcher, build (area:engine)
+        - Fixtures partagées (area:fixtures)
+        - client.ts, App.tsx, CI, configs racine (area:shared)
+        - Je ne sais pas
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que se passe-t-il ?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Placer une résistance de 1k et une source de 5 V
+        2. Lancer une analyse transitoire
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+      description: Messages d'erreur, captures d'écran, extrait de log…
+    validations:
+      required: true
+  - type: textarea
+    id: circuit
+    attributes:
+      label: Circuit ou netlist (optionnel)
+      description: Fichier ou netlist qui reproduit le problème.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: ex. a8f2ac0
+  - type: dropdown
+    id: env
+    attributes:
+      label: Environnement
+      options:
+        - Application packagée (pywebview)
+        - Développement (pnpm dev + uvicorn)
+        - CI
