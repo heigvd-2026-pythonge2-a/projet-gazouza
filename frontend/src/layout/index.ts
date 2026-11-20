@@ -2,3 +2,5 @@
 export * from "./sizes";
 export { Splitter } from "./Splitter";
 export { useElementSize } from "./useElementSize";
+export { MaximizeButton } from "./MaximizeButton";
+export { loadLayout, parseLayout, saveLayout } from "./storage";
