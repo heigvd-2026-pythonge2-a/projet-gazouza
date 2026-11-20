@@ -28,7 +28,8 @@ export interface ParamDef {
 export interface ComponentDef {
   type: string;
   label: string;
-  prefix: string;
+  /** SPICE prefix. `null` for ground and label, which have no SPICE line and no `name`. */
+  prefix: string | null;
   pins: PinDef[];
   params: ParamDef[];
   symbol: SymbolShape[];
@@ -123,7 +124,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "ground",
     label: "Masse",
-    prefix: "GND",
+    prefix: null,
     pins: [{ name: "1", x: 0, y: 0 }],
     params: [],
     symbol: [
@@ -136,7 +137,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "label",
     label: "Étiquette",
-    prefix: "LBL",
+    prefix: null,
     pins: [{ name: "1", x: 0, y: 0 }],
     params: [{ name: "net", label: "Nom du nœud", unit: "", default: "out" }],
     symbol: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
@@ -150,9 +151,6 @@ export function getDef(type: string): ComponentDef {
   if (!def) throw new Error(`Unknown component type: ${type}`);
   return def;
 }
-
-/** Types whose `name` is not a SPICE name and may repeat (several grounds, labels). */
-export const UNNAMED_TYPES: ReadonlySet<string> = new Set(["ground", "label"]);
 
 export interface Bounds {
   min: GridPoint;

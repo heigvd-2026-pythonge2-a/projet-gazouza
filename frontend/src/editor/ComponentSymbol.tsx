@@ -62,7 +62,8 @@ function caption(c: PlacedComponent, def: ComponentDef): string | null {
   if (c.type === "label") return c.params.net ?? "";
   const main = def.params.find((p) => p.name !== "waveform");
   const value = main ? (c.params[main.name] ?? "") : "";
-  return value ? `${c.name}\n${value}${main?.unit ?? ""}` : c.name;
+  const name = c.name ?? "";
+  return value ? `${name}\n${value}${main?.unit ?? ""}` : name;
 }
 
 interface ComponentSymbolProps {

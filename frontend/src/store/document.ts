@@ -8,7 +8,7 @@
 // Every operation returns a new document and never mutates its input, so undo/redo can later
 // be implemented by keeping snapshots.
 
-import { getDef, UNNAMED_TYPES } from "./library";
+import { getDef } from "./library";
 
 export interface GridPoint {
   x: number;
@@ -20,7 +20,8 @@ export type Rotation = 0 | 90 | 180 | 270;
 export interface PlacedComponent {
   id: string;
   type: string;
-  name: string;
+  /** SPICE name (e.g. "R1"). Absent for ground and label. */
+  name?: string;
   position: GridPoint;
   rotation: Rotation;
   mirror: boolean;
@@ -83,7 +84,7 @@ export function toWorld(
 
 export function pinPosition(c: PlacedComponent, pinName: string): GridPoint {
   const pin = getDef(c.type).pins.find((p) => p.name === pinName);
-  if (!pin) throw new Error(`${c.name} has no pin ${pinName}`);
+  if (!pin) throw new Error(`${c.name ?? c.id} has no pin ${pinName}`);
   return toWorld(pin, c);
 }
 
@@ -199,14 +200,10 @@ export interface Placement {
 export function addComponent(doc: EditorDoc, p: Placement): { doc: EditorDoc; id: string } {
   const def = getDef(p.type);
   const id = nextIndexed("c", allIds(doc));
-  const name = UNNAMED_TYPES.has(def.type)
-    ? def.prefix
-    : nextIndexed(
-        def.prefix,
-        doc.components.map((c) => c.name),
-      );
+  const names = doc.components.flatMap((c) => (c.name ? [c.name] : []));
   const params = Object.fromEntries(def.params.map((param) => [param.name, param.default]));
-  const component: PlacedComponent = { id, name, params, ...p, position: { ...p.position } };
+  const component: PlacedComponent = { id, params, ...p, position: { ...p.position } };
+  if (def.prefix !== null) component.name = nextIndexed(def.prefix, names);
   return { doc: { ...doc, components: [...doc.components, component] }, id };
 }
 
