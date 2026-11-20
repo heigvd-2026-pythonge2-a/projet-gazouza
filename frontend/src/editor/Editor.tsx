@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { Circle, Layer, Rect, Stage } from "react-konva";
 
 import {
+  animatable,
   docBounds,
+  freshSimulation,
   itemsInRect,
   moveItems,
   moveWirePart,
@@ -19,10 +21,12 @@ import {
   type PlacedComponent,
   type WirePart,
 } from "../store";
+import { AnimationControls } from "./AnimationControls";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport } from "./fitView";
+import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
@@ -203,6 +207,8 @@ export function SchematicCanvas() {
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
   const dropComponent = useEditorStore((s) => s.dropComponent);
+  const simulation = useEditorStore(freshSimulation);
+  const animation = useEditorStore((s) => s.animation);
 
   useKeyboardShortcuts();
 
@@ -655,7 +661,11 @@ export function SchematicCanvas() {
             <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
           )}
         </Layer>
+        {animation.on && simulation && animatable(simulation) && (
+          <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
+        )}
       </Stage>
+      <AnimationControls />
       <div
         style={{
           position: "absolute",
