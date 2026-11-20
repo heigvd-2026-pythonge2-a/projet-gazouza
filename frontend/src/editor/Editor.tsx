@@ -22,6 +22,7 @@ import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
+import { entryForKey } from "./paletteLayout";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
 import { WireDraft, Wires } from "./Wires";
 
@@ -112,6 +113,14 @@ function useKeyboardShortcuts() {
         if (s.tool.kind !== "select" || s.selection.length === 0) return;
         // Holding the key down repeats it: one undo step for the whole move.
         s.moveSelection(arrow, true);
+        e.preventDefault();
+        return;
+      }
+      // 1 to 9: the palette tool with that number.
+      const entry = entryForKey(e.key);
+      if (entry) {
+        if (entry.kind === "wire") s.startWiring();
+        else s.startPlacing(entry.def.type);
         e.preventDefault();
         return;
       }

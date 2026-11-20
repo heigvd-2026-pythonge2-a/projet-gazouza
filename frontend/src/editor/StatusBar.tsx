@@ -9,6 +9,7 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic sur un fil : coude ou tronçon, à glisser · Double-clic : fil entier · " +
     "Glisser : déplacer la sélection · Flèches : la déplacer d'un pas · " +
     "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
+    "1 à 8 : outil de la palette · " +
     "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
   place:
     "Clic : poser · R : tourner · M : miroir · Échap ou clic droit : arrêter de poser · " +

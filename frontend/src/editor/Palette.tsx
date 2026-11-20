@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import { paletteGroups, useEditorStore } from "../store";
+import { useEditorStore } from "../store";
+import { paletteLayout, shortcutKey } from "./paletteLayout";
 import { SymbolIcon } from "./SymbolIcon";
 import { COLORS, UI } from "./theme";
 
@@ -21,20 +22,33 @@ const tileStyle = (active: boolean): CSSProperties => ({
   lineHeight: 1.2,
   textAlign: "center",
   cursor: "pointer",
+  position: "relative",
 });
+
+const keyStyle: CSSProperties = {
+  position: "absolute",
+  top: 2,
+  left: 4,
+  fontSize: 10,
+  color: UI.muted,
+};
 
 function Tile(props: {
   label: string;
   active: boolean;
   onClick: () => void;
   dragType?: string;
+  /** Digit key that picks this tool. */
+  shortcut?: string;
   children: ReactNode;
 }) {
-  const { label, active, onClick, dragType, children } = props;
+  const { label, active, onClick, dragType, shortcut, children } = props;
+  const help = dragType ? `${label} : glisser sur le schéma, ou cliquer puis poser` : label;
   return (
     <button
       type="button"
-      title={dragType ? `${label} : glisser sur le schéma, ou cliquer puis poser` : label}
+      title={shortcut ? `${help} (touche ${shortcut})` : help}
+      aria-keyshortcuts={shortcut}
       style={tileStyle(active)}
       onClick={onClick}
       draggable={dragType !== undefined}
@@ -44,6 +58,11 @@ function Tile(props: {
         e.dataTransfer.effectAllowed = "copy";
       }}
     >
+      {shortcut && (
+        <span style={keyStyle} aria-hidden>
+          {shortcut}
+        </span>
+      )}
       {children}
       <span style={{ fontSize: 11 }}>{label}</span>
     </button>
@@ -70,12 +89,15 @@ const groupTitleStyle: CSSProperties = {
 
 /**
  * Component palette, grouped by category (`category` in the library): one tile per library
- * type, to drag onto the schematic or click. The wire tool closes the "Connexions" group.
+ * type, to drag onto the schematic or click. The wire tool closes the "Connexions" group. Keys 1
+ * to 9 pick the tiles in order (see `paletteLayout`).
  */
 export function Palette() {
   const tool = useEditorStore((s) => s.tool);
   const startPlacing = useEditorStore((s) => s.startPlacing);
   const startWiring = useEditorStore((s) => s.startWiring);
+  /** Position of each tile in the whole palette, for its digit key. */
+  let position = 0;
 
   return (
     <aside
@@ -89,26 +111,35 @@ export function Palette() {
       }}
     >
       <h3 style={UI.heading}>Composants</h3>
-      {paletteGroups().map((group) => (
+      {paletteLayout().map((group) => (
         <section key={group.id} aria-label={group.label}>
           <h4 style={groupTitleStyle}>{group.label}</h4>
           <div style={gridStyle}>
-            {group.defs.map((def) => (
-              <Tile
-                key={def.type}
-                label={def.label}
-                active={tool.kind === "place" && tool.type === def.type}
-                onClick={() => startPlacing(def.type)}
-                dragType={def.type}
-              >
-                <SymbolIcon def={def} />
-              </Tile>
-            ))}
-            {group.id === "connection" && (
-              <Tile label="Fil" active={tool.kind === "wire"} onClick={startWiring}>
-                <WireIcon />
-              </Tile>
-            )}
+            {group.entries.map((entry) => {
+              const shortcut = shortcutKey(position++);
+              return entry.kind === "wire" ? (
+                <Tile
+                  key="wire"
+                  label="Fil"
+                  active={tool.kind === "wire"}
+                  onClick={startWiring}
+                  shortcut={shortcut}
+                >
+                  <WireIcon />
+                </Tile>
+              ) : (
+                <Tile
+                  key={entry.def.type}
+                  label={entry.def.label}
+                  active={tool.kind === "place" && tool.type === entry.def.type}
+                  onClick={() => startPlacing(entry.def.type)}
+                  dragType={entry.def.type}
+                  shortcut={shortcut}
+                >
+                  <SymbolIcon def={entry.def} />
+                </Tile>
+              );
+            })}
           </div>
         </section>
       ))}
