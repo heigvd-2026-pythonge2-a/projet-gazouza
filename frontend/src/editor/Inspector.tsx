@@ -1,22 +1,37 @@
-import { useId } from "react";
+import { useId, type CSSProperties } from "react";
 
 import {
   getDef,
   nameProblem,
   netNameProblem,
   useEditorStore,
+  visibleParams,
+  type ParamOption,
   type PlacedComponent,
 } from "../store";
 import { COLORS, UI } from "./theme";
+
+const controlStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "5px 8px",
+  border: 0,
+  background: "transparent",
+  color: "inherit",
+  font: "inherit",
+  outline: "none",
+};
 
 function Field(props: {
   label: string;
   value: string;
   unit?: string;
+  /** For a "choice" parameter: a drop-down list instead of a text field. */
+  options?: ParamOption[];
   problem?: string | null;
   onChange: (value: string) => void;
 }) {
-  const { label, value, unit, problem, onChange } = props;
+  const { label, value, unit, options, problem, onChange } = props;
   const id = useId();
   return (
     <div style={{ marginBottom: 10 }}>
@@ -35,23 +50,29 @@ function Field(props: {
           background: "#ffffff",
         }}
       >
-        <input
-          id={id}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          spellCheck={false}
-          aria-invalid={problem ? true : undefined}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "5px 8px",
-            border: 0,
-            background: "transparent",
-            color: "inherit",
-            font: "inherit",
-            outline: "none",
-          }}
-        />
+        {options ? (
+          <select
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            style={controlStyle}
+          >
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            spellCheck={false}
+            aria-invalid={problem ? true : undefined}
+            style={controlStyle}
+          />
+        )}
         {unit && <span style={{ padding: "0 8px", color: "#9ca3af" }}>{unit}</span>}
       </div>
       {problem && <p style={{ margin: "3px 0 0", fontSize: 12, color: UI.error }}>{problem}</p>}
@@ -64,7 +85,8 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
   const renameComponent = useEditorStore((s) => s.renameComponent);
   const setParam = useEditorStore((s) => s.setParam);
   const def = getDef(c.type);
-  const hasValues = def.params.some((p) => p.unit !== "");
+  const params = visibleParams(def, c.params);
+  const hasValues = params.some((p) => p.kind === "value");
 
   return (
     <>
@@ -80,7 +102,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           onChange={(name) => renameComponent(c.id, name)}
         />
       )}
-      {def.params.map((p) => {
+      {params.map((p) => {
         const value = c.params[p.name] ?? "";
         return (
           <Field
@@ -88,6 +110,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
             label={p.label}
             value={value}
             unit={p.unit}
+            options={p.kind === "choice" ? p.options : undefined}
             problem={c.type === "label" && p.name === "net" ? netNameProblem(value) : null}
             onChange={(v) => setParam(c.id, p.name, v)}
           />
@@ -140,7 +163,8 @@ export function Inspector() {
         borderTop: `1px solid ${UI.border}`,
         background: UI.panel,
         color: COLORS.symbol,
-        height: 260,
+        height: "45%",
+        minHeight: 220,
         flex: "none",
         overflowY: "auto",
       }}
