@@ -296,6 +296,46 @@ export function realignWires(before: EditorDoc, after: EditorDoc): EditorDoc {
   return changed ? { ...after, wires } : after;
 }
 
+const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });
+
+/**
+ * Moves components, junctions and wires (by id) by `delta`, in grid units. A moved wire takes
+ * its bends and free ends along. Wires attached to moved items on both sides are translated
+ * whole; the others are re-aligned (see `realignedBends`) so they stay connected and orthogonal.
+ */
+export function moveItems(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridPoint): EditorDoc {
+  if ((delta.x === 0 && delta.y === 0) || ids.size === 0) return doc;
+  const moveEnd = (end: WireEnd): WireEnd =>
+    "comp" in end || "junction" in end ? end : shift(end, delta);
+  const after: EditorDoc = {
+    components: doc.components.map((c) =>
+      ids.has(c.id) ? { ...c, position: shift(c.position, delta) } : c,
+    ),
+    junctions: doc.junctions.map((j) =>
+      ids.has(j.id) ? { ...j, position: shift(j.position, delta) } : j,
+    ),
+    wires: doc.wires.map((w) =>
+      ids.has(w.id) ? { ...w, from: moveEnd(w.from), to: moveEnd(w.to) } : w,
+    ),
+  };
+  return {
+    ...after,
+    wires: after.wires.map((w, i) => {
+      const old = doc.wires[i] ?? w;
+      const a1 = endPosition(after, w.from);
+      const b1 = endPosition(after, w.to);
+      // A moved wire is first carried along whole, then re-aligned to ends that did not follow.
+      const carried = ids.has(w.id);
+      const offset = carried ? delta : { x: 0, y: 0 };
+      const bends = old.points.map((p) => shift(p, offset));
+      const a0 = shift(endPosition(doc, old.from), offset);
+      const b0 = shift(endPosition(doc, old.to), offset);
+      if (!carried && samePoint(a0, a1) && samePoint(b0, b1)) return w;
+      return { ...w, points: realignedBends(bends, a0, b0, a1, b1) };
+    }),
+  };
+}
+
 export function moveComponent(doc: EditorDoc, id: string, position: GridPoint): EditorDoc {
   const moved = updateComponents(doc, new Set([id]), (c) => ({ ...c, position: { ...position } }));
   return realignWires(doc, moved);

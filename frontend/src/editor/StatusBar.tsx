@@ -5,6 +5,7 @@ const HINTS: Record<Tool["kind"], string> = {
   select:
     "Clic : sélectionner · Maj + clic : sélection multiple · Clic droit sur un composant : menu · " +
     "Tirer depuis une broche : fil · " +
+    "Glisser : déplacer la sélection · Flèches : la déplacer d'un pas · " +
     "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
     "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
   place:
