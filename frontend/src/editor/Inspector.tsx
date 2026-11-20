@@ -160,12 +160,11 @@ export function Inspector() {
       aria-label="Propriétés"
       style={{
         padding: 10,
-        borderTop: `1px solid ${UI.border}`,
         background: UI.panel,
         color: COLORS.symbol,
-        height: "45%",
-        minHeight: 220,
-        flex: "none",
+        // Sized by the app shell (resizable split with the results).
+        flex: 1,
+        minHeight: 0,
         overflowY: "auto",
       }}
     >
