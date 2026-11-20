@@ -209,6 +209,13 @@ Aucune installation n'est nécessaire sur la machine cible.
 | S9–10 | Import `.asc`, annuler/rétablir, mesures et export |
 | S11–12 | Tests, stabilisation, build final, rapport et démo |
 
+Chaque jalon est une [milestone GitHub](../../milestones) (`S1-2 : Fondations`,
+`S3-5 : Éditeur de bout en bout`, `S6-8 : Analyses et sauvegarde`,
+`S9-10 : Import, annuler et mesures`, `S11-12 : Stabilisation et livraison`). Toute issue et
+toute PR est rattachée à la milestone du jalon dont elle fait avancer l'objectif ; une PR
+reprend celle de l'issue qu'elle ferme. La page des milestones montre ainsi l'avancement de
+chaque jalon.
+
 ### Issues et labels
 
 Les tâches sont suivies dans GitHub Issues. Chaque issue (et chaque PR) porte en principe un

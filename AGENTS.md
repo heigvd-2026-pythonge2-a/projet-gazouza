@@ -53,6 +53,11 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
   (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`), message court en anglais.
 - **Labels** : toute issue ou PR reçoit un label `type:` et un label `area:` (liste et usage
   dans la section « Issues et labels » du [README](README.md)).
+- **Milestones** : chaque jalon du cahier des charges (S1-2 … S11-12) est une milestone
+  GitHub. Toute issue ou PR reçoit la milestone du jalon dont elle fait avancer l'objectif
+  (par l'objectif, pas par la date) ; une PR reprend celle de l'issue qu'elle ferme. Avec `gh`,
+  utilise `--milestone "<titre exact>"` (liste : `gh api repos/{owner}/{repo}/milestones`).
+  En cas de doute entre deux jalons, demande à l'humain.
 - **Modèles d'issue et de PR** : quand tu crées une issue ou une PR (par ex. avec `gh`),
   suis la structure du modèle correspondant et remplis toutes ses sections :
   - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,

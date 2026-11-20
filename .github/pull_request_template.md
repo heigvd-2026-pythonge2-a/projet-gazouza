@@ -32,6 +32,7 @@ Une capture d'écran est la bienvenue pour un changement visuel. -->
 
 - [ ] Branche `type/description-courte`, commits au format Conventional Commits
 - [ ] Labels `type:` et `area:` ajoutés
+- [ ] Milestone du jalon concerné (`S1-2` … `S11-12`) posée, comme sur l'issue liée
 - [ ] Tests ajoutés ou mis à jour (Python : couverture ≥ 80 %)
 - [ ] Tests, lint et formatage passent pour la partie touchée
 - [ ] Aucun fichier généré modifié à la main (`openapi.json`, `schema.gen.ts`, lockfiles)
