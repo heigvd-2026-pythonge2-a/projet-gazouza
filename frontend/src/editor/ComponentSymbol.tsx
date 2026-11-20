@@ -14,6 +14,13 @@ import { COLORS, GRID } from "./theme";
 const STROKE = 2;
 const TEXT_WIDTH = 80;
 const PIN_SIZE = 0.3;
+/** Clickable area around a pin, larger than its drawn square. */
+const PIN_HIT = 0.8;
+
+function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
+  const container = e.target.getStage()?.container();
+  if (container) container.style.cursor = cursor;
+}
 
 function arcPoints(s: Extract<SymbolShape, { kind: "arc" }>): number[] {
   const points: number[] = [];
@@ -65,6 +72,8 @@ interface ComponentSymbolProps {
   draggable?: boolean;
   onSelect?: (e: KonvaEventObject<MouseEvent>) => void;
   onMove?: (position: { x: number; y: number }) => void;
+  /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
+  onPinMouseDown?: (pin: string) => void;
 }
 
 /**
@@ -78,6 +87,7 @@ export function ComponentSymbol({
   draggable = false,
   onSelect,
   onMove,
+  onPinMouseDown,
 }: ComponentSymbolProps) {
   const def = getDef(c.type);
   const color = selected ? COLORS.selected : COLORS.symbol;
@@ -142,6 +152,26 @@ export function ComponentSymbol({
             listening={false}
           />
         ))}
+        {onPinMouseDown &&
+          def.pins.map((pin) => (
+            <Rect
+              key={`hit-${pin.name}`}
+              x={(pin.x - PIN_HIT / 2) * GRID}
+              y={(pin.y - PIN_HIT / 2) * GRID}
+              width={PIN_HIT * GRID}
+              height={PIN_HIT * GRID}
+              fill="rgba(0,0,0,0)"
+              onMouseEnter={(e) => setCursor(e, "crosshair")}
+              onMouseLeave={(e) => setCursor(e, "")}
+              onMouseDown={(e) => {
+                if (e.evt.button !== 0) return;
+                // Keep the press from reaching the group, which would select and drag it.
+                e.cancelBubble = true;
+                setCursor(e, "");
+                onPinMouseDown(pin.name);
+              }}
+            />
+          ))}
       </Group>
       {text !== null && (
         <Text

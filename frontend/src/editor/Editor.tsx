@@ -3,11 +3,12 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { useEffect, useRef, useState } from "react";
 import { Layer, Stage } from "react-konva";
 
-import { useEditorStore, type GridPoint, type PlacedComponent } from "../store";
+import { pinPosition, useEditorStore, type GridPoint, type PlacedComponent } from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { Grid, type Viewport } from "./Grid";
 import { Palette } from "./Palette";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
+import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
 
@@ -43,6 +44,10 @@ function useKeyboardShortcuts() {
         case "M":
           s.mirror();
           break;
+        case "w":
+        case "W":
+          s.startWiring();
+          break;
         case "Delete":
         case "Backspace":
           s.deleteSelection();
@@ -75,6 +80,10 @@ export function Editor() {
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveComponent = useEditorStore((s) => s.moveComponent);
+  const draft = useEditorStore((s) => s.draft);
+  const wireClick = useEditorStore((s) => s.wireClick);
+  const startWireFrom = useEditorStore((s) => s.startWireFrom);
+  const cancelDraft = useEditorStore((s) => s.cancelDraft);
 
   useKeyboardShortcuts();
 
@@ -113,8 +122,15 @@ export function Editor() {
       panStart.current = { x: e.evt.clientX, y: e.evt.clientY, vx: viewport.x, vy: viewport.y };
       return;
     }
+    if (e.evt.button === 2) {
+      if (draft) cancelDraft();
+      return;
+    }
     if (e.evt.button !== 0) return;
-    if (tool.kind === "place") {
+    if (tool.kind === "wire") {
+      const p = pointerGrid();
+      if (p) wireClick(p);
+    } else if (tool.kind === "place") {
       const p = pointerGrid();
       if (p) placeAt(p);
     } else if (e.target === e.target.getStage()) {
@@ -131,14 +147,14 @@ export function Editor() {
         y: pan.vy + e.evt.clientY - pan.y,
       }));
     }
-    if (tool.kind === "place") setPointer(pointerGrid());
+    if (tool.kind !== "select") setPointer(pointerGrid());
   };
 
   const endPan = () => {
     panStart.current = null;
   };
 
-  const selectComponent = (id: string, e: KonvaEventObject<MouseEvent>) => {
+  const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
     if (tool.kind !== "select") return;
     if (e.evt.shiftKey) toggleSelected(id);
     else if (!selection.includes(id)) select([id]);
@@ -168,7 +184,7 @@ export function Editor() {
           position: "relative",
           overflow: "hidden",
           background: COLORS.background,
-          cursor: tool.kind === "place" ? "crosshair" : "default",
+          cursor: tool.kind === "select" ? "default" : "crosshair",
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -193,17 +209,33 @@ export function Editor() {
             <Grid viewport={viewport} width={size.width} height={size.height} />
           </Layer>
           <Layer>
+            <Wires
+              doc={doc}
+              selection={selection}
+              onSelect={tool.kind === "select" ? selectItem : undefined}
+            />
             {doc.components.map((c) => (
               <ComponentSymbol
                 key={c.id}
                 component={c}
                 selected={selection.includes(c.id)}
                 draggable={tool.kind === "select"}
-                onSelect={(e) => selectComponent(c.id, e)}
+                onSelect={(e) => selectItem(c.id, e)}
                 onMove={(position) => moveComponent(c.id, position)}
+                onPinMouseDown={
+                  tool.kind === "select"
+                    ? (pin) => {
+                        startWireFrom(pinPosition(c, pin));
+                        setPointer(pointerGrid());
+                      }
+                    : undefined
+                }
               />
             ))}
             {ghost && <ComponentSymbol component={ghost} ghost />}
+            {tool.kind === "wire" && (
+              <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
+            )}
           </Layer>
         </Stage>
         <div

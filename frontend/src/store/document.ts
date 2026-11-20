@@ -87,6 +87,86 @@ export function pinPosition(c: PlacedComponent, pinName: string): GridPoint {
   return toWorld(pin, c);
 }
 
+export const samePoint = (a: GridPoint, b: GridPoint): boolean => a.x === b.x && a.y === b.y;
+
+/** True if `p` lies on the segment [a, b], ends included. Exact on integer coordinates. */
+export function onSegment(p: GridPoint, a: GridPoint, b: GridPoint): boolean {
+  const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  return (
+    cross === 0 &&
+    Math.min(a.x, b.x) <= p.x &&
+    p.x <= Math.max(a.x, b.x) &&
+    Math.min(a.y, b.y) <= p.y &&
+    p.y <= Math.max(a.y, b.y)
+  );
+}
+
+/** Removes repeated points and bends lying on the straight line between their neighbours. */
+export function simplifyPath(path: readonly GridPoint[]): GridPoint[] {
+  const out: GridPoint[] = [];
+  for (const p of path) {
+    const last = out[out.length - 1];
+    if (last && samePoint(last, p)) continue;
+    const prev = out[out.length - 2];
+    if (prev && last && onSegment(last, prev, p)) out.pop();
+    out.push({ ...p });
+  }
+  return out;
+}
+
+/** Grid position of a wire end. */
+export function endPosition(doc: EditorDoc, end: WireEnd): GridPoint {
+  if ("comp" in end) {
+    const c = doc.components.find((comp) => comp.id === end.comp);
+    if (!c) throw new Error(`Unknown component ${end.comp}`);
+    return pinPosition(c, end.pin);
+  }
+  if ("junction" in end) {
+    const j = doc.junctions.find((junction) => junction.id === end.junction);
+    if (!j) throw new Error(`Unknown junction ${end.junction}`);
+    return j.position;
+  }
+  return end;
+}
+
+/** Full polyline of a wire: its two ends and the bends in between. */
+export function wirePath(doc: EditorDoc, w: EditorWire): GridPoint[] {
+  return [endPosition(doc, w.from), ...w.points, endPosition(doc, w.to)];
+}
+
+/** Something a wire end can be attached to, found at a grid point. */
+export type Anchor =
+  | { kind: "pin"; comp: string; pin: string }
+  | { kind: "junction"; junction: string }
+  | { kind: "freeEnd" }
+  | { kind: "wire"; wire: string };
+
+/**
+ * What a wire end dropped at `p` would attach to. Pins win over junctions, which win over wires,
+ * so a wire is never split at one of its own attached ends.
+ */
+export function anchorAt(doc: EditorDoc, p: GridPoint): Anchor | null {
+  for (const c of doc.components) {
+    for (const pin of getDef(c.type).pins) {
+      if (samePoint(toWorld(pin, c), p)) return { kind: "pin", comp: c.id, pin: pin.name };
+    }
+  }
+  const junction = doc.junctions.find((j) => samePoint(j.position, p));
+  if (junction) return { kind: "junction", junction: junction.id };
+  const isFreeEndAtP = (end: WireEnd) =>
+    !("comp" in end) && !("junction" in end) && samePoint(end, p);
+  if (doc.wires.some((w) => isFreeEndAtP(w.from) || isFreeEndAtP(w.to))) return { kind: "freeEnd" };
+  for (const w of doc.wires) {
+    const path = wirePath(doc, w);
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      if (a && b && onSegment(p, a, b)) return { kind: "wire", wire: w.id };
+    }
+  }
+  return null;
+}
+
 // --- Ids and names --------------------------------------------------------------------------
 
 /** Next value of the form `${prefix}${n}`, one above the highest existing n (case-insensitive). */
@@ -153,6 +233,107 @@ export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): Edit
 
 export function mirrorComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
   return updateComponents(doc, ids, (c) => ({ ...c, mirror: !c.mirror }));
+}
+
+/**
+ * Cuts a wire in two at `p` (which must lie on it) and puts a junction there. A bend at `p`
+ * becomes the junction. Returns the new doc and the junction id.
+ */
+export function splitWire(
+  doc: EditorDoc,
+  wireId: string,
+  p: GridPoint,
+): { doc: EditorDoc; junction: string } {
+  const w = doc.wires.find((wire) => wire.id === wireId);
+  if (!w) throw new Error(`Unknown wire ${wireId}`);
+  const path = wirePath(doc, w);
+  let i = 0;
+  while (i + 2 < path.length && !onSegment(p, path[i] as GridPoint, path[i + 1] as GridPoint)) i++;
+
+  const junction = nextIndexed("j", allIds(doc));
+  const newWire = nextIndexed("w", [...allIds(doc), junction]);
+  const notP = (q: GridPoint) => !samePoint(q, p);
+  const first: EditorWire = {
+    ...w,
+    to: { junction },
+    points: path.slice(1, i + 1).filter(notP),
+  };
+  const second: EditorWire = {
+    id: newWire,
+    from: { junction },
+    to: w.to,
+    points: path.slice(i + 1, -1).filter(notP),
+  };
+  return {
+    doc: {
+      ...doc,
+      junctions: [...doc.junctions, { id: junction, position: { ...p } }],
+      wires: doc.wires.flatMap((wire) => (wire.id === wireId ? [first, second] : [wire])),
+    },
+    junction,
+  };
+}
+
+/**
+ * Attaches a wire end dropped at `p` to whatever is there: a pin, a junction, the free end of
+ * another wire (both then meet at a new junction), the middle of a wire (split, see
+ * `splitWire`), or nothing (free end).
+ */
+export function resolveEnd(doc: EditorDoc, p: GridPoint): { doc: EditorDoc; end: WireEnd } {
+  const anchor = anchorAt(doc, p);
+  switch (anchor?.kind) {
+    case undefined:
+      return { doc, end: { ...p } };
+    case "pin":
+      return { doc, end: { comp: anchor.comp, pin: anchor.pin } };
+    case "junction":
+      return { doc, end: { junction: anchor.junction } };
+    case "freeEnd": {
+      // Every free end lying at `p` (there may be several) is attached to the new junction.
+      const junction = nextIndexed("j", allIds(doc));
+      const attach = (end: WireEnd): WireEnd =>
+        !("comp" in end) && !("junction" in end) && samePoint(end, p) ? { junction } : end;
+      return {
+        doc: {
+          ...doc,
+          junctions: [...doc.junctions, { id: junction, position: { ...p } }],
+          wires: doc.wires.map((w) => ({ ...w, from: attach(w.from), to: attach(w.to) })),
+        },
+        end: { junction },
+      };
+    }
+    case "wire": {
+      const split = splitWire(doc, anchor.wire, p);
+      return { doc: split.doc, end: { junction: split.junction } };
+    }
+  }
+}
+
+const sameEnd = (a: WireEnd, b: WireEnd): boolean =>
+  ("comp" in a && "comp" in b && a.comp === b.comp && a.pin === b.pin) ||
+  ("junction" in a && "junction" in b && a.junction === b.junction);
+
+/**
+ * Adds a wire along `path` (start, bends, end, in grid units). Both ends are attached with
+ * `resolveEnd`. Returns null, and changes nothing, for a wire of zero length or one that would
+ * loop back to the pin or junction it starts from.
+ */
+export function addWire(
+  doc: EditorDoc,
+  path: readonly GridPoint[],
+): { doc: EditorDoc; id: string } | null {
+  const points = simplifyPath(path);
+  const start = points[0];
+  const end = points[points.length - 1];
+  if (!start || !end || points.length < 2) return null;
+
+  const from = resolveEnd(doc, start);
+  const to = resolveEnd(from.doc, end);
+  if (sameEnd(from.end, to.end)) return null;
+
+  const id = nextIndexed("w", allIds(to.doc));
+  const wire: EditorWire = { id, from: from.end, to: to.end, points: points.slice(1, -1) };
+  return { doc: { ...to.doc, wires: [...to.doc.wires, wire] }, id };
 }
 
 /**

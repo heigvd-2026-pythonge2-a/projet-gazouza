@@ -21,6 +21,7 @@ export function Palette() {
   const tool = useEditorStore((s) => s.tool);
   const setTool = useEditorStore((s) => s.setTool);
   const startPlacing = useEditorStore((s) => s.startPlacing);
+  const startWiring = useEditorStore((s) => s.startWiring);
 
   return (
     <aside
@@ -40,6 +41,9 @@ export function Palette() {
       >
         Sélection
       </button>
+      <button type="button" style={buttonStyle(tool.kind === "wire")} onClick={startWiring}>
+        Fil
+      </button>
       <hr style={{ border: 0, borderTop: "1px solid #e5e7eb" }} />
       {[...LIBRARY.values()].map((def) => (
         <button
@@ -52,13 +56,23 @@ export function Palette() {
         </button>
       ))}
       <p style={{ fontSize: 12, color: COLORS.text, lineHeight: 1.5 }}>
+        W : fil (ou tirer depuis une broche)
+        <br />
+        Clic : coude, ou fin du fil sur une broche ou un fil
+        <br />
+        Double-clic : finir le fil dans le vide
+        <br />
+        Échap : enlever le dernier coude
+        <br />
+        Clic droit : abandonner le fil
+        <br />
         R : tourner
         <br />
         M : miroir
         <br />
         Suppr : supprimer
         <br />
-        Échap : annuler
+        Échap : quitter l'outil
         <br />
         Molette : zoom
         <br />
