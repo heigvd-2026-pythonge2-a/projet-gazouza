@@ -57,7 +57,14 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
   GitHub. Toute issue ou PR reçoit la milestone du jalon dont elle fait avancer l'objectif
   (par l'objectif, pas par la date) ; une PR reprend celle de l'issue qu'elle ferme. Avec `gh`,
   utilise `--milestone "<titre exact>"` (liste : `gh api repos/{owner}/{repo}/milestones`).
-  En cas de doute entre deux jalons, demande à l'humain.
+  En cas de doute entre deux jalons, demande à l'humain. Chaque tâche prévue d'un jalon a son
+  issue dans la milestone dès le début du jalon, sinon le pourcentage d'avancement est faux.
+- **Partir des issues ouvertes** : avant de commencer une tâche, cherche une issue ouverte qui
+  la couvre (`gh issue list --state open --search "<mots-clés>"`, ou
+  `gh issue list --milestone "<titre>"`). Si elle existe, travaille dessus : mentionne-la à
+  l'humain, ferme-la depuis la PR (`Closes #N`) et reprends sa milestone ; si ta tâche n'en
+  couvre qu'une partie, écris `Refs #N` et indique ce qui reste. N'ouvre une nouvelle issue que
+  si aucune ne correspond, et ne crée jamais de doublon.
 - **Modèles d'issue et de PR** : quand tu crées une issue ou une PR (par ex. avec `gh`),
   suis la structure du modèle correspondant et remplis toutes ses sections :
   - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,

@@ -213,8 +213,10 @@ Chaque jalon est une [milestone GitHub](../../milestones) (`S1-2 : Fondations`,
 `S3-5 : Éditeur de bout en bout`, `S6-8 : Analyses et sauvegarde`,
 `S9-10 : Import, annuler et mesures`, `S11-12 : Stabilisation et livraison`). Toute issue et
 toute PR est rattachée à la milestone du jalon dont elle fait avancer l'objectif ; une PR
-reprend celle de l'issue qu'elle ferme. La page des milestones montre ainsi l'avancement de
-chaque jalon.
+reprend celle de l'issue qu'elle ferme. Le pourcentage d'une milestone ne compte que les
+issues et PR rattachées : chaque tâche prévue d'un jalon doit donc avoir son issue dès le
+début du jalon. Avant de commencer une tâche, on cherche l'issue ouverte qui la couvre et on la
+ferme depuis la PR plutôt que d'en créer une nouvelle.
 
 ### Issues et labels
 
