@@ -558,6 +558,33 @@ export function deleteBend(doc: EditorDoc, part: WirePart): EditorDoc {
   return withPath(doc, w.id, without);
 }
 
+/**
+ * Removes one segment of a wire: the wire is cut in two around it, each remaining piece keeping
+ * its attached end and getting a free end where the segment was. A piece reduced to a single
+ * point disappears, so removing the only segment removes the whole wire.
+ */
+export function deleteSegment(doc: EditorDoc, part: WirePart): EditorDoc {
+  const w = doc.wires.find((wire) => wire.id === part.wire);
+  if (!w || part.kind !== "segment" || !wirePartPoints(doc, part)) return doc;
+  const path = partPath(doc, w);
+  const i = part.index;
+  const a = path[i] as GridPoint;
+  const b = path[i + 1] as GridPoint;
+  const pieces: EditorWire[] = [];
+  // Before the segment: from the original start to a free end at `a`.
+  if (i > 0) pieces.push({ ...w, to: { ...a }, points: path.slice(1, i).map((p) => ({ ...p })) });
+  // After it: from a free end at `b` to the original end (a new id if the first piece kept it).
+  if (i + 1 < path.length - 1) {
+    const id = pieces.length > 0 ? nextIndexed("w", allIds(doc)) : w.id;
+    const points = path.slice(i + 2, -1).map((p) => ({ ...p }));
+    pieces.push({ ...w, id, from: { ...b }, points });
+  }
+  return {
+    ...doc,
+    wires: doc.wires.flatMap((wire) => (wire.id === w.id ? pieces : [wire])),
+  };
+}
+
 const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });
 
 /**
