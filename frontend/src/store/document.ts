@@ -180,6 +180,37 @@ export function anchorAt(doc: EditorDoc, p: GridPoint): Anchor | null {
 }
 
 /** Axis-aligned rectangle in grid units (not necessarily on grid points). */
+/** A component pin that nothing is connected to, with its grid position. */
+export interface UnconnectedPin {
+  comp: string;
+  pin: string;
+  position: GridPoint;
+}
+
+/**
+ * Pins connected to nothing: no wire ends on them and no other component has a pin at the same
+ * point. A wire merely passing over a pin does not connect it (wires only connect at their ends),
+ * and a node label counts like any other component: its net name connects nothing by itself.
+ */
+export function unconnectedPins(doc: EditorDoc): UnconnectedPin[] {
+  const wired = new Set<string>();
+  for (const w of doc.wires) {
+    for (const end of [w.from, w.to]) if ("comp" in end) wired.add(`${end.comp}/${end.pin}`);
+  }
+  const pins = doc.components.flatMap((c) =>
+    getDef(c.type).pins.map((pin) => ({ comp: c.id, pin: pin.name, position: toWorld(pin, c) })),
+  );
+  const pinsAt = new Map<string, number>();
+  for (const p of pins) {
+    const key = `${p.position.x},${p.position.y}`;
+    pinsAt.set(key, (pinsAt.get(key) ?? 0) + 1);
+  }
+  return pins.filter(
+    (p) =>
+      !wired.has(`${p.comp}/${p.pin}`) && (pinsAt.get(`${p.position.x},${p.position.y}`) ?? 0) < 2,
+  );
+}
+
 export interface GridRect {
   min: GridPoint;
   max: GridPoint;
