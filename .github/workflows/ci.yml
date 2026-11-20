@@ -93,5 +93,8 @@ jobs:
       - name: Vérification du formatage (Prettier)
         run: pnpm format:check
 
+      - name: Tests unitaires (vitest)
+        run: pnpm test
+
       - name: Build de vérification
         run: pnpm build

@@ -18,5 +18,7 @@ Complète le fichier [`AGENTS.md`](../AGENTS.md) à la racine.
   (réexportés depuis `schema.gen.ts`). Ne redéfinis jamais à la main un type du contrat.
 - Le frontend ne fait aucun calcul de simulation : il affiche et édite.
 - Pour développer sans backend, importe les fichiers de `shared/fixtures/` comme données.
+- Tests : `pnpm test` (vitest). Un fichier `*.test.ts` à côté du module testé ; les circuits
+  de `shared/fixtures/` sont disponibles via `src/store/testFixtures.ts`.
 - Un module n'importe pas les fichiers internes d'un autre module : passer par `src/store/`
   ou par une fonction exportée explicitement.
