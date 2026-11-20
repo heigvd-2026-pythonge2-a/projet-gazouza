@@ -59,6 +59,7 @@ Résumé de nos échanges, des inputs/outputs par personne et des points d'atten
 * **Pistes :**
   1. **Garder l'architecture actuelle (`pywebview` + React)** mais faire tout le calcul/traitement en Python (NumPy/SciPy : crête, moyenne, temps de montée, FFT) et n'utiliser `uPlot` que pour l'affichage brut des points.
   2. **Basculer en 100 % Python** (ex. `PySide6` + `PyQtGraph` ou `Matplotlib`), ce qui impliquerait toutefois de réécrire aussi l'éditeur de schéma en Python (ex. `QGraphicsView`).
+* **Décision :** on **garde l'interface en TypeScript + React** (piste 1). L'éditeur de schéma et les courbes (`uPlot`) restent côté frontend, affichés dans `pywebview` ; le Python reste cantonné au backend (netlist, simulation, et éventuellement les calculs de mesures).
 
 ### C'est quoi le « Contrat d'API (Pydantic + OpenAPI → TypeScript) » ?
 * **Réponse :** On définit la structure des données **une seule fois en Python** avec Pydantic. FastAPI génère automatiquement un schéma OpenAPI, et `openapi-typescript` génère les interfaces TypeScript correspondantes pour le frontend. Ça garantit que le front et le back parlent exactement le même format JSON sans erreur de champs.
