@@ -9,10 +9,12 @@ import {
   SHOW_INSPECTOR_EVENT,
   SchematicCanvas,
   StatusBar,
+  saveRescueCopy,
 } from "./editor";
 import {
   DEFAULT_LAYOUT,
   MaximizeButton,
+  PanelErrorBoundary,
   Splitter,
   clampPaletteWidth,
   clampSideWidth,
@@ -113,7 +115,9 @@ export default function App() {
           onClick={() => toggle("results")}
         />
       </div>
-      <p style={{ color: "#6b7280" }}>Les courbes s'afficheront ici après une simulation.</p>
+      <PanelErrorBoundary panel="les résultats">
+        <p style={{ color: "#6b7280" }}>Les courbes s'afficheront ici après une simulation.</p>
+      </PanelErrorBoundary>
     </section>
   );
 
@@ -160,7 +164,9 @@ export default function App() {
           borderBottom: BORDER,
         }}
       >
-        <EditorToolbar />
+        <PanelErrorBoundary panel="la barre d'outils" onRescue={saveRescueCopy} compact>
+          <EditorToolbar />
+        </PanelErrorBoundary>
         {/* Simulation group. Wired to POST /api/simulate in a later PR (simulation panel). */}
         <select
           disabled
@@ -212,7 +218,9 @@ export default function App() {
 
       <div ref={rowRef} style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div style={{ display: shown(showSchematic), width: paletteWidth, flex: "none" }}>
-          <Palette />
+          <PanelErrorBoundary panel="la palette">
+            <Palette />
+          </PanelErrorBoundary>
         </div>
         {showSchematic && (
           <Splitter
@@ -237,7 +245,9 @@ export default function App() {
           <div
             style={{ display: shown(showSchematic), flex: 1, minHeight: 0, position: "relative" }}
           >
-            <SchematicCanvas />
+            <PanelErrorBoundary panel="le schéma" onRescue={saveRescueCopy}>
+              <SchematicCanvas />
+            </PanelErrorBoundary>
             <div style={{ position: "absolute", top: 8, right: 8 }}>
               <MaximizeButton
                 panel="le schéma"
@@ -309,12 +319,16 @@ export default function App() {
               ...(right ? { height: inspector, flex: "none" } : { flex: 1, minHeight: 0 }),
             }}
           >
-            <Inspector />
+            <PanelErrorBoundary panel="les propriétés" onRescue={saveRescueCopy}>
+              <Inspector />
+            </PanelErrorBoundary>
           </div>
         </div>
       </div>
 
-      <StatusBar />
+      <PanelErrorBoundary panel="la barre d'état" compact>
+        <StatusBar />
+      </PanelErrorBoundary>
     </main>
   );
 }
