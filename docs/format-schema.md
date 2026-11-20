@@ -224,15 +224,19 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
 | `kind` | Champs | Exemple | Ligne SPICE |
 | --- | --- | --- | --- |
 | `op` | aucun | `{"kind": "op"}` | `.op` |
-| `tran` | `stop_time`, `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "max_step": 1e-5}` | `.tran 10u 10m` |
-| `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` | `{"kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 1e5, "points_per_decade": 100}` | `.ac dec 100 10 100k` |
+| `tran` | `stop_time`, `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "max_step": 1e-5}` | `.tran 10u 10m 0 10u` |
+| `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (**20 par défaut**) | `{"kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 1e5, "points_per_decade": 100}` | `.ac dec 100 10 100k` |
 | `dc` | `source_id`, `start`, `stop`, `step` | `{"kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1}` | `.dc V1 0 10 1` |
 
 - Les sources sont désignées par leur **id** : le nom SPICE est retrouvé à la traduction, donc
   renommer la source ne casse rien.
-- `.tran` : proposition `.tran {max_step} {stop_time}` (si `max_step` est absent :
-  `stop_time / 1000`). Ce format a été vérifié avec ngspice. La fixture `rc_tran` de `main` utilise
-  `.tran 0 5m 0 10u`, à confirmer avec Antoine (voir section 10).
+- **Ligne `.tran`** (décidé avec Antoine). En SPICE, c'est `.tran tstep tstop [tstart [tmax]]` : le
+  1er argument est le pas d'**affichage**, le vrai pas maximum est le **4e**. Donc :
+  - sans `max_step` : `.tran {stop_time / 1000} {stop_time}` (environ 1000 points, assez pour
+    les courbes) ;
+  - avec `max_step` : `.tran {max_step} {stop_time} 0 {max_step}`.
+
+  La fixture `rc_tran` (`.tran 0 5m 0 10u` sur `main`) devient `.tran 10u 5m 0 10u` à la migration.
 
 ## 7. Traduction en netlist
 
@@ -244,7 +248,9 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
    2. un nœud qui touche une étiquette prend son nom ;
    3. les autres s'appellent `n1`, `n2`… dans l'ordre où on les rencontre en parcourant les
       composants (ordre de la liste), puis leurs broches (ordre de la bibliothèque).
-4. **Écrire l'en-tête** : `* ` suivi du titre (ou `* Psice`).
+4. **Écrire l'en-tête** : `* ` suivi du `title` du schéma (ou `* Psice` s'il n'y en a pas). Les
+   fixtures de `main` commencent par `* divider_op` / `* rc_tran` : à la migration, on leur donne
+   un `title` et on met à jour leur `netlist.cir` en conséquence.
 5. **Écrire les `.include`** nécessaires, sans doublons.
 6. **Écrire une ligne par composant** (sauf masses et étiquettes), en remplissant le modèle `spice`.
 7. **Écrire la ligne d'analyse**, puis `.end`.
@@ -275,9 +281,13 @@ Une cible est l'une de ces formes :
 | Broche | `{ "comp": "c2", "pin": "2" }` |
 | Fil | `{ "wire": "w3" }` |
 | Jonction | `{ "junction": "j1" }` |
+| Nœud | `{ "net": "n3" }` |
 
-Le même format (nom `Diagnostic`, déjà utilisé par `SimulationResult`) sert aux erreurs de ngspice
-renvoyées par Antoine : il retrouve les fils d'un nœud grâce à `nets`.
+La cible **nœud** sert surtout aux erreurs de ngspice, qui ne connaît que les noms de nœuds SPICE.
+L'éditeur retrouve les fils à surligner grâce à `nets` (section 9).
+
+Le même format (nom `Diagnostic`, déjà utilisé par `SimulationResult`) sert aux erreurs de ngspice,
+produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 
 ### Codes de la netlist
 
@@ -301,12 +311,23 @@ renvoyées par Antoine : il retrouve les fils d'un nœud grâce à `nets`.
 | `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
 | `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
 
-Une broche non reliée est une **erreur** (et non un avertissement) : ngspice échoue sur un nœud
-flottant, autant le dire clairement avant. Un composant posé mais pas encore câblé donne donc une
-erreur `PIN_NOT_CONNECTED` par broche.
+Une broche non reliée est une **erreur** (et non un avertissement) pour une raison
+**pédagogique** : pour un débutant, c'est presque toujours un oubli de câblage. ngspice, lui,
+simulerait sans problème une résistance avec une patte en l'air ; ce qui le fait échouer, c'est un
+nœud sans chemin DC vers la masse (`SINGULAR_MATRIX`, ci-dessous). Un composant posé mais pas encore
+câblé donne donc une erreur `PIN_NOT_CONNECTED` par broche.
 
-Les codes des erreurs ngspice (par exemple `SIMULATION_FAILED`, `NO_CONVERGENCE`) seront ajoutés
-à la même liste par Antoine.
+### Codes de la simulation (ngspice, Antoine)
+
+| Code | Cas | Cibles |
+| --- | --- | --- |
+| `SINGULAR_MATRIX` | Nœud flottant, sans chemin DC vers la masse (par exemple derrière un condensateur seul) | le nœud |
+| `VOLTAGE_SOURCE_LOOP` | Boucle de sources de tension (ou source en parallèle avec une bobine) | les sources, les bobines |
+| `NO_CONVERGENCE` | `timestep too small`, échec du « gmin / source stepping » | le composant si ngspice le nomme, sinon aucune |
+| `SIMULATION_TIMEOUT` | Simulation trop longue, processus arrêté | aucune |
+| `SIMULATION_FAILED` | Tout le reste ; le message brut de ngspice est ajouté à la fin du message | aucune |
+
+Les deux tableaux forment **une seule liste fermée** de codes.
 
 ### Règles
 
@@ -318,7 +339,7 @@ Les codes des erreurs ngspice (par exemple `SIMULATION_FAILED`, `NO_CONVERGENCE`
 
 ```json
 {
-  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m\n.end\n",
+  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m 0 10u\n.end\n",
   "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
   "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
@@ -335,10 +356,8 @@ Les codes des erreurs ngspice (par exemple `SIMULATION_FAILED`, `NO_CONVERGENCE`
 | Question | Avec qui |
 | --- | --- |
 | Format exact du champ `symbol` de la bibliothèque. | Noé (il propose) |
-| Forme de la ligne `.tran` : `.tran 10u 10m` (vérifiée avec ngspice) ou `.tran 0 5m 0 10u` (fixture de `main`) ? | Antoine |
 | Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | Antoine |
 | Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Noémi |
-| Codes d'erreur de ngspice à ajouter à la liste fermée. | Antoine |
 
 Les exemples complets (ce que je reçois, ce que je renvoie) sont dans
 [`exemples-netlist.md`](exemples-netlist.md).

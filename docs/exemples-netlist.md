@@ -31,7 +31,9 @@ Dans la réponse :
 > **Migration des fixtures de `main`** : en version 1, `divider_op` et `rc_tran` nomment leurs nœuds
 > `in` et `out` sans étiquette. En version 2, sans étiquette, ils s'appelleraient `n1` et `n2`. On
 > ajoute donc les étiquettes `in` et `out` en migrant, pour garder les mêmes noms (et les mêmes
-> traces dans `result.json`). Les noms `GND1` et `GND2` des masses disparaissent.
+> traces dans `result.json`). Les noms `GND1` et `GND2` des masses disparaissent. On leur donne aussi
+> un `title`, et leur `netlist.cir` change en conséquence : en-tête `* {title}`, et
+> `.tran 10u 5m 0 10u` au lieu de `.tran 0 5m 0 10u` pour `rc_tran`.
 
 ---
 
@@ -176,7 +178,7 @@ Même câblage que l'exemple 1 : seuls V1, le 2ᵉ composant (C1 au lieu de R2) 
 
 ```json
 {
-  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m\n.end\n",
+  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m 0 10u\n.end\n",
   "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
   "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
@@ -189,12 +191,12 @@ Même câblage que l'exemple 1 : seuls V1, le 2ᵉ composant (C1 au lieu de R2) 
 V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)
 R1 in out 1k
 C1 out 0 1u
-.tran 10u 5m
+.tran 10u 5m 0 10u
 .end
 ```
 
-La ligne `.tran` suit la règle proposée (`.tran {max_step} {stop_time}`). La fixture actuelle de
-`main` utilise `.tran 0 5m 0 10u` : à trancher avec Antoine.
+`max_step` est donné, donc `.tran {max_step} {stop_time} 0 {max_step}` : pas d'affichage de 10 µs
+(1er argument) et pas de calcul limité à 10 µs (4e argument). Voir `format-schema.md`, section 6.
 
 ### 3. Résultat attendu après simulation
 

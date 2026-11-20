@@ -245,8 +245,10 @@ uv run pytest tests/test_values.py -v
 
 - [ ] `analysis_line(analysis, components) -> str`
 - [ ] `op` → `.op`
-- [ ] `tran` → `.tran 10u 5m` (`.tran {max_step} {stop_time}`, `stop_time / 1000` si `max_step`
-  est absent ; forme à confirmer avec Antoine)
+- [ ] `tran` (règle décidée avec Antoine) : avec `max_step` → `.tran {max_step} {stop_time} 0 {max_step}`
+  (ex. `.tran 10u 5m 0 10u`) ; sans `max_step` → `.tran {stop_time / 1000} {stop_time}`.
+  Attention : le 1er argument est le pas d'**affichage**, le pas maximum est le **4e**.
+- [ ] `ac` : `points_per_decade` vaut 20 par défaut si absent.
 - [ ] `ac` → `.ac dec 100 10 100k`
 - [ ] `dc` → `.dc V1 0 10 1` (retrouver le **nom** `V1` à partir de l'**id** de la source).
 - [ ] Une fonction `format_value(0.005) -> "5m"` (l'inverse de l'étape 2) pour une netlist lisible.
@@ -343,6 +345,8 @@ La liste complète et les messages sont dans `format-schema.md`, section 8.
 - [ ] Convertir `divider_op` et `rc_tran` en version 2 (fils `from`/`to`), en **ajoutant les
   étiquettes `in` et `out`** pour garder les mêmes noms de nœuds, et en retirant les `name` des
   masses. Modèle : `docs/exemples-netlist.md`, exemples 1 et 2.
+- [ ] Leur donner un `title` et mettre à jour leur `netlist.cir` (en-tête `* {title}`, nouvelle ligne
+  `.tran 10u 5m 0 10u` pour `rc_tran`).
 - [ ] Ajouter `lowpass_ac` et `loaded_divider_dc` (exemples 3 et 4), avec les 5 fichiers chacun.
 - [ ] Supprimer mon ancien dossier local `backend/tests/fixtures/circuits/` (ancien format, jamais
   commité).
@@ -579,7 +583,9 @@ uv run pytest --cov=app --cov-report=term-missing
 | ~~Fils explicites ou géométriques ?~~ **Explicites, validé par Noé** | Noé | 8, 10 |
 | Format des erreurs (`code`, `targets`) : validé par Noé, reste les codes ngspice | Antoine | 8 |
 | ~~Qui ajoute l'analyse à la netlist ?~~ **La route reçoit `{ schematic, analysis }`** | Noé | 10, 11 |
-| Forme de la ligne `.tran` (`.tran 10u 5m` ou `.tran 0 5m 0 10u`) | Antoine | 6 |
+| ~~Forme de la ligne `.tran`~~ **`.tran {max_step} {stop} 0 {max_step}`, ou `.tran {stop/1000} {stop}`** | Antoine | 6 |
+| ~~Codes d'erreur ngspice~~ **`SINGULAR_MATRIX`, `VOLTAGE_SOURCE_LOOP`, `NO_CONVERGENCE`, `SIMULATION_TIMEOUT`, `SIMULATION_FAILED` + cible `{net}`** | Antoine | 8 |
+| ~~En-tête de la netlist~~ **`* {title}` ; `netlist.cir` des fixtures mis à jour à la migration** | Noé | 9, 10 |
 | Format exact du champ `symbol` (dessin des symboles) | Noé (il propose) | 3 |
 | Accès de Noémi au dépôt (elle n'apparaît pas dans les reviewers) | Antoine | — |
 | Courant dans R/C : `.save @r1[i]` ou source 0 V en série ? | Antoine | 13 |
