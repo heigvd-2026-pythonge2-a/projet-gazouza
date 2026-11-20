@@ -22,6 +22,20 @@ class RawParseError(ValueError):
         self.user_message = user_message or message
 
 
+MAX_RESULT_POINTS: int = 200_000
+
+
+def _validate_max_points(max_points: int) -> None:
+    if isinstance(max_points, bool) or not isinstance(max_points, int) or max_points <= 0:
+        raise RawParseError(
+            f"max_points must be a positive integer, got {max_points!r}.",
+            user_message=(
+                "La limite maximale de points de simulation doit être "
+                "un entier strictement positif."
+            ),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class RawVariable:
     """Variable descriptor declared in a SPICE3 ASCII rawfile header."""
@@ -107,6 +121,7 @@ def _append_variable_line(variables: list[RawVariable], stripped_line: str) -> N
 
 def _parse_header_and_variables(
     lines: list[str],
+    max_points: int = MAX_RESULT_POINTS,
 ) -> tuple[dict[str, str], tuple[str, ...], int, int, tuple[RawVariable, ...], int]:
     """Parse header metadata and variable declarations, returning the index of Value lines."""
     metadata: dict[str, str] = {"title": "", "date": "", "plotname": ""}
@@ -177,6 +192,14 @@ def _parse_header_and_variables(
                 )
         elif norm_key == "no. points":
             num_points = _parse_non_negative_int(norm_val, "No. Points")
+            if num_points > max_points:
+                raise RawParseError(
+                    f"Rawfile declares {num_points} points, exceeding maximum {max_points}.",
+                    user_message=(
+                        f"La simulation a produit trop de points de mesure "
+                        f"({num_points} > {max_points})."
+                    ),
+                )
         elif norm_key == "variables":
             if num_vars is None or num_points is None:
                 raise RawParseError(
@@ -191,12 +214,15 @@ def _parse_header_and_variables(
     )
 
 
-def parse_raw_ascii(raw_text: str) -> RawPlot:
+def parse_raw_ascii(raw_text: str, max_points: int = MAX_RESULT_POINTS) -> RawPlot:
     """Parse a SPICE3 ASCII rawfile string into a structured RawPlot.
 
     Raises:
-        RawParseError: If the rawfile is empty, binary, complex, or malformed.
+        RawParseError: If the rawfile is empty, binary, complex, exceeds
+            ``max_points``, or is malformed.
     """
+    _validate_max_points(max_points)
+
     if not raw_text or not raw_text.strip():
         raise RawParseError(
             "Ngspice raw output is empty.",
@@ -205,7 +231,8 @@ def parse_raw_ascii(raw_text: str) -> RawPlot:
 
     lines = raw_text.splitlines()
     metadata, flags, num_vars, num_points, variables, values_start = _parse_header_and_variables(
-        lines
+        lines,
+        max_points=max_points,
     )
 
     if metadata["plotname"].lower() == "constants":
@@ -441,6 +468,7 @@ def parse_ngspice_output(
     raw_text: str,
     netlist_result: NetlistResult,
     analysis: Analysis,
+    max_points: int = MAX_RESULT_POINTS,
 ) -> SimulationResult:
     """Parse raw SPICE3 ASCII output and map variables to a SimulationResult.
 
@@ -463,7 +491,7 @@ def parse_ngspice_output(
         )
 
     try:
-        plot = parse_raw_ascii(raw_text)
+        plot = parse_raw_ascii(raw_text, max_points=max_points)
     except RawParseError as exc:
         return _error_result(analysis, exc.user_message, list(netlist_result.warnings))
 
