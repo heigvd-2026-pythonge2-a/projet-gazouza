@@ -11,6 +11,7 @@ import {
   copyItems,
   deleteBend,
   deleteItems,
+  deleteSegment,
   emptyDoc,
   mirrorComponents,
   moveComponent,
@@ -341,12 +342,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   deleteSelection: () =>
     set((s) => {
       const part = s.wirePart;
-      // A bend goes only if the wire stays orthogonal; a segment takes its whole wire along.
-      if (part?.kind === "bend") {
-        const doc = deleteBend(s.doc, part);
+      // A bend goes only if the wire stays orthogonal; a segment cuts its wire in two.
+      if (part) {
+        const doc = part.kind === "bend" ? deleteBend(s.doc, part) : deleteSegment(s.doc, part);
         return doc === s.doc ? {} : { ...change(s, doc), wirePart: null };
       }
-      if (part) return { ...change(s, deleteItems(s.doc, new Set([part.wire]))), wirePart: null };
       return s.selection.length > 0
         ? { ...change(s, deleteItems(s.doc, new Set(s.selection))), selection: [] }
         : {};
