@@ -1,11 +1,13 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Layer, Stage } from "react-konva";
 
 import { pinPosition, useEditorStore, type GridPoint, type PlacedComponent } from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
+import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
+import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
 import { WireDraft, Wires } from "./Wires";
@@ -24,6 +26,30 @@ interface Press {
   vy: number;
   /** The view is being moved (always for the middle button, after the threshold for the right). */
   panning: boolean;
+  /** Component under the right press, if any. */
+  componentId: string | null;
+}
+
+/** Actions of the menu opened by a right click on a component; they apply to the selection. */
+function componentMenu(selectionSize: number): MenuItem[] {
+  const s = () => useEditorStore.getState();
+  return [
+    { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
+    { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
+    {
+      label: "Supprimer",
+      shortcut: "Suppr",
+      keys: ["Delete", "Backspace"],
+      onSelect: () => s().deleteSelection(),
+    },
+    {
+      label: "Propriétés…",
+      // The properties panel only shows the fields of a single component.
+      disabled: selectionSize !== 1,
+      // After the menu has closed and given the focus back to where it was.
+      onSelect: () => setTimeout(focusInspector),
+    },
+  ];
 }
 
 /** Tracks the size of an element, so the Konva stage can fill its container. */
@@ -95,6 +121,10 @@ export function SchematicCanvas() {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
+  /** Context menu, at this position in the canvas. */
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  /** Component under the right press being handled (set by the component, read by the stage). */
+  const rightPressed = useRef<string | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
   const endPress = useRef<(() => void) | null>(null);
 
@@ -162,11 +192,19 @@ export function SchematicCanvas() {
     });
   };
 
-  /** Right click without moving: leaves the wire being drawn or the current tool (like Escape). */
-  const rightClick = () => {
+  /**
+   * Right click without moving: leaves the wire being drawn or the current tool (like Escape);
+   * with the select tool, opens the menu of the component clicked.
+   */
+  const rightClick = (press: Press, e: MouseEvent) => {
     const s = useEditorStore.getState();
     if (s.draft) s.cancelDraft();
     else if (s.tool.kind !== "select") s.cancel();
+    else if (press.componentId && s.doc.components.some((c) => c.id === press.componentId)) {
+      if (!s.selection.includes(press.componentId)) s.select([press.componentId]);
+      const box = containerRef.current?.getBoundingClientRect();
+      if (box) setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
+    }
   };
 
   /**
@@ -182,7 +220,9 @@ export function SchematicCanvas() {
       vx: viewport.x,
       vy: viewport.y,
       panning: button === 1,
+      componentId: button === 2 ? rightPressed.current : null,
     };
+    rightPressed.current = null;
     setPanning(press.panning);
 
     const onMove = (ev: MouseEvent) => {
@@ -192,13 +232,14 @@ export function SchematicCanvas() {
         if (Math.hypot(dx, dy) <= DRAG_THRESHOLD) return;
         press.panning = true;
         setPanning(true);
+        setMenu(null);
       }
       setViewport((v) => ({ ...v, x: press.vx + dx, y: press.vy + dy }));
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== press.button) return;
       stop();
-      if (press.button === 2 && !press.panning) rightClick();
+      if (press.button === 2 && !press.panning) rightClick(press, ev);
     };
     const stop = () => {
       window.removeEventListener("mousemove", onMove);
@@ -237,6 +278,8 @@ export function SchematicCanvas() {
   const onMouseMove = () => {
     if (tool.kind !== "select") setPointer(pointerGrid());
   };
+
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
     if (tool.kind !== "select") return;
@@ -316,6 +359,9 @@ export function SchematicCanvas() {
               selected={selection.includes(c.id)}
               draggable={tool.kind === "select"}
               onSelect={(e) => selectItem(c.id, e)}
+              onContextPress={() => {
+                rightPressed.current = c.id;
+              }}
               onMove={(position) => moveComponent(c.id, position)}
               onPinMouseDown={
                 tool.kind === "select"
@@ -345,6 +391,14 @@ export function SchematicCanvas() {
       >
         {Math.round(viewport.scale * 100)} %
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={componentMenu(selection.length)}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 }
