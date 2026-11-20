@@ -541,9 +541,18 @@ quelques fichiers `.asc` de test dans `backend/tests/`.
   🧪 Une résistance en `R90` → ses broches aux bonnes coordonnées.
 - [ ] 20c. Relier les segments qui se touchent (bout à bout et en T) → fils `from`/`to` + jonctions.
   🧪 Trois segments en T → une jonction et trois fils.
-- [ ] 20d. Traduire les directives (`.tran 5m` → `TranAnalysis(stop_time=0.005)`) et signaler
-  les symboles inconnus (`UNKNOWN_TYPE`).
-  🧪 Un symbole non supporté → erreur claire, pas de plantage.
+- [ ] 20d. Traduire les directives et signaler les symboles inconnus (`UNKNOWN_TYPE`).
+  Pour `.tran`, LTspice accepte deux formes :
+  - `.tran tstep tstop [tstart [tmax]]` (forme SPICE) → `stop_time = tstop`, `max_step = tmax`
+    s'il est donné ;
+  - `.tran tstop` (forme courte, propre à LTspice, celle qu'il écrit par défaut ; invalide dans
+    ngspice) → `stop_time = tstop`, sans `max_step`.
+
+  🧪 Tests :
+  - `.tran 5m` → `TranAnalysis(stop_time=0.005)` (forme courte LTspice) ;
+  - `.tran 0 5m 0 10u` → `stop_time=0.005`, `max_step=1e-5` ;
+  - `.tran 1u 5m` → `stop_time=0.005`, sans `max_step` ;
+  - un symbole non supporté → erreur claire, pas de plantage.
 
 **🧪 Test final** :
 
