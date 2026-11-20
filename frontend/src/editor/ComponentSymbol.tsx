@@ -123,6 +123,8 @@ interface ComponentSymbolProps {
   onMove?: (position: { x: number; y: number }) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
+  /** Left double-click on the component (not on one of its clickable pins). */
+  onDoubleClick?: () => void;
 }
 
 /**
@@ -139,6 +141,7 @@ export function ComponentSymbol({
   onDrag,
   onMove,
   onPinMouseDown,
+  onDoubleClick,
 }: ComponentSymbolProps) {
   const def = getDef(c.type);
   const color = selected ? COLORS.selected : COLORS.symbol;
@@ -160,6 +163,9 @@ export function ComponentSymbol({
       onMouseDown={(e) => {
         if (e.evt.button === 0) onSelect?.(e);
         else if (e.evt.button === 2) onContextPress?.();
+      }}
+      onDblClick={(e) => {
+        if (e.evt.button === 0) onDoubleClick?.();
       }}
       onDragMove={(e) => {
         const node = e.target;

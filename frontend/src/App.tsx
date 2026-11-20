@@ -1,7 +1,14 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { getHealth } from "./api/client";
-import { Inspector, Palette, SchematicCanvas, StatusBar, UndoRedoButtons } from "./editor";
+import {
+  Inspector,
+  Palette,
+  SHOW_INSPECTOR_EVENT,
+  SchematicCanvas,
+  StatusBar,
+  UndoRedoButtons,
+} from "./editor";
 import {
   DEFAULT_LAYOUT,
   MaximizeButton,
@@ -61,6 +68,14 @@ export default function App() {
   const normal = maximized === null;
   const showSchematic = maximized !== "results";
   const showResults = maximized !== "schematic";
+
+  // The editor asks for the properties panel (double-click on a component, "Propriétés…"): it is
+  // hidden in full screen, so leave it.
+  useEffect(() => {
+    const onShowInspector = () => setMaximized(null);
+    window.addEventListener(SHOW_INSPECTOR_EVENT, onShowInspector);
+    return () => window.removeEventListener(SHOW_INSPECTOR_EVENT, onShowInspector);
+  }, []);
 
   // Escape leaves full screen, unless the editor uses it (placing a component, drawing a wire).
   useEffect(() => {

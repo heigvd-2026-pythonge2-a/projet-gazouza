@@ -141,6 +141,11 @@ interface EditorState {
   undo: () => void;
   /** Ctrl+Y / Ctrl+Shift+Z: re-applies the last undone change. */
   redo: () => void;
+  /**
+   * Ends the current merge of field edits, so the next edit is its own undo step (called when a
+   * field gets the focus: Escape can then undo exactly what was typed in it).
+   */
+  sealHistory: () => void;
 }
 
 /**
@@ -298,6 +303,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   // Changing the selection ends a field edit: editing the same field again later is a new step.
   select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
+
+  sealHistory: () => set((s) => ({ history: seal(s.history) })),
 
   selectWirePart: (part) =>
     set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),
