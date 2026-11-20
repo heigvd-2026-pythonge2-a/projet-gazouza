@@ -39,6 +39,8 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
 4. **Développe contre les fixtures.** Pas besoin d'attendre les autres modules : utilise
    `shared/fixtures/*` comme entrées et sorties de référence, et dans les tests.
 5. **Tests obligatoires** pour le code Python (`backend/tests/`). La CI exige 80 % de couverture.
+   Côté frontend, la logique pure (`src/store/`, `src/layout/`) est testée avec vitest
+   (fichiers `*.test.ts` à côté du code) : ajoute des tests quand tu la modifies.
 6. **Petites PR**, une par tâche, sur une branche `type/description-courte`
    (ex. `feat/netlist-resistor`, `fix/plot-zoom`). Jamais de push direct sur `main`.
 7. Ne fais pas de refactoring ou de reformatage hors du périmètre de la tâche.
@@ -78,6 +80,7 @@ uv run python scripts/export_openapi.py       # régénérer shared/openapi.json
 # Frontend (dans frontend/)
 pnpm install
 pnpm dev                                      # http://localhost:5173 (proxy /api -> 8000)
+pnpm test                                     # tests unitaires (vitest)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
 pnpm gen:api                                  # régénérer les types depuis shared/openapi.json

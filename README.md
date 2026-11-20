@@ -68,7 +68,7 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 | Backend | Python 3, FastAPI, Pydantic, NumPy / SciPy (géré avec **uv**) |
 | Simulation | ngspice (binaires Windows inclus dans le projet) |
 | Application | pywebview (fenêtre native), PyInstaller (packaging) |
-| Qualité | pytest, ESLint, GitHub Actions |
+| Qualité | pytest, vitest, ESLint, GitHub Actions |
 
 ---
 
@@ -144,6 +144,7 @@ uv run pre-commit install
 cd backend
 uv run pytest                     # tests + fixtures du contrat
 cd ../frontend
+pnpm test                         # tests unitaires (vitest)
 pnpm lint ; pnpm build            # lint + vérification de types
 ```
 

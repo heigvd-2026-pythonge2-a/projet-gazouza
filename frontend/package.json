@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "gen:api": "openapi-typescript ../shared/openapi.json -o src/api/schema.gen.ts && prettier --write src/api/schema.gen.ts"
+    "gen:api": "openapi-typescript ../shared/openapi.json -o src/api/schema.gen.ts && prettier --write src/api/schema.gen.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "konva": "^10.9.1",
@@ -38,6 +39,7 @@
     "prettier": "^3.10.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.2",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }
