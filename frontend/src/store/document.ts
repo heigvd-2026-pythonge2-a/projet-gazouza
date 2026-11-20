@@ -218,8 +218,87 @@ function updateComponents(
   };
 }
 
+// --- Keeping wires orthogonal -----------------------------------------------------------------
+
+const isDiagonal = (a: GridPoint, b: GridPoint): boolean => a.x !== b.x && a.y !== b.y;
+
+/**
+ * Moves the bend next to a wire end that went from `oldEnd` to `newEnd`, so the segment between
+ * them keeps its direction: a horizontal segment keeps the end's y, a vertical one its x. The
+ * direction is read on `original` (the bend before any change), the result built from `bend`.
+ */
+function followEnd(
+  bend: GridPoint,
+  original: GridPoint,
+  oldEnd: GridPoint,
+  newEnd: GridPoint,
+): GridPoint {
+  if (original.y === oldEnd.y && original.x !== oldEnd.x) return { x: bend.x, y: newEnd.y };
+  if (original.x === oldEnd.x && original.y !== oldEnd.y) return { x: newEnd.x, y: bend.y };
+  return bend;
+}
+
+/** Adds a corner (horizontal then vertical) inside every diagonal segment of `path`. */
+function squarePath(path: readonly GridPoint[]): GridPoint[] {
+  const out: GridPoint[] = [];
+  for (const p of path) {
+    const last = out[out.length - 1];
+    if (last && isDiagonal(last, p)) out.push({ x: p.x, y: last.y });
+    out.push({ ...p });
+  }
+  return out;
+}
+
+/**
+ * New bends of a wire whose ends moved from `a0`/`b0` to `a1`/`b1`, so that no segment becomes
+ * diagonal. Both ends moved by the same amount: the whole wire is translated. Otherwise the
+ * bends next to a moved end follow it, a corner is added where that is not enough, and bends left
+ * useless (repeated or aligned) are removed.
+ */
+export function realignedBends(
+  bends: readonly GridPoint[],
+  a0: GridPoint,
+  b0: GridPoint,
+  a1: GridPoint,
+  b1: GridPoint,
+): GridPoint[] {
+  const da = { x: a1.x - a0.x, y: a1.y - a0.y };
+  const db = { x: b1.x - b0.x, y: b1.y - b0.y };
+  if (da.x === db.x && da.y === db.y) return bends.map((p) => ({ x: p.x + da.x, y: p.y + da.y }));
+
+  // Work on the simplified path, so consecutive segments always alternate direction.
+  // A single bend follows the start for one coordinate and the end for the other.
+  const original = simplifyPath([a0, ...bends, b0]).slice(1, -1);
+  const inner = original.map((p) => ({ ...p }));
+  const n = inner.length;
+  const first = original[0];
+  const last = original[n - 1];
+  if (first && !samePoint(a0, a1)) inner[0] = followEnd(inner[0] ?? first, first, a0, a1);
+  if (last && !samePoint(b0, b1)) inner[n - 1] = followEnd(inner[n - 1] ?? last, last, b0, b1);
+  return simplifyPath(squarePath([a1, ...inner, b1])).slice(1, -1);
+}
+
+/**
+ * Re-aligns the wires whose ends moved between `before` and `after` (a component was moved,
+ * rotated or mirrored), so that every wire stays horizontal / vertical. Other wires are kept as is.
+ */
+export function realignWires(before: EditorDoc, after: EditorDoc): EditorDoc {
+  let changed = false;
+  const wires = after.wires.map((w) => {
+    const a0 = endPosition(before, w.from);
+    const b0 = endPosition(before, w.to);
+    const a1 = endPosition(after, w.from);
+    const b1 = endPosition(after, w.to);
+    if (samePoint(a0, a1) && samePoint(b0, b1)) return w;
+    changed = true;
+    return { ...w, points: realignedBends(w.points, a0, b0, a1, b1) };
+  });
+  return changed ? { ...after, wires } : after;
+}
+
 export function moveComponent(doc: EditorDoc, id: string, position: GridPoint): EditorDoc {
-  return updateComponents(doc, new Set([id]), (c) => ({ ...c, position: { ...position } }));
+  const moved = updateComponents(doc, new Set([id]), (c) => ({ ...c, position: { ...position } }));
+  return realignWires(doc, moved);
 }
 
 export function renameComponent(doc: EditorDoc, id: string, name: string): EditorDoc {
@@ -265,11 +344,15 @@ export function netNameProblem(net: string): string | null {
 export const rotateCw = (r: Rotation): Rotation => ((r + 90) % 360) as Rotation;
 
 export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
-  return updateComponents(doc, ids, (c) => ({ ...c, rotation: rotateCw(c.rotation) }));
+  const rotated = updateComponents(doc, ids, (c) => ({ ...c, rotation: rotateCw(c.rotation) }));
+  return realignWires(doc, rotated);
 }
 
 export function mirrorComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
-  return updateComponents(doc, ids, (c) => ({ ...c, mirror: !c.mirror }));
+  return realignWires(
+    doc,
+    updateComponents(doc, ids, (c) => ({ ...c, mirror: !c.mirror })),
+  );
 }
 
 /**
