@@ -20,6 +20,11 @@ LIBRARY_DIR = Path(__file__).parent / "library"
 # Matches the placeholders of a template: "{name} {pin:1} {resistance}" -> name, pin:1, resistance
 PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
 
+# A SPICE number as written in the library defaults: "5", "-1.5", "1e-3", "4.7u", "10Meg".
+# Deliberately strict (no trailing letters, unlike SPICE): a typo such as "1kk" is refused.
+# The full user-input parser (`parse_value`) comes with the netlist core.
+SPICE_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(meg|[fpnumkgt])?", re.IGNORECASE)
+
 
 class PinDef(BaseModel):
     """A pin, with its position relative to the component at rotation 0 (grid units)."""
@@ -29,6 +34,15 @@ class PinDef(BaseModel):
     name: str
     x: int
     y: int
+
+
+class Option(BaseModel):
+    """One allowed value of a 'choice' parameter."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(description="Stored in `params` (e.g. 'pulse').")
+    label: str = Field(description="Shown to the user, in French (e.g. 'Impulsion').")
 
 
 class ParamDef(BaseModel):
@@ -45,14 +59,22 @@ class ParamDef(BaseModel):
         description="'value': SPICE number ('1k'); 'text': free text (label name); "
         "'choice': one of `options`.",
     )
-    options: list[str] = Field(default_factory=list, description="Allowed values, for 'choice'.")
+    options: list[Option] = Field(default_factory=list, description="Allowed values, for 'choice'.")
+    waveforms: list[str] = Field(
+        default_factory=list,
+        description="Sources only: the waveforms that use this parameter (e.g. ['pulse', 'sin']). "
+        "Empty: always shown.",
+    )
 
     @model_validator(mode="after")
-    def check_choice(self) -> "ParamDef":
-        if self.kind == "choice" and self.default not in self.options:
-            raise ValueError(f"{self.name}: default {self.default!r} is not in {self.options}")
+    def check_kind(self) -> "ParamDef":
+        values = [o.value for o in self.options]
+        if self.kind == "choice" and self.default not in values:
+            raise ValueError(f"{self.name}: default {self.default!r} is not in {values}")
         if self.kind != "choice" and self.options:
             raise ValueError(f"{self.name}: only a 'choice' parameter has options")
+        if self.kind == "value" and not SPICE_NUMBER.fullmatch(self.default):
+            raise ValueError(f"{self.name}: default {self.default!r} is not a SPICE number")
         return self
 
 
@@ -100,8 +122,22 @@ class ComponentType(BaseModel):
         waveform = next((p for p in self.params if p.name == "waveform"), None)
         if (waveform is None) != (not self.waveforms):
             raise ValueError(f"{self.type}: a 'waveform' parameter needs `waveforms`, and back")
-        if waveform is not None and set(waveform.options) != set(self.waveforms):
+        if waveform is not None and {o.value for o in waveform.options} != set(self.waveforms):
             raise ValueError(f"{self.type}: 'waveform' options must match `waveforms`")
+
+        # Each parameter lists the waveforms that use it, and the list must say exactly what
+        # the templates use: the editor shows only the fields of the selected waveform.
+        for param in self.params:
+            used_by = {
+                name
+                for name, template in self.waveforms.items()
+                if param.name in PLACEHOLDER.findall(template)
+            }
+            if set(param.waveforms) != used_by:
+                raise ValueError(
+                    f"{self.type}: {param.name!r} lists waveforms {param.waveforms}, "
+                    f"but is used by {sorted(used_by)}"
+                )
         return self
 
     def _check_placeholder(self, placeholder: str, pins: list[str], params: list[str]) -> None:

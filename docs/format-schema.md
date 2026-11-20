@@ -165,6 +165,12 @@ Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie �
 ```
 
 - `pins` : nom et position de chaque broche à la rotation 0, relative à `position`.
+- `params` : chaque paramètre a un `name`, un `label` (français), une `unit`, un `default` et un
+  `kind` :
+  - `value` (par défaut) : un nombre SPICE (`"1k"`) ; le `default` est vérifié au chargement ;
+  - `text` : du texte libre (le nom d'une étiquette) ;
+  - `choice` : une valeur parmi `options`, chacune avec sa `value` (enregistrée) et son `label`
+    (affiché), par exemple `{ "value": "pulse", "label": "Impulsion" }`.
 - `symbol` : le **dessin** du symbole, sous forme d'une liste de formes simples (`line`, `rect`,
   `circle`, `arc`, `text`) en unités de grille, à la rotation 0. Le cahier des charges (§3) demande
   que les symboles soient dans la bibliothèque, pour l'étendre sans toucher au code. **Format exact
@@ -208,6 +214,19 @@ Une source a une **forme d'onde**, utilisée pour `.op`, `.tran` et `.dc` :
 Dans le schéma : `"params": { "waveform": "pulse", "v1": "0", "v2": "5", ... }`.
 La valeur de `waveform` s'écrit en **minuscules** (`dc`, `pulse`, `sin`), comme dans les fixtures de
 `main`.
+
+Dans la bibliothèque, chaque paramètre d'une source indique les formes d'onde qui l'utilisent,
+pour que l'éditeur n'affiche que les champs utiles :
+
+```json
+{ "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse", "sin"] }
+```
+
+Le chargeur vérifie que cette liste correspond exactement aux `{…}` des modèles de `waveforms`.
+
+La **source de courant** (`current_source`, préfixe `I`) a les mêmes broches `+` / `-` et les mêmes
+formes d'onde. Attention au sens SPICE : un courant positif circule **dans la source** de `+` vers
+`-`, donc il **sort** par la broche `-` dans le circuit. La flèche du symbole va de `+` vers `-`.
 
 Il n'y a **pas** d'amplitude AC sur la source : pour une analyse `.ac`, c'est l'analyse qui désigne
 la source d'entrée (`input_source_id`), et le backend ajoute `AC 1` à **cette** source seulement :
