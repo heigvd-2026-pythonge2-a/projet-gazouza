@@ -18,6 +18,7 @@ Complète le fichier [`AGENTS.md`](../AGENTS.md) à la racine.
   appels au processus ngspice dans `engines/`.
 - Les routes restent fines : elles valident (Pydantic) et délèguent aux modules.
 - Les erreurs prévisibles de l'utilisateur (circuit sans masse, valeur invalide…) sont
-  renvoyées dans `errors` / `warnings` avec `component_id` ou `wire_id`, pas en exception HTTP.
+  renvoyées dans `errors` / `warnings` sous forme de `Diagnostic` (`code`, `message`,
+  `targets`), pas en exception HTTP. Voir `docs/format-schema.md`, section 8.
 - Tests : un test par cas de `shared/fixtures/` (« golden test ») en plus des tests unitaires.
 - Les tests qui ont besoin du vrai ngspice sont marqués `@pytest.mark.ngspice`.

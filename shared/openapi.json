@@ -30,13 +30,13 @@
     "/api/netlist": {
       "post": {
         "summary": "Generate Netlist",
-        "description": "Schematic -> SPICE netlist. Owner: Damien.",
+        "description": "Schematic + analysis -> SPICE netlist (with its analysis line). Owner: Damien.",
         "operationId": "generate_netlist_api_netlist_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Schematic"
+                "$ref": "#/components/schemas/SimulationRequest"
               }
             }
           },
@@ -188,9 +188,16 @@
             "description": "Library id of the component (e.g. 'resistor', 'ground')."
           },
           "name": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Name",
-            "description": "Reference shown to the user (e.g. 'R1')."
+            "description": "SPICE name shown to the user (e.g. 'R1'). Absent for 'ground' and 'label'."
           },
           "position": {
             "$ref": "#/components/schemas/Point"
@@ -204,11 +211,13 @@
               270
             ],
             "title": "Rotation",
+            "description": "Clockwise, in degrees.",
             "default": 0
           },
           "mirror": {
             "type": "boolean",
             "title": "Mirror",
+            "description": "Horizontal mirror (x -> -x), applied before the rotation.",
             "default": false
           },
           "params": {
@@ -217,18 +226,31 @@
             },
             "type": "object",
             "title": "Params",
-            "description": "Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'})."
+            "description": "Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'}). For a label: {'net': 'out'}."
           }
         },
         "type": "object",
         "required": [
           "id",
           "type",
-          "name",
           "position"
         ],
         "title": "Component",
-        "description": "A placed component instance."
+        "description": "A placed component instance (including grounds and labels)."
+      },
+      "ComponentTarget": {
+        "properties": {
+          "comp": {
+            "type": "string",
+            "title": "Comp"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comp"
+        ],
+        "title": "ComponentTarget"
       },
       "DcAnalysis": {
         "properties": {
@@ -268,39 +290,92 @@
       },
       "Diagnostic": {
         "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "NO_GROUND",
+              "PIN_NOT_CONNECTED",
+              "MISSING_NAME",
+              "DUPLICATE_NAME",
+              "BAD_PREFIX",
+              "BAD_VALUE",
+              "MISSING_PARAM",
+              "UNKNOWN_TYPE",
+              "UNKNOWN_ENDPOINT",
+              "LABEL_CONFLICT",
+              "LABEL_ON_GROUND",
+              "BAD_LABEL_NAME",
+              "AC_SOURCE_NOT_FOUND",
+              "DC_SOURCE_NOT_FOUND",
+              "WIRE_DANGLING",
+              "JUNCTION_DANGLING",
+              "MILLI_SUFFIX",
+              "SINGULAR_MATRIX",
+              "VOLTAGE_SOURCE_LOOP",
+              "NO_CONVERGENCE",
+              "SIMULATION_TIMEOUT",
+              "SIMULATION_FAILED"
+            ],
+            "title": "Code",
+            "description": "Stable code, checked by the tests."
+          },
           "message": {
             "type": "string",
-            "title": "Message"
+            "title": "Message",
+            "description": "French message for the student. May change."
           },
-          "component_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Component Id"
-          },
-          "wire_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Wire Id"
+          "targets": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ComponentTarget"
+                },
+                {
+                  "$ref": "#/components/schemas/PinTarget"
+                },
+                {
+                  "$ref": "#/components/schemas/WireTarget"
+                },
+                {
+                  "$ref": "#/components/schemas/JunctionTarget"
+                },
+                {
+                  "$ref": "#/components/schemas/NetTarget"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Targets",
+            "description": "Elements to highlight. May be empty."
           }
         },
         "type": "object",
         "required": [
+          "code",
           "message"
         ],
         "title": "Diagnostic",
-        "description": "An error or warning, optionally pointing to the faulty element so the UI can\nhighlight it."
+        "description": "An error or a warning. Whether it is one or the other depends on the list it is in."
+      },
+      "FreeEnd": {
+        "properties": {
+          "x": {
+            "type": "integer",
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "title": "Y"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "FreeEnd",
+        "description": "Wire end attached to nothing (dangling). Produces a WIRE_DANGLING warning."
       },
       "HTTPValidationError": {
         "properties": {
@@ -315,12 +390,77 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "Junction": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Stable unique id (e.g. 'j1')."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Point"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "position"
+        ],
+        "title": "Junction",
+        "description": "A point where wires meet outside a pin (a 'T')."
+      },
+      "JunctionEnd": {
+        "properties": {
+          "junction": {
+            "type": "string",
+            "title": "Junction",
+            "description": "Junction id (e.g. 'j1')."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "junction"
+        ],
+        "title": "JunctionEnd",
+        "description": "Wire end attached to a junction."
+      },
+      "JunctionTarget": {
+        "properties": {
+          "junction": {
+            "type": "string",
+            "title": "Junction"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "junction"
+        ],
+        "title": "JunctionTarget"
+      },
+      "NetTarget": {
+        "properties": {
+          "net": {
+            "type": "string",
+            "title": "Net"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "net"
+        ],
+        "title": "NetTarget",
+        "description": "A SPICE node (e.g. 'n3'). The editor finds its wires through `NetlistResult.nets`."
+      },
       "NetlistResult": {
         "properties": {
           "netlist": {
             "type": "string",
             "title": "Netlist",
-            "description": "SPICE netlist, directly runnable by ngspice if no errors."
+            "description": "SPICE netlist, directly runnable by ngspice. Empty if there are errors.",
+            "default": ""
           },
           "nets": {
             "additionalProperties": {
@@ -357,9 +497,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "netlist"
-        ],
         "title": "NetlistResult"
       },
       "OpAnalysis": {
@@ -373,6 +510,47 @@
         },
         "type": "object",
         "title": "OpAnalysis"
+      },
+      "PinEnd": {
+        "properties": {
+          "comp": {
+            "type": "string",
+            "title": "Comp",
+            "description": "Component id (e.g. 'c1')."
+          },
+          "pin": {
+            "type": "string",
+            "title": "Pin",
+            "description": "Pin name from the library (e.g. '+', '1')."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comp",
+          "pin"
+        ],
+        "title": "PinEnd",
+        "description": "Wire end attached to a component pin."
+      },
+      "PinTarget": {
+        "properties": {
+          "comp": {
+            "type": "string",
+            "title": "Comp"
+          },
+          "pin": {
+            "type": "string",
+            "title": "Pin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "comp",
+          "pin"
+        ],
+        "title": "PinTarget"
       },
       "Point": {
         "properties": {
@@ -391,15 +569,27 @@
           "y"
         ],
         "title": "Point",
-        "description": "Position on the grid, in grid units."
+        "description": "Position on the grid, in grid units. The y axis points down."
       },
       "Schematic": {
         "properties": {
           "version": {
             "type": "integer",
-            "const": 1,
+            "const": 2,
             "title": "Version",
-            "default": 1
+            "default": 2
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Used as the netlist header."
           },
           "components": {
             "items": {
@@ -407,6 +597,13 @@
             },
             "type": "array",
             "title": "Components"
+          },
+          "junctions": {
+            "items": {
+              "$ref": "#/components/schemas/Junction"
+            },
+            "type": "array",
+            "title": "Junctions"
           },
           "wires": {
             "items": {
@@ -670,22 +867,65 @@
             "type": "string",
             "title": "Id"
           },
+          "from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PinEnd"
+              },
+              {
+                "$ref": "#/components/schemas/JunctionEnd"
+              },
+              {
+                "$ref": "#/components/schemas/FreeEnd"
+              }
+            ],
+            "title": "From"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PinEnd"
+              },
+              {
+                "$ref": "#/components/schemas/JunctionEnd"
+              },
+              {
+                "$ref": "#/components/schemas/FreeEnd"
+              }
+            ],
+            "title": "To"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/Point"
             },
             "type": "array",
-            "minItems": 2,
-            "title": "Points"
+            "title": "Points",
+            "description": "Intermediate bends only, for drawing. Ignored by the netlist."
           }
         },
         "type": "object",
         "required": [
           "id",
-          "points"
+          "from",
+          "to"
         ],
         "title": "Wire",
-        "description": "A wire drawn as a polyline. Its two ends may touch pins or other wires."
+        "description": "A wire between two explicit ends."
+      },
+      "WireTarget": {
+        "properties": {
+          "wire": {
+            "type": "string",
+            "title": "Wire"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "wire"
+        ],
+        "title": "WireTarget"
       }
     }
   }

@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException
 
-from app.models import NetlistResult, Schematic, SimulationRequest, SimulationResult
+from app.models import NetlistResult, SimulationRequest, SimulationResult
 
 app = FastAPI(title="Psice API", version="0.1.0")
 
@@ -13,8 +13,8 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/netlist")
-def generate_netlist(schematic: Schematic) -> NetlistResult:
-    """Schematic -> SPICE netlist. Owner: Damien."""
+def generate_netlist(request: SimulationRequest) -> NetlistResult:
+    """Schematic + analysis -> SPICE netlist (with its analysis line). Owner: Damien."""
     raise HTTPException(status_code=501, detail="Not implemented yet")
 
 

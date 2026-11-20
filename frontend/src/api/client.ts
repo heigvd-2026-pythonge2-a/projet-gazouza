@@ -18,8 +18,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getHealth = () => request<{ status: string }>("/api/health");
 
-export const generateNetlist = (schematic: Schematic) =>
-  request<NetlistResult>("/api/netlist", { method: "POST", body: JSON.stringify(schematic) });
+export const generateNetlist = (body: SimulationRequest) =>
+  request<NetlistResult>("/api/netlist", { method: "POST", body: JSON.stringify(body) });
 
 export const simulate = (body: SimulationRequest) =>
   request<SimulationResult>("/api/simulate", { method: "POST", body: JSON.stringify(body) });

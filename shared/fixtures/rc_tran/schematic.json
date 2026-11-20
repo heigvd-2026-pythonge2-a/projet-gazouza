@@ -1,5 +1,6 @@
 {
-  "version": 1,
+  "version": 2,
+  "title": "Circuit RC",
   "components": [
     {
       "id": "c1",
@@ -53,7 +54,6 @@
     {
       "id": "c4",
       "type": "ground",
-      "name": "GND1",
       "position": {
         "x": 0,
         "y": 4
@@ -65,7 +65,6 @@
     {
       "id": "c5",
       "type": "ground",
-      "name": "GND2",
       "position": {
         "x": 8,
         "y": 4
@@ -73,68 +72,113 @@
       "rotation": 0,
       "mirror": false,
       "params": {}
+    },
+    {
+      "id": "c6",
+      "type": "label",
+      "position": {
+        "x": 0,
+        "y": -3
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "net": "in"
+      }
+    },
+    {
+      "id": "c7",
+      "type": "label",
+      "position": {
+        "x": 8,
+        "y": -3
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "net": "out"
+      }
     }
   ],
+  "junctions": [],
   "wires": [
     {
       "id": "w1",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c2",
+        "pin": "1"
+      },
       "points": [
         {
           "x": 0,
-          "y": -1
-        },
-        {
-          "x": 0,
-          "y": -2
-        },
-        {
-          "x": 2,
           "y": -2
         }
       ]
     },
     {
       "id": "w2",
+      "from": {
+        "comp": "c2",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c3",
+        "pin": "1"
+      },
       "points": [
         {
-          "x": 6,
-          "y": -2
-        },
-        {
           "x": 8,
           "y": -2
-        },
-        {
-          "x": 8,
-          "y": -1
         }
       ]
     },
     {
       "id": "w3",
-      "points": [
-        {
-          "x": 0,
-          "y": 1
-        },
-        {
-          "x": 0,
-          "y": 4
-        }
-      ]
+      "from": {
+        "comp": "c1",
+        "pin": "-"
+      },
+      "to": {
+        "comp": "c4",
+        "pin": "1"
+      }
     },
     {
       "id": "w4",
-      "points": [
-        {
-          "x": 8,
-          "y": 1
-        },
-        {
-          "x": 8,
-          "y": 4
-        }
-      ]
+      "from": {
+        "comp": "c3",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w5",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c6",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w6",
+      "from": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "to": {
+        "comp": "c7",
+        "pin": "1"
+      }
     }
   ]
 }

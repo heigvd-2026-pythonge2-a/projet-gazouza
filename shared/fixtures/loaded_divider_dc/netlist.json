@@ -1,0 +1,26 @@
+{
+  "netlist": "* Diviseur chargé\nV1 n1 0 DC 10\nR1 n1 n2 1k\nR2 n2 0 1k\nR3 n2 0 1k\n.dc V1 0 10 1\n.end\n",
+  "nets": {
+    "n1": [
+      "w1"
+    ],
+    "n2": [
+      "w2",
+      "w3",
+      "w4"
+    ],
+    "0": [
+      "w5",
+      "w6",
+      "w7"
+    ]
+  },
+  "components": {
+    "V1": "c1",
+    "R1": "c2",
+    "R2": "c3",
+    "R3": "c4"
+  },
+  "errors": [],
+  "warnings": []
+}

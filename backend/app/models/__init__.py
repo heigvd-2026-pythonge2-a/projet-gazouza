@@ -1,7 +1,28 @@
 """API contract (Pydantic). Single source of truth for the frontend TypeScript types."""
 
-from app.models.netlist import Diagnostic, NetlistResult
-from app.models.schematic import Component, Point, Schematic, Wire
+from app.models.netlist import (
+    ComponentTarget,
+    Diagnostic,
+    DiagnosticCode,
+    JunctionTarget,
+    NetlistResult,
+    NetTarget,
+    PinTarget,
+    Target,
+    WireTarget,
+)
+from app.models.schematic import (
+    SCHEMATIC_VERSION,
+    Component,
+    FreeEnd,
+    Junction,
+    JunctionEnd,
+    PinEnd,
+    Point,
+    Schematic,
+    Wire,
+    WireEnd,
+)
 from app.models.simulation import (
     AcAnalysis,
     Analysis,
@@ -15,19 +36,32 @@ from app.models.simulation import (
 )
 
 __all__ = [
+    "SCHEMATIC_VERSION",
     "AcAnalysis",
     "Analysis",
     "Axis",
     "Component",
+    "ComponentTarget",
     "DcAnalysis",
     "Diagnostic",
+    "DiagnosticCode",
+    "FreeEnd",
+    "Junction",
+    "JunctionEnd",
+    "JunctionTarget",
+    "NetTarget",
     "NetlistResult",
     "OpAnalysis",
+    "PinEnd",
+    "PinTarget",
     "Point",
     "Schematic",
     "SimulationRequest",
     "SimulationResult",
-    "TranAnalysis",
+    "Target",
     "Trace",
+    "TranAnalysis",
     "Wire",
+    "WireEnd",
+    "WireTarget",
 ]

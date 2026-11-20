@@ -1,11 +1,13 @@
 {
-  "netlist": "* divider_op\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n",
+  "netlist": "* Diviseur de tension\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n",
   "nets": {
     "in": [
-      "w1"
+      "w1",
+      "w5"
     ],
     "out": [
-      "w2"
+      "w2",
+      "w6"
     ],
     "0": [
       "w3",

@@ -1,0 +1,7 @@
+* Diviseur chargé
+V1 n1 0 DC 10
+R1 n1 n2 1k
+R2 n2 0 1k
+R3 n2 0 1k
+.dc V1 0 10 1
+.end
