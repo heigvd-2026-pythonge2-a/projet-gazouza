@@ -171,7 +171,10 @@ uv run pytest tests/test_values.py -v
 
 - [ ] Fichiers JSON : `resistor`, `capacitor`, `inductor`, `voltage_source`, `ground`, `label`.
 - [ ] Contenu de chacun : `type`, `label` (français), `prefix`, `pins` (nom + position),
-  `params` (nom, unité, défaut), `spice` (modèle de ligne).
+  `params` (nom, unité, défaut), `spice` (modèle de ligne), `symbol` (dessin, format proposé par
+  Noé).
+- [ ] **À pousser tôt** (demande de Noé) : une petite PR `feat/library-basic` avec les JSON de R, C,
+  source, masse et étiquette, pour qu'il dessine les broches sans attendre `GET /api/library`.
 - [ ] `load_library() -> dict[str, ComponentType]` qui lit et valide tous les fichiers
   (petit modèle Pydantic interne `ComponentType`, **pas** dans `models/` pour l'instant).
 
@@ -196,15 +199,16 @@ uv run pytest tests/test_values.py -v
 
 - [ ] `component_line(comp, comp_type, pin_nodes: dict[str, str]) -> str`
 - [ ] Remplace `{name}`, `{pin:X}` et `{param}`.
-- [ ] Pour les sources : choisir la forme d'onde (`DC`, `PULSE`, `SIN`) et ajouter la partie
-  `AC {ac_mag} {ac_phase}` si `ac_mag` est donné.
+- [ ] Pour les sources : choisir la forme d'onde (`dc`, `pulse`, `sin`, en minuscules dans le
+  schéma) et ajouter `AC 1` **seulement** à la source désignée par `input_source_id` d'une analyse
+  `.ac`.
 
 **🧪 Phase de test** :
 
 - [ ] Résistance : `R1` + nœuds `in`/`out` → `"R1 in out 1k"`.
 - [ ] Source DC → `"V1 in 0 DC 10"`.
 - [ ] Source PULSE → `"V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)"`.
-- [ ] Source DC + AC → `"V1 in 0 DC 0 AC 1 0"`.
+- [ ] Source d'entrée d'une analyse `.ac` → `"V1 in 0 DC 0 AC 1"`.
 
 **✅ Terminé quand** : les lignes produites sont identiques à celles des fixtures.
 
@@ -241,8 +245,9 @@ uv run pytest tests/test_values.py -v
 
 - [ ] `analysis_line(analysis, components) -> str`
 - [ ] `op` → `.op`
-- [ ] `tran` → `.tran 0 5m 0 10u` (comme dans `shared/fixtures/rc_tran`)
-- [ ] `ac` → `.ac dec 20 10 100k`
+- [ ] `tran` → `.tran 10u 5m` (`.tran {max_step} {stop_time}`, `stop_time / 1000` si `max_step`
+  est absent ; forme à confirmer avec Antoine)
+- [ ] `ac` → `.ac dec 100 10 100k`
 - [ ] `dc` → `.dc V1 0 10 1` (retrouver le **nom** `V1` à partir de l'**id** de la source).
 - [ ] Une fonction `format_value(0.005) -> "5m"` (l'inverse de l'étape 2) pour une netlist lisible.
 
@@ -251,7 +256,7 @@ uv run pytest tests/test_values.py -v
 - [ ] Un test par type d'analyse, avec les objets de `app.models` (`OpAnalysis`, `TranAnalysis`…).
 - [ ] `format_value` puis `parse_value` redonne la même valeur (test « aller-retour »).
 - [ ] `.dc` avec un id de source inconnu → erreur `DC_SOURCE_NOT_FOUND`.
-- [ ] `.ac` sans aucune source avec `ac_mag` → erreur `NO_AC_SOURCE`.
+- [ ] `.ac` avec un `input_source_id` inconnu → erreur `AC_SOURCE_NOT_FOUND`.
 
 **✅ Terminé quand** : la ligne produite pour `rc_tran` est identique à celle de `netlist.cir`.
 
@@ -264,12 +269,21 @@ uv run pytest tests/test_values.py -v
 **À coder** (une fonction par vérification, chacune renvoie une liste d'erreurs) :
 
 - [ ] `NO_GROUND` : pas de masse.
-- [ ] `DUPLICATE_NAME` : deux composants avec le même nom (cibles = **les deux**).
+- [ ] `PIN_NOT_CONNECTED` : broche reliée à rien (erreur, une par broche).
+- [ ] `MISSING_NAME` : composant sans nom (sauf masses et étiquettes, qui n'en ont pas).
+- [ ] `DUPLICATE_NAME` : deux composants avec le même nom (cibles = **les deux** ; masses et
+  étiquettes non concernées).
 - [ ] `BAD_PREFIX` : `C1` utilisé pour une résistance.
 - [ ] `BAD_VALUE` : `"1kk"`.
 - [ ] `MISSING_PARAM` : paramètre obligatoire vide.
 - [ ] `UNKNOWN_TYPE` : type absent de la bibliothèque.
-- [ ] Avertissement `COMPONENT_ISOLATED` : composant relié à rien.
+- [ ] `UNKNOWN_ENDPOINT` : fil accroché à un composant, une broche ou une jonction qui n'existe pas.
+- [ ] `BAD_LABEL_NAME` : nom d'étiquette invalide (`2out`).
+- [ ] Avertissement `WIRE_DANGLING` : fil avec un bout libre `{x, y}`.
+- [ ] Avertissement `JUNCTION_DANGLING` : jonction reliée à moins de 2 fils.
+- [ ] Avertissement `MILLI_SUFFIX` : valeur en `M` (milli), probablement un `Meg` oublié.
+
+La liste complète et les messages sont dans `format-schema.md`, section 8.
 
 **🧪 Phase de test** :
 
@@ -326,9 +340,12 @@ uv run pytest tests/test_values.py -v
 
 **À faire** :
 
-- [ ] Convertir `divider_op` et `rc_tran` au nouveau format (fils `from`/`to`).
-- [ ] Ajouter `lowpass_ac` et `loaded_divider_dc` (à partir de mes `rc_bode.json` et
-  `diviseur_charge_dc.json`), avec les 5 fichiers chacun.
+- [ ] Convertir `divider_op` et `rc_tran` en version 2 (fils `from`/`to`), en **ajoutant les
+  étiquettes `in` et `out`** pour garder les mêmes noms de nœuds, et en retirant les `name` des
+  masses. Modèle : `docs/exemples-netlist.md`, exemples 1 et 2.
+- [ ] Ajouter `lowpass_ac` et `loaded_divider_dc` (exemples 3 et 4), avec les 5 fichiers chacun.
+- [ ] Supprimer mon ancien dossier local `backend/tests/fixtures/circuits/` (ancien format, jamais
+  commité).
 - [ ] Mettre à jour `shared/fixtures/README.md`.
 
 **🧪 Phase de test** :
@@ -379,6 +396,8 @@ uv run pytest tests/test_generate.py -v
 
 **À coder** :
 
+- [ ] La route reçoit `{ schematic, analysis }` (même objet que `SimulationRequest`, décidé avec
+  Noé) : il faut changer sa signature dans `main.py`.
 - [ ] La route reste **fine** : elle reçoit, appelle `generate_netlist`, renvoie le résultat.
 
 **🧪 Phase de test** :
@@ -557,9 +576,12 @@ uv run pytest --cov=app --cov-report=term-missing
 
 | Question | Avec qui | Bloque l'étape |
 | --- | --- | --- |
-| Fils explicites ou géométriques ? | Noé | 8, 10 |
-| Format des erreurs (`code`, `targets`) | Antoine, Noé | 8 |
-| **`POST /api/netlist` ne reçoit que le schéma, mais les fixtures contiennent la ligne `.op` / `.tran`.** Qui ajoute l'analyse : moi (la route reçoit aussi l'analyse) ou Antoine ? | Antoine | 10, 11 |
+| ~~Fils explicites ou géométriques ?~~ **Explicites, validé par Noé** | Noé | 8, 10 |
+| Format des erreurs (`code`, `targets`) : validé par Noé, reste les codes ngspice | Antoine | 8 |
+| ~~Qui ajoute l'analyse à la netlist ?~~ **La route reçoit `{ schematic, analysis }`** | Noé | 10, 11 |
+| Forme de la ligne `.tran` (`.tran 10u 5m` ou `.tran 0 5m 0 10u`) | Antoine | 6 |
+| Format exact du champ `symbol` (dessin des symboles) | Noé (il propose) | 3 |
+| Accès de Noémi au dépôt (elle n'apparaît pas dans les reviewers) | Antoine | — |
 | Courant dans R/C : `.save @r1[i]` ou source 0 V en série ? | Antoine | 13 |
 | Inverser le signe du courant des sources à l'affichage ? | Noémi | 13 |
 | Garder l'import `.asc` ou le retirer du cahier des charges ? | Toute l'équipe | 20 |

@@ -1,145 +1,89 @@
 # Exemples : ce que je reçois, ce que je renvoie
 
-Rôle **Bibliothèque et netlist** (Damien). Format décrit dans [`format-schema.md`](format-schema.md).
+Rôle **Bibliothèque et netlist** (Damien). Format décrit dans [`format-schema.md`](format-schema.md)
+(version 2).
 
 ```
-Éditeur (Noé) ──schéma JSON──► Netlist (Damien) ──netlist + nets + components──► Simulation (Antoine)
-                                                                               └► Sondes (Noémi)
+Éditeur (Noé) ──{ schematic, analysis }──► Netlist (Damien) ──netlist + nets + components──► Simulation (Antoine)
+                                                                                          └► Sondes (Noémi)
 ```
 
-| # | Circuit | Analyse | Ce que l'exemple montre |
+Les exemples 1 à 4 sont les circuits de référence de `shared/fixtures/`. Les deux premiers existent
+déjà sur `main` (au format version 1) ; les deux derniers sont ceux que le README des fixtures
+annonce « à ajouter ». Tous seront migrés en version 2 dans la PR du contrat
+(`feat/schematic-contract`).
+
+| # | Fixture | Analyse | Ce que l'exemple montre |
 | --- | --- | --- | --- |
-| 1 | Diviseur de tension | `.op` | Noms de nœuds automatiques (`n1`, `n2`) |
-| 2 | Circuit RC | `.tran` | Source `PULSE`, étiquette `out` |
-| 3 | Filtre passe-bas RC | `.ac` | Amplitude AC sur la source, étiquettes `in` et `out` |
-| 4 | Diviseur chargé | `.dc` | Jonction (trois fils au même point), balayage de la source |
+| 1 | `divider_op` | `.op` | Étiquettes `in` et `out`, deux masses |
+| 2 | `rc_tran` | `.tran` | Source `pulse` |
+| 3 | `lowpass_ac` (nouveau) | `.ac` | Source d'entrée choisie par l'analyse (`AC 1` ajouté) |
+| 4 | `loaded_divider_dc` (nouveau) | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |
+| 5 | — | `.op` | Un circuit faux : erreurs et avertissements |
 
 Dans la réponse :
 
-- `netlist` : le texte que ngspice exécute ;
+- `netlist` : le texte que ngspice exécute (`""` s'il y a des erreurs) ;
 - `nets` : pour chaque nœud, les fils qui le forment (clic sur un fil → tension du nœud) ;
 - `components` : pour chaque nom SPICE, l'id du composant (clic sur un composant → son courant) ;
-- `errors` / `warnings` : vides si tout va bien (voir section 7 de `format-schema.md`).
+- `errors` / `warnings` : vides si tout va bien (voir la section 8 de `format-schema.md`).
 
-## Exemple 1 — Diviseur de tension
+> **Migration des fixtures de `main`** : en version 1, `divider_op` et `rc_tran` nomment leurs nœuds
+> `in` et `out` sans étiquette. En version 2, sans étiquette, ils s'appelleraient `n1` et `n2`. On
+> ajoute donc les étiquettes `in` et `out` en migrant, pour garder les mêmes noms (et les mêmes
+> traces dans `result.json`). Les noms `GND1` et `GND2` des masses disparaissent.
 
-Le cas le plus simple : analyse `.op`, aucun nom de nœud choisi, donc noms automatiques `n1`, `n2`.
+---
+
+## Exemple 1 — Diviseur de tension (`divider_op`)
+
+V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
 
 ```
-   n1        R1 10k        n2
-    ┌───────/\/\/\────────┐
-    │+                      │
-   (V1) 10 V              R2 10k
-    │-                      │
-    └──────────┬────────────┘
-              ⏚  (0)
+   in ◄ étiquette    R1 1k      out ◄ étiquette
+    ┌───────────────/\/\/\───────┐
+    │+                            │
+   (V1) 10 V                    R2 1k
+    │-                            │
+    ⏚ (0)                         ⏚ (0)
 ```
 
 ### 1. Je reçois (de l'éditeur de Noé)
 
 ```json
 {
-  "version": 1,
-  "title": "Diviseur de tension",
-  "components": [
-    {
-      "id": "comp-1",
-      "type": "voltage_source",
-      "name": "V1",
-      "x": 0,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "waveform": "DC",
-        "dc": "10"
-      }
-    },
-    {
-      "id": "comp-2",
-      "type": "resistor",
-      "name": "R1",
-      "x": 4,
-      "y": 2,
-      "rotation": 90,
-      "mirror": false,
-      "params": {
-        "resistance": "10k"
-      }
-    },
-    {
-      "id": "comp-3",
-      "type": "resistor",
-      "name": "R2",
-      "x": 8,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "resistance": "10k"
-      }
-    },
-    {
-      "id": "comp-4",
-      "type": "ground",
-      "name": "GND",
-      "x": 4,
-      "y": 8,
-      "rotation": 0,
-      "mirror": false,
-      "params": {}
-    }
-  ],
-  "junctions": [],
-  "wires": [
-    {
-      "id": "wire-1",
-      "from": {
-        "comp": "comp-1",
-        "pin": "+"
-      },
-      "to": {
-        "comp": "comp-2",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-2",
-      "from": {
-        "comp": "comp-2",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-3",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-3",
-      "from": {
-        "comp": "comp-1",
-        "pin": "-"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-4",
-      "from": {
-        "comp": "comp-3",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    }
-  ],
-  "analysis": {
-    "type": "op"
-  }
+  "schematic": {
+    "version": 2,
+    "title": "Diviseur de tension",
+    "components": [
+      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "10" } },
+      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
+        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c4", "type": "ground", "position": { "x": 0, "y": 4 },
+        "rotation": 0, "mirror": false, "params": {} },
+      { "id": "c5", "type": "ground", "position": { "x": 8, "y": 4 },
+        "rotation": 0, "mirror": false, "params": {} },
+      { "id": "c6", "type": "label", "position": { "x": 0, "y": -3 },
+        "rotation": 0, "mirror": false, "params": { "net": "in" } },
+      { "id": "c7", "type": "label", "position": { "x": 8, "y": -3 },
+        "rotation": 0, "mirror": false, "params": { "net": "out" } }
+    ],
+    "junctions": [],
+    "wires": [
+      { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
+        "points": [ { "x": 0, "y": -2 } ] },
+      { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "comp": "c3", "pin": "1" },
+        "points": [ { "x": 8, "y": -2 } ] },
+      { "id": "w3", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c4", "pin": "1" } },
+      { "id": "w4", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
+      { "id": "w5", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c6", "pin": "1" } },
+      { "id": "w6", "from": { "comp": "c3", "pin": "1" }, "to": { "comp": "c7", "pin": "1" } }
+    ]
+  },
+  "analysis": { "kind": "op" }
 }
 ```
 
@@ -147,24 +91,9 @@ Le cas le plus simple : analyse `.op`, aucun nom de nœud choisi, donc noms auto
 
 ```json
 {
-  "netlist": "* Diviseur de tension\nV1 n1 0 DC 10\nR1 n1 n2 10k\nR2 n2 0 10k\n.op\n.end\n",
-  "nets": {
-    "n1": [
-      "wire-1"
-    ],
-    "n2": [
-      "wire-2"
-    ],
-    "0": [
-      "wire-3",
-      "wire-4"
-    ]
-  },
-  "components": {
-    "V1": "comp-1",
-    "R1": "comp-2",
-    "R2": "comp-3"
-  },
+  "netlist": "* Diviseur de tension\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n",
+  "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
+  "components": { "V1": "c1", "R1": "c2", "R2": "c3" },
   "errors": [],
   "warnings": []
 }
@@ -174,428 +103,145 @@ La netlist, lisible :
 
 ```
 * Diviseur de tension
-V1 n1 0 DC 10
-R1 n1 n2 10k
-R2 n2 0 10k
+V1 in 0 DC 10
+R1 in out 1k
+R2 out 0 1k
 .op
 .end
 ```
 
-### 3. Résultat attendu après simulation (vérifié avec ngspice)
+### 3. Résultat attendu après simulation
 
-v(n2) = 5 V (la moitié de 10 V), i(v1) = −0,5 mA.
-
-Fichier de test : `backend/tests/fixtures/circuits/diviseur.json`
+v(in) = 10 V, v(out) = 5 V (la moitié), i(V1) = −5 mA.
 
 ---
 
-## Exemple 2 — Circuit RC
+## Exemple 2 — Circuit RC (`rc_tran`)
 
-Analyse temporelle `.tran` avec une source `PULSE`, et une **étiquette** `out` qui donne son nom au nœud de sortie.
+Échelon 0 → 5 V (`pulse`) sur un RC : R = 1 kΩ, C = 1 µF, τ = RC = 1 ms. Temporel sur 5 ms.
 
 ```
-   n1        R1 1k        out ◄── étiquette OUT
-    ┌───────/\/\/\───────┬──
-    │+                    │
-   (V1) créneau 0→5 V    ═╪═ C1 1µ
-    │-                    │
-    └──────────┬──────────┘
-              ⏚  (0)
+   in ◄ étiquette    R1 1k      out ◄ étiquette
+    ┌───────────────/\/\/\───────┐
+    │+                            │
+   (V1) échelon 0 → 5 V         ═╪═ C1 1µ
+    │-                            │
+    ⏚ (0)                         ⏚ (0)
 ```
 
-### 1. Je reçois (de l'éditeur de Noé)
+### 1. Je reçois
+
+Même câblage que l'exemple 1 : seuls V1, le 2ᵉ composant (C1 au lieu de R2) et l'analyse changent.
 
 ```json
 {
-  "version": 1,
-  "title": "Circuit RC",
-  "components": [
-    {
-      "id": "comp-1",
-      "type": "voltage_source",
-      "name": "V1",
-      "x": 0,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "waveform": "PULSE",
-        "v1": "0",
-        "v2": "5",
-        "delay": "0",
-        "rise": "1u",
-        "fall": "1u",
-        "width": "5m",
-        "period": "10m"
-      }
-    },
-    {
-      "id": "comp-2",
-      "type": "resistor",
-      "name": "R1",
-      "x": 4,
-      "y": 2,
-      "rotation": 90,
-      "mirror": false,
-      "params": {
-        "resistance": "1k"
-      }
-    },
-    {
-      "id": "comp-3",
-      "type": "capacitor",
-      "name": "C1",
-      "x": 8,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "capacitance": "1u"
-      }
-    },
-    {
-      "id": "comp-4",
-      "type": "ground",
-      "name": "GND",
-      "x": 4,
-      "y": 8,
-      "rotation": 0,
-      "mirror": false,
-      "params": {}
-    },
-    {
-      "id": "comp-5",
-      "type": "label",
-      "name": "OUT",
-      "x": 10,
-      "y": 2,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "net": "out"
-      }
-    }
-  ],
-  "junctions": [],
-  "wires": [
-    {
-      "id": "wire-1",
-      "from": {
-        "comp": "comp-1",
-        "pin": "+"
-      },
-      "to": {
-        "comp": "comp-2",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-2",
-      "from": {
-        "comp": "comp-2",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-3",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-3",
-      "from": {
-        "comp": "comp-1",
-        "pin": "-"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-4",
-      "from": {
-        "comp": "comp-3",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-5",
-      "from": {
-        "comp": "comp-3",
-        "pin": "1"
-      },
-      "to": {
-        "comp": "comp-5",
-        "pin": "1"
-      }
-    }
-  ],
-  "analysis": {
-    "type": "tran",
-    "step": "10u",
-    "stop": "10m"
-  }
+  "schematic": {
+    "version": 2,
+    "title": "Circuit RC",
+    "components": [
+      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+        "rotation": 0, "mirror": false,
+        "params": { "waveform": "pulse", "v1": "0", "v2": "5", "delay": "0",
+                    "rise": "1n", "fall": "1n", "width": "10m", "period": "20m" } },
+      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
+        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c3", "type": "capacitor", "name": "C1", "position": { "x": 8, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "capacitance": "1u" } },
+      { "id": "c4", "type": "ground", "position": { "x": 0, "y": 4 },
+        "rotation": 0, "mirror": false, "params": {} },
+      { "id": "c5", "type": "ground", "position": { "x": 8, "y": 4 },
+        "rotation": 0, "mirror": false, "params": {} },
+      { "id": "c6", "type": "label", "position": { "x": 0, "y": -3 },
+        "rotation": 0, "mirror": false, "params": { "net": "in" } },
+      { "id": "c7", "type": "label", "position": { "x": 8, "y": -3 },
+        "rotation": 0, "mirror": false, "params": { "net": "out" } }
+    ],
+    "junctions": [],
+    "wires": [
+      { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
+        "points": [ { "x": 0, "y": -2 } ] },
+      { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "comp": "c3", "pin": "1" },
+        "points": [ { "x": 8, "y": -2 } ] },
+      { "id": "w3", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c4", "pin": "1" } },
+      { "id": "w4", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
+      { "id": "w5", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c6", "pin": "1" } },
+      { "id": "w6", "from": { "comp": "c3", "pin": "1" }, "to": { "comp": "c7", "pin": "1" } }
+    ]
+  },
+  "analysis": { "kind": "tran", "stop_time": 0.005, "max_step": 1e-5 }
 }
 ```
 
-### 2. Je renvoie (à Antoine pour simuler, à Noémi pour les sondes)
+### 2. Je renvoie
 
 ```json
 {
-  "netlist": "* Circuit RC\nV1 n1 0 PULSE(0 5 0 1u 1u 5m 10m)\nR1 n1 out 1k\nC1 out 0 1u\n.tran 10u 10m\n.end\n",
-  "nets": {
-    "n1": [
-      "wire-1"
-    ],
-    "out": [
-      "wire-2",
-      "wire-5"
-    ],
-    "0": [
-      "wire-3",
-      "wire-4"
-    ]
-  },
-  "components": {
-    "V1": "comp-1",
-    "R1": "comp-2",
-    "C1": "comp-3"
-  },
+  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m\n.end\n",
+  "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
+  "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
   "warnings": []
 }
 ```
-
-La netlist, lisible :
 
 ```
 * Circuit RC
-V1 n1 0 PULSE(0 5 0 1u 1u 5m 10m)
-R1 n1 out 1k
+V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)
+R1 in out 1k
 C1 out 0 1u
-.tran 10u 10m
+.tran 10u 5m
 .end
 ```
 
-### 3. Résultat attendu après simulation (vérifié avec ngspice)
+La ligne `.tran` suit la règle proposée (`.tran {max_step} {stop_time}`). La fixture actuelle de
+`main` utilise `.tran 0 5m 0 10u` : à trancher avec Antoine.
 
-τ = RC = 1 ms : v(out) vaut 3,16 V à 1 ms (63 %), 4,75 V à 3 ms, 4,97 V à 5 ms.
+### 3. Résultat attendu après simulation
 
-Fichier de test : `backend/tests/fixtures/circuits/rc.json`
+v(out) vaut 3,16 V à 1 ms (63 %), 4,75 V à 3 ms, 4,97 V à 5 ms. Ces valeurs ont été vérifiées avec
+ngspice sur un RC identique (même R, C et échelon de 5 V) ; à revérifier avec cette netlist exacte.
 
 ---
 
-## Exemple 3 — Filtre passe-bas RC (Bode)
+## Exemple 3 — Filtre passe-bas RC, Bode (`lowpass_ac`, nouveau)
 
-Analyse fréquentielle `.ac` : la source a une **amplitude AC** (`ac_mag`), et deux étiquettes `in` et `out`.
+Même circuit que l'exemple 2 avec C = 159,15 nF : coupure à fc = 1 / (2π·R·C) = 1 kHz.
+La source est une simple source `dc` à 0 V : c'est **l'analyse** qui la désigne comme entrée
+(`input_source_id`), et le backend ajoute `AC 1` à sa ligne.
 
+### 1. Je reçois
+
+Le schéma est celui de l'exemple 2, avec deux changements :
+
+```json
+{ "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+  "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "0" } },
+{ "id": "c3", "type": "capacitor", "name": "C1", "position": { "x": 8, "y": 0 },
+  "rotation": 0, "mirror": false, "params": { "capacitance": "159.15n" } }
 ```
-   in        R1 1k        out
-    ┌───────/\/\/\───────┐
-    │+                    │
-   (V1) AC 1 V           ═╪═ C1 159,15n
-    │-                    │
-    └──────────┬──────────┘
-              ⏚  (0)          fc = 1 / (2π·R·C) = 1 kHz
+
+et `"title": "Filtre passe-bas RC"`. L'analyse :
+
+```json
+{ "kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 100000,
+  "points_per_decade": 100 }
 ```
 
-### 1. Je reçois (de l'éditeur de Noé)
+### 2. Je renvoie
 
 ```json
 {
-  "version": 1,
-  "title": "Filtre passe-bas RC (Bode)",
-  "components": [
-    {
-      "id": "comp-1",
-      "type": "voltage_source",
-      "name": "V1",
-      "x": 0,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "waveform": "DC",
-        "dc": "0",
-        "ac_mag": "1",
-        "ac_phase": "0"
-      }
-    },
-    {
-      "id": "comp-2",
-      "type": "resistor",
-      "name": "R1",
-      "x": 4,
-      "y": 2,
-      "rotation": 90,
-      "mirror": false,
-      "params": {
-        "resistance": "1k"
-      }
-    },
-    {
-      "id": "comp-3",
-      "type": "capacitor",
-      "name": "C1",
-      "x": 8,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "capacitance": "159.15n"
-      }
-    },
-    {
-      "id": "comp-4",
-      "type": "ground",
-      "name": "GND",
-      "x": 4,
-      "y": 8,
-      "rotation": 0,
-      "mirror": false,
-      "params": {}
-    },
-    {
-      "id": "comp-5",
-      "type": "label",
-      "name": "IN",
-      "x": 0,
-      "y": 0,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "net": "in"
-      }
-    },
-    {
-      "id": "comp-6",
-      "type": "label",
-      "name": "OUT",
-      "x": 10,
-      "y": 2,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "net": "out"
-      }
-    }
-  ],
-  "junctions": [],
-  "wires": [
-    {
-      "id": "wire-1",
-      "from": {
-        "comp": "comp-1",
-        "pin": "+"
-      },
-      "to": {
-        "comp": "comp-2",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-2",
-      "from": {
-        "comp": "comp-2",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-3",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-3",
-      "from": {
-        "comp": "comp-1",
-        "pin": "-"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-4",
-      "from": {
-        "comp": "comp-3",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-5",
-      "from": {
-        "comp": "comp-1",
-        "pin": "+"
-      },
-      "to": {
-        "comp": "comp-5",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-6",
-      "from": {
-        "comp": "comp-3",
-        "pin": "1"
-      },
-      "to": {
-        "comp": "comp-6",
-        "pin": "1"
-      }
-    }
-  ],
-  "analysis": {
-    "type": "ac",
-    "points": "100",
-    "start": "10",
-    "stop": "100k"
-  }
-}
-```
-
-### 2. Je renvoie (à Antoine pour simuler, à Noémi pour les sondes)
-
-```json
-{
-  "netlist": "* Filtre passe-bas RC (Bode)\nV1 in 0 DC 0 AC 1 0\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 100 10 100k\n.end\n",
-  "nets": {
-    "in": [
-      "wire-1",
-      "wire-5"
-    ],
-    "out": [
-      "wire-2",
-      "wire-6"
-    ],
-    "0": [
-      "wire-3",
-      "wire-4"
-    ]
-  },
-  "components": {
-    "V1": "comp-1",
-    "R1": "comp-2",
-    "C1": "comp-3"
-  },
+  "netlist": "* Filtre passe-bas RC\nV1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 100 10 100k\n.end\n",
+  "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
+  "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
   "warnings": []
 }
 ```
 
-La netlist, lisible :
-
 ```
-* Filtre passe-bas RC (Bode)
-V1 in 0 DC 0 AC 1 0
+* Filtre passe-bas RC
+V1 in 0 DC 0 AC 1
 R1 in out 1k
 C1 out 0 159.15n
 .ac dec 100 10 100k
@@ -606,16 +252,15 @@ C1 out 0 159.15n
 
 Gain ≈ 0 dB à 100 Hz, −3 dB à la coupure (1 kHz), puis −20 dB par décade (−20 dB à 10 kHz).
 
-Fichier de test : `backend/tests/fixtures/circuits/rc_bode.json`
-
 ---
 
-## Exemple 4 — Diviseur chargé (balayage DC)
+## Exemple 4 — Diviseur chargé, balayage DC (`loaded_divider_dc`, nouveau)
 
-Balayage `.dc` de la source, et une **jonction** `j-1` : trois fils se rejoignent au milieu du circuit (un « T »).
+Une **jonction** `j1` : trois fils se rejoignent au milieu du circuit (un « T »). Aucune étiquette :
+les nœuds prennent des **noms automatiques** `n1`, `n2`.
 
 ```
-   n1        R1 1k       n2 (jonction j-1)
+   n1        R1 1k        n2 (jonction j1)
     ┌───────/\/\/\────────●──────────┐
     │+                    │          │
    (V1) 0 → 10 V        R2 1k     R3 1k (charge)
@@ -624,201 +269,58 @@ Balayage `.dc` de la source, et une **jonction** `j-1` : trois fils se rejoignen
               ⏚  (0)
 ```
 
-### 1. Je reçois (de l'éditeur de Noé)
+### 1. Je reçois
 
 ```json
 {
-  "version": 1,
-  "title": "Diviseur chargé (balayage DC)",
-  "components": [
-    {
-      "id": "comp-1",
-      "type": "voltage_source",
-      "name": "V1",
-      "x": 0,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "waveform": "DC",
-        "dc": "10"
-      }
-    },
-    {
-      "id": "comp-2",
-      "type": "resistor",
-      "name": "R1",
-      "x": 4,
-      "y": 2,
-      "rotation": 90,
-      "mirror": false,
-      "params": {
-        "resistance": "1k"
-      }
-    },
-    {
-      "id": "comp-3",
-      "type": "resistor",
-      "name": "R2",
-      "x": 8,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "resistance": "1k"
-      }
-    },
-    {
-      "id": "comp-4",
-      "type": "resistor",
-      "name": "R3",
-      "x": 12,
-      "y": 4,
-      "rotation": 0,
-      "mirror": false,
-      "params": {
-        "resistance": "1k"
-      }
-    },
-    {
-      "id": "comp-5",
-      "type": "ground",
-      "name": "GND",
-      "x": 6,
-      "y": 8,
-      "rotation": 0,
-      "mirror": false,
-      "params": {}
-    }
-  ],
-  "junctions": [
-    {
-      "id": "j-1",
-      "x": 8,
-      "y": 2
-    }
-  ],
-  "wires": [
-    {
-      "id": "wire-1",
-      "from": {
-        "comp": "comp-1",
-        "pin": "+"
-      },
-      "to": {
-        "comp": "comp-2",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-2",
-      "from": {
-        "comp": "comp-2",
-        "pin": "2"
-      },
-      "to": {
-        "junction": "j-1"
-      }
-    },
-    {
-      "id": "wire-3",
-      "from": {
-        "junction": "j-1"
-      },
-      "to": {
-        "comp": "comp-3",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-4",
-      "from": {
-        "junction": "j-1"
-      },
-      "to": {
-        "comp": "comp-4",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-5",
-      "from": {
-        "comp": "comp-1",
-        "pin": "-"
-      },
-      "to": {
-        "comp": "comp-5",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-6",
-      "from": {
-        "comp": "comp-3",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-5",
-        "pin": "1"
-      }
-    },
-    {
-      "id": "wire-7",
-      "from": {
-        "comp": "comp-4",
-        "pin": "2"
-      },
-      "to": {
-        "comp": "comp-5",
-        "pin": "1"
-      }
-    }
-  ],
-  "analysis": {
-    "type": "dc",
-    "source": "comp-1",
-    "start": "0",
-    "stop": "10",
-    "step": "1"
-  }
+  "schematic": {
+    "version": 2,
+    "title": "Diviseur chargé",
+    "components": [
+      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "10" } },
+      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
+        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c4", "type": "resistor", "name": "R3", "position": { "x": 12, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c5", "type": "ground", "position": { "x": 6, "y": 4 },
+        "rotation": 0, "mirror": false, "params": {} }
+    ],
+    "junctions": [
+      { "id": "j1", "position": { "x": 8, "y": -2 } }
+    ],
+    "wires": [
+      { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
+        "points": [ { "x": 0, "y": -2 } ] },
+      { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "junction": "j1" } },
+      { "id": "w3", "from": { "junction": "j1" }, "to": { "comp": "c3", "pin": "1" } },
+      { "id": "w4", "from": { "junction": "j1" }, "to": { "comp": "c4", "pin": "1" },
+        "points": [ { "x": 12, "y": -2 } ] },
+      { "id": "w5", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c5", "pin": "1" } },
+      { "id": "w6", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
+      { "id": "w7", "from": { "comp": "c4", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } }
+    ]
+  },
+  "analysis": { "kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1 }
 }
 ```
 
-### 2. Je renvoie (à Antoine pour simuler, à Noémi pour les sondes)
+### 2. Je renvoie
 
 ```json
 {
-  "netlist": "* Diviseur chargé (balayage DC)\nV1 n1 0 DC 10\nR1 n1 n2 1k\nR2 n2 0 1k\nR3 n2 0 1k\n.dc V1 0 10 1\n.end\n",
-  "nets": {
-    "n1": [
-      "wire-1"
-    ],
-    "n2": [
-      "wire-2",
-      "wire-3",
-      "wire-4"
-    ],
-    "0": [
-      "wire-5",
-      "wire-6",
-      "wire-7"
-    ]
-  },
-  "components": {
-    "V1": "comp-1",
-    "R1": "comp-2",
-    "R2": "comp-3",
-    "R3": "comp-4"
-  },
+  "netlist": "* Diviseur chargé\nV1 n1 0 DC 10\nR1 n1 n2 1k\nR2 n2 0 1k\nR3 n2 0 1k\n.dc V1 0 10 1\n.end\n",
+  "nets": { "n1": ["w1"], "n2": ["w2", "w3", "w4"], "0": ["w5", "w6", "w7"] },
+  "components": { "V1": "c1", "R1": "c2", "R2": "c3", "R3": "c4" },
   "errors": [],
   "warnings": []
 }
 ```
 
-La netlist, lisible :
-
 ```
-* Diviseur chargé (balayage DC)
+* Diviseur chargé
 V1 n1 0 DC 10
 R1 n1 n2 1k
 R2 n2 0 1k
@@ -827,8 +329,62 @@ R3 n2 0 1k
 .end
 ```
 
+`.dc V1` : l'analyse donne l'**id** `c1`, et le backend retrouve le nom `V1`.
+
 ### 3. Résultat attendu après simulation (vérifié avec ngspice)
 
 R2 et R3 en parallèle font 500 Ω, donc v(n2) = V1 / 3 : 1 V pour 3 V, 3 V pour 9 V.
 
-Fichier de test : `backend/tests/fixtures/circuits/diviseur_charge_dc.json`
+---
+
+## Exemple 5 — Un circuit faux
+
+L'étudiant a oublié la masse, et un fil a un bout en l'air.
+
+### 1. Je reçois
+
+```json
+{
+  "schematic": {
+    "version": 2,
+    "components": [
+      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "5" } },
+      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": 0 },
+        "rotation": 0, "mirror": false, "params": { "resistance": "1M" } }
+    ],
+    "junctions": [],
+    "wires": [
+      { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" } },
+      { "id": "w2", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c2", "pin": "2" } },
+      { "id": "w3", "from": { "comp": "c2", "pin": "2" }, "to": { "x": 8, "y": 4 } }
+    ]
+  },
+  "analysis": { "kind": "op" }
+}
+```
+
+### 2. Je renvoie
+
+```json
+{
+  "netlist": "",
+  "nets": {},
+  "components": {},
+  "errors": [
+    { "code": "NO_GROUND", "message": "Le circuit n'a pas de masse.", "targets": [] }
+  ],
+  "warnings": [
+    { "code": "WIRE_DANGLING", "message": "Le fil w3 a un bout qui n'est relié à rien.",
+      "targets": [ { "wire": "w3" } ] },
+    { "code": "MILLI_SUFFIX",
+      "message": "R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ».",
+      "targets": [ { "comp": "c2" } ] }
+  ]
+}
+```
+
+- Toutes les erreurs et tous les avertissements sont renvoyés **en une fois**.
+- La réponse HTTP est **200** : le circuit est faux, mais la requête est correcte.
+- L'éditeur surligne les `targets` en rouge (erreurs) ou en orange (avertissements) et affiche le
+  `message`.

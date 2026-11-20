@@ -1,62 +1,88 @@
-# Format de schéma Psice (`.json`)
+# Format de schéma Psice — version 2
 
-> **Proposition à valider** par Damien, Noé, Antoine et Noémi.
-> Une fois validée, elle devient les modèles Pydantic de `backend/app/models/`.
+> **Proposition** de Damien, relue par Noé (éditeur), Antoine (simulation) et Noémi (sondes).
+> Une fois validée, elle remplace le brouillon de `backend/app/models/` dans une PR dédiée
+> (`feat/schematic-contract`), avec la migration de `shared/fixtures/`.
 
 ## 1. Principe
 
 Un schéma Psice est un **graphe** : des **composants** qui ont des **broches**, et des **fils** qui
-relient deux broches. Chaque fil dit explicitement à quoi il est accroché.
+relient deux extrémités. **Chaque fil dit explicitement à quoi il est accroché.**
 
-Cela rend la traduction en netlist très simple :
+- Le backend n'a **aucun calcul géométrique** à faire : pas de « est-ce que ce fil touche cette
+  broche ? ». Les coordonnées ne servent qu'à l'affichage.
+- Quand on déplace un composant, ses fils restent accrochés : l'éditeur n'a qu'à redessiner.
+- Chaque type de composant est décrit **une seule fois** dans la bibliothèque (broches, paramètres,
+  ligne SPICE). Ajouter un composant ne demande aucune ligne de code.
+- La sonde est directe : un clic sur un fil donne son nœud.
 
-- le backend n'a **aucun calcul géométrique** à faire (pas de « est-ce que ce fil touche cette
-  broche ? ») ; les coordonnées ne servent qu'à l'affichage ;
-- chaque type de composant est décrit **une seule fois** dans la bibliothèque, avec un **modèle de
-  ligne SPICE**. Ajouter un composant ne demande donc aucune ligne de code ;
-- le format appartient au projet : pas de dépendance à un format propriétaire.
+### Ce qui change par rapport au brouillon sur `main` (version 1)
+
+| | Version 1 (brouillon) | Version 2 (proposée) |
+| --- | --- | --- |
+| Connexion des fils | Géométrique : polyligne `points` | Explicite : `from` / `to` |
+| Points en T | Fil qui touche le milieu d'un autre | Objet `junction` |
+| Nom d'un nœud | Non défini | Composant `label` |
+| `name` des masses et étiquettes | Obligatoire (`GND1`, `GND2`) | Absent |
+| Dessin des symboles | Non défini | Champ `symbol` dans la bibliothèque |
+| Erreurs | `message`, `component_id`, `wire_id` | `code` (liste fermée), `message`, `targets` |
+| `version` | `1` | `2` |
+
+**Inchangé** : `position`, `rotation`, `mirror`, `params`, ids courts (`c1`, `w1`), analyse séparée
+du schéma (`SimulationRequest`, clé `kind`, nombres en unités SI).
 
 ## 2. Structure d'un fichier
 
 ```json
 {
-  "version": 1,
+  "version": 2,
+  "title": "Circuit RC",
   "components": [ ... ],
   "junctions": [ ... ],
-  "wires": [ ... ],
-  "analysis": { ... }
+  "wires": [ ... ]
 }
 ```
 
 | Clé | Contenu |
 | --- | --- |
-| `version` | Toujours `1` pour l'instant. On l'augmente à chaque changement incompatible. |
-| `components` | Les composants posés sur le schéma, y compris masses et étiquettes. |
-| `junctions` | Les points où trois fils ou plus se rejoignent hors d'une broche (un « T »). |
-| `wires` | Les fils, chacun entre deux extrémités. |
-| `analysis` | L'analyse à lancer. |
+| `version` | `2`. On l'augmente à chaque changement incompatible. |
+| `title` | Facultatif. Sert d'en-tête de la netlist (`* Circuit RC`). |
+| `components` | Les composants posés, y compris masses et étiquettes. |
+| `junctions` | Les points où des fils se rejoignent hors d'une broche (un « T »). |
+| `wires` | Les fils. |
+
+L'**analyse** n'est pas dans le schéma : elle est envoyée à côté (section 6).
 
 ## 3. Composants
 
 ```json
 {
-  "id": "comp-2",
+  "id": "c2",
   "type": "resistor",
   "name": "R1",
-  "x": 4, "y": 2, "rotation": 90, "mirror": false,
+  "position": { "x": 4, "y": 2 },
+  "rotation": 90,
+  "mirror": false,
   "params": { "resistance": "1k" }
 }
 ```
 
 | Champ | Règle |
 | --- | --- |
-| `id` | Identifiant interne, unique et stable (`comp-1`, `comp-2`…). Jamais affiché. |
+| `id` | Identifiant interne, unique et stable, généré par l'éditeur (`c1`, `c2`…). Jamais affiché. |
 | `type` | Un type de la bibliothèque (`resistor`, `capacitor`, `voltage_source`, `ground`, `label`…). |
-| `name` | Nom SPICE affiché, unique, qui **commence par le préfixe** du type (`R1`, `Rcharge`). |
-| `x`, `y` | Position en unités de grille (entiers). L'axe y va vers le bas. Affichage seulement. |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire. Affichage seulement. |
-| `mirror` | `true` ou `false`. Affichage seulement. |
-| `params` | Valeurs sous forme de texte SPICE : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
+| `name` | Nom SPICE affiché, unique, qui **commence par le préfixe** du type (`R1`, `Rcharge`). **Absent** pour `ground` et `label`. |
+| `position` | En unités de grille (entiers). L'axe y va vers le bas. |
+| `rotation` | `0`, `90`, `180` ou `270`, sens horaire. |
+| `mirror` | `true` ou `false`. |
+| `params` | Valeurs **telles que l'utilisateur les tape** : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
+
+**Miroir et rotation** : le miroir est horizontal (`x → −x`) et s'applique **avant** la rotation.
+L'éditeur et l'import `.asc` utilisent la même règle.
+
+**Paramètres par défaut** : dès qu'un composant est placé, l'éditeur écrit **tous** les `default`
+de la bibliothèque dans `params`. Le fichier est donc toujours complet, et `MISSING_PARAM` ne se
+déclenche que si l'utilisateur vide un champ.
 
 ### Composants spéciaux
 
@@ -65,45 +91,56 @@ Cela rend la traduction en netlist très simple :
 | `ground` | `1` | Relie son nœud à la masse : le nœud s'appelle `0`. | aucune |
 | `label` | `1` | Donne un nom au nœud : `params.net = "out"`. | aucune |
 
+Ces deux types n'ont **pas** de `name` : on peut poser autant de masses qu'on veut, et le nom d'une
+étiquette est uniquement dans `params.net` (pas de doublon).
+
 Un nom d'étiquette ne contient que des lettres, des chiffres et `_`, commence par une lettre, et ne
 doit pas ressembler à un nom automatique (`n1`, `n2`…). SPICE ignore la casse : `Out` et `out`
 désignent le même nœud.
 
 ## 4. Fils et jonctions
 
+### Les extrémités
+
+Chaque fil a deux extrémités, `from` et `to`. Une extrémité est **l'une** de ces trois formes :
+
+| Forme | Exemple | Sens |
+| --- | --- | --- |
+| Broche | `{ "comp": "c1", "pin": "+" }` | Accrochée à la broche `+` du composant `c1`. |
+| Jonction | `{ "junction": "j1" }` | Accrochée à la jonction `j1`. |
+| Bout libre | `{ "x": 6, "y": 2 }` | Accrochée à rien (fil laissé en l'air). |
+
 ```json
-{ "id": "wire-1", "from": { "comp": "comp-1", "pin": "+" }, "to": { "comp": "comp-2", "pin": "1" } }
-{ "id": "wire-7", "from": { "comp": "comp-3", "pin": "1" }, "to": { "junction": "j-1" } }
+{ "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" } }
+{ "id": "w7", "from": { "comp": "c3", "pin": "1" }, "to": { "junction": "j1" },
+  "points": [ { "x": 6, "y": 4 } ] }
 ```
 
-- Chaque extrémité (`from`, `to`) est **soit une broche** (`comp` + `pin`), **soit une jonction**
-  (`junction`).
+- **`points`** (facultatif) : uniquement les **coudes** intermédiaires, pour le dessin. Les deux
+  extrémités sont déduites de la broche, de la jonction ou des coordonnées du bout libre.
+  La netlist ignore `points`.
 - Plusieurs fils peuvent arriver sur la même broche : pas besoin de jonction dans ce cas.
-- `points` (facultatif) : liste de coudes `[{"x": 4, "y": 0}, ...]` pour le dessin. Ignoré par la netlist.
+- **Bout libre** : accepté (le fichier se sauvegarde), mais la netlist renvoie l'avertissement
+  `WIRE_DANGLING`. Un fil n'a d'effet sur les connexions que par ses extrémités accrochées.
+- Le fil **en train d'être tracé** (souris encore enfoncée) reste dans l'état de l'éditeur : il
+  n'apparaît pas dans le schéma.
 
-Une jonction n'a qu'une position :
+### Les jonctions
 
 ```json
-{ "id": "j-1", "x": 6, "y": 2 }
+{ "id": "j1", "position": { "x": 6, "y": 2 } }
 ```
 
-Quand on déplace un composant, ses fils restent accrochés : l'éditeur n'a qu'à redessiner.
+**Fil lâché au milieu d'un autre fil** : l'éditeur **coupe** ce fil en deux et crée une jonction à
+cet endroit. Trois fils arrivent alors sur la jonction. Le backend ne voit donc jamais de
+« fil sur fil » : tout reste explicite.
 
-## 5. Analyses
+Une jonction reliée à moins de 2 fils ne sert à rien : avertissement `JUNCTION_DANGLING`.
 
-| `type` | Paramètres | Exemple | Ligne SPICE |
-| --- | --- | --- | --- |
-| `op` | aucun | `{"type": "op"}` | `.op` |
-| `tran` | `step`, `stop` | `{"type": "tran", "step": "10u", "stop": "10m"}` | `.tran 10u 10m` |
-| `ac` | `points` (par décade), `start`, `stop` | `{"type": "ac", "points": "100", "start": "10", "stop": "100k"}` | `.ac dec 100 10 100k` |
-| `dc` | `source` (id), `start`, `stop`, `step` | `{"type": "dc", "source": "comp-1", "start": "0", "stop": "5", "step": "0.1"}` | `.dc V1 0 5 0.1` |
+## 5. Bibliothèque
 
-Pour `dc`, `source` est l'**id** du composant : le nom SPICE est retrouvé à la traduction, donc
-renommer la source ne casse rien.
-
-## 6. Bibliothèque
-
-Un fichier JSON par type de composant, par exemple `library/resistor.json` :
+Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie à l'éditeur par
+`GET /api/library` : **les noms et positions des broches ne sont définis qu'à un seul endroit.**
 
 ```json
 {
@@ -121,17 +158,32 @@ Un fichier JSON par type de composant, par exemple `library/resistor.json` :
 }
 ```
 
-- `pins` : ordre et position des broches à la rotation 0. L'éditeur s'en sert pour dessiner ; la
-  netlist n'utilise que leur nom.
+- `pins` : nom et position de chaque broche à la rotation 0, relative à `position`.
+- `symbol` : le **dessin** du symbole, sous forme d'une liste de formes simples (`line`, `rect`,
+  `circle`, `arc`, `text`) en unités de grille, à la rotation 0. Le cahier des charges (§3) demande
+  que les symboles soient dans la bibliothèque, pour l'étendre sans toucher au code. **Format exact
+  proposé par Noé** (c'est l'éditeur qui le dessine).
 - `spice` : le modèle de ligne. `{name}` = nom du composant, `{pin:X}` = nœud de la broche X,
   `{param}` = valeur d'un paramètre.
 - `includes` (facultatif) : fichiers de modèles à ajouter avec `.include`, par exemple
   `["models/1n4148.lib"]` pour une diode.
 
+### Noms des broches
+
+| Composants | Broches |
+| --- | --- |
+| Résistance, condensateur, bobine | `1`, `2` |
+| Sources de tension et de courant | `+`, `-` |
+| Diodes (signal, redressement, Zener, LED) | `A` (anode), `K` (cathode) |
+| Ampli-op idéal | `+`, `-`, `out` |
+| Ampli-op réel | `+`, `-`, `out`, `V+`, `V-` |
+| Transistor bipolaire (NPN, PNP) | `C`, `B`, `E` |
+| MOSFET canal N | `D`, `G`, `S` |
+| Masse, étiquette | `1` |
+
 ### Sources
 
-Une source a une **forme d'onde** pour `.op`, `.tran` et `.dc`, et une **amplitude AC facultative**
-pour `.ac`. Les deux peuvent coexister sur la même source (ce que ngspice accepte).
+Une source a une **forme d'onde**, utilisée pour `.op`, `.tran` et `.dc` :
 
 ```json
 {
@@ -140,110 +192,153 @@ pour `.ac`. Les deux peuvent coexister sur la même source (ce que ngspice accep
   "pins": [ { "name": "+", "x": 0, "y": -2 }, { "name": "-", "x": 0, "y": 2 } ],
   "spice": "{name} {pin:+} {pin:-} {waveform}",
   "waveforms": {
-    "DC":    "DC {dc}",
-    "PULSE": "PULSE({v1} {v2} {delay} {rise} {fall} {width} {period})",
-    "SIN":   "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
-  },
-  "ac": "AC {ac_mag} {ac_phase}"
+    "dc":    "DC {dc}",
+    "pulse": "PULSE({v1} {v2} {delay} {rise} {fall} {width} {period})",
+    "sin":   "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
+  }
 }
 ```
 
-Dans le schéma : `"params": { "waveform": "PULSE", "v1": "0", ..., "ac_mag": "1", "ac_phase": "0" }`.
-Si `ac_mag` est présent, la partie `ac` est ajoutée à la fin de la ligne :
+Dans le schéma : `"params": { "waveform": "pulse", "v1": "0", "v2": "5", ... }`.
+La valeur de `waveform` s'écrit en **minuscules** (`dc`, `pulse`, `sin`), comme dans les fixtures de
+`main`.
+
+Il n'y a **pas** d'amplitude AC sur la source : pour une analyse `.ac`, c'est l'analyse qui désigne
+la source d'entrée (`input_source_id`), et le backend ajoute `AC 1` à **cette** source seulement :
 
 ```
-V1 n1 0 PULSE(0 5 0 1u 1u 5m 10m) AC 1 0
+V1 in 0 DC 0 AC 1
 ```
+
+C'est plus simple pour l'étudiant (il choisit la source dans la fenêtre d'analyse), et un oubli ne
+peut plus casser le diagramme de Bode.
+
+## 6. Analyses (inchangé par rapport à `main`)
+
+L'analyse est envoyée **à côté** du schéma : `SimulationRequest = { schematic, analysis }`.
+Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
+
+`POST /api/netlist` et `POST /api/simulate` reçoivent tous les deux ce même objet
+`{ schematic, analysis }` : la netlist contient donc déjà sa ligne d'analyse.
+
+| `kind` | Champs | Exemple | Ligne SPICE |
+| --- | --- | --- | --- |
+| `op` | aucun | `{"kind": "op"}` | `.op` |
+| `tran` | `stop_time`, `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "max_step": 1e-5}` | `.tran 10u 10m` |
+| `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` | `{"kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 1e5, "points_per_decade": 100}` | `.ac dec 100 10 100k` |
+| `dc` | `source_id`, `start`, `stop`, `step` | `{"kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1}` | `.dc V1 0 10 1` |
+
+- Les sources sont désignées par leur **id** : le nom SPICE est retrouvé à la traduction, donc
+  renommer la source ne casse rien.
+- `.tran` : proposition `.tran {max_step} {stop_time}` (si `max_step` est absent :
+  `stop_time / 1000`). Ce format a été vérifié avec ngspice. La fixture `rc_tran` de `main` utilise
+  `.tran 0 5m 0 10u`, à confirmer avec Antoine (voir section 10).
 
 ## 7. Traduction en netlist
 
-1. **Regrouper les broches en nœuds.** Chaque fil fusionne ses deux extrémités (structure
-   « union-find »). Une jonction est une extrémité comme une autre.
-2. **Nommer les nœuds**, dans cet ordre de priorité :
+1. **Vérifier** le schéma (section 8) et collecter **toutes** les erreurs. S'il y en a, on s'arrête.
+2. **Regrouper les broches en nœuds** : chaque fil fusionne ses extrémités accrochées
+   (structure « union-find »). Une jonction est une extrémité comme une autre.
+3. **Nommer les nœuds**, dans cet ordre de priorité :
    1. un nœud qui touche une masse s'appelle `0` ;
    2. un nœud qui touche une étiquette prend son nom ;
    3. les autres s'appellent `n1`, `n2`… dans l'ordre où on les rencontre en parcourant les
       composants (ordre de la liste), puis leurs broches (ordre de la bibliothèque).
-3. **Écrire l'en-tête** : `* ` suivi du titre du schéma (ou `* Psice`).
-4. **Écrire les `.include`** nécessaires, sans doublons.
-5. **Écrire une ligne par composant** (sauf masses et étiquettes), en remplissant le modèle `spice`.
-6. **Écrire la ligne d'analyse**, puis `.end`.
+4. **Écrire l'en-tête** : `* ` suivi du titre (ou `* Psice`).
+5. **Écrire les `.include`** nécessaires, sans doublons.
+6. **Écrire une ligne par composant** (sauf masses et étiquettes), en remplissant le modèle `spice`.
+7. **Écrire la ligne d'analyse**, puis `.end`.
 
-### Erreurs à signaler (sans lancer la simulation)
+## 8. Erreurs et avertissements
 
-| Erreur | Exemple de message |
-| --- | --- |
-| Pas de masse | « Le circuit n'a pas de masse. » |
-| Broche non reliée | « La broche 2 de R1 n'est reliée à rien. » |
-| Nom en double | « Deux composants s'appellent R1. » |
-| Nom sans le bon préfixe | « C1 n'est pas un nom valide pour une résistance. » |
-| Deux étiquettes différentes sur un même nœud | « Le nœud porte deux noms : in et out. » |
-| Étiquette sur la masse | « L'étiquette out est reliée à la masse. » |
-| Paramètre manquant ou invalide | « R1 : la résistance « 1kk » n'est pas une valeur valide. » |
-
-## 8. Réponse du backend
-
-La traduction renvoie la netlist **et** les correspondances dont les sondes ont besoin :
+### Format
 
 ```json
 {
-  "netlist": "* Circuit RC\nV1 n1 0 PULSE(0 5 0 1u 1u 5m 10m)\nR1 n1 out 1k\nC1 out 0 1u\n.tran 10u 10m\n.end\n",
-  "nets": { "n1": ["wire-1"], "out": ["wire-2", "wire-5"], "0": ["wire-3", "wire-4"] },
-  "components": { "V1": "comp-1", "R1": "comp-2", "C1": "comp-3" },
+  "code": "DUPLICATE_NAME",
+  "message": "Deux composants s'appellent R1.",
+  "targets": [ { "comp": "c2" }, { "comp": "c5" } ]
+}
+```
+
+| Champ | Règle |
+| --- | --- |
+| `code` | Valeur d'une **liste fermée** (ci-dessous). En Pydantic un `Literal`, donc une union de chaînes en TypeScript. Stable : c'est ce que les tests vérifient. |
+| `message` | En français, pour l'étudiant, avec le nom du composant. Peut changer. |
+| `targets` | Les éléments à surligner. **Peut être vide** (`NO_GROUND` n'a rien à montrer). |
+
+Une cible est l'une de ces formes :
+
+| Cible | Exemple |
+| --- | --- |
+| Composant | `{ "comp": "c2" }` |
+| Broche | `{ "comp": "c2", "pin": "2" }` |
+| Fil | `{ "wire": "w3" }` |
+| Jonction | `{ "junction": "j1" }` |
+
+Le même format (nom `Diagnostic`, déjà utilisé par `SimulationResult`) sert aux erreurs de ngspice
+renvoyées par Antoine : il retrouve les fils d'un nœud grâce à `nets`.
+
+### Codes de la netlist
+
+| Code | Type | Exemple de message | Cibles |
+| --- | --- | --- | --- |
+| `NO_GROUND` | erreur | « Le circuit n'a pas de masse. » | aucune |
+| `PIN_NOT_CONNECTED` | erreur | « La broche 2 de R1 n'est reliée à rien. » | la broche |
+| `MISSING_NAME` | erreur | « Un composant n'a pas de nom. » | le composant |
+| `DUPLICATE_NAME` | erreur | « Deux composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
+| `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour une résistance. » | le composant |
+| `BAD_VALUE` | erreur | « R1 : la résistance « 1kk » n'est pas une valeur valide. » | le composant |
+| `MISSING_PARAM` | erreur | « R1 : la résistance n'est pas renseignée. » | le composant |
+| `UNKNOWN_TYPE` | erreur | « Le type « triode » n'existe pas dans la bibliothèque. » | le composant |
+| `UNKNOWN_ENDPOINT` | erreur | « Le fil w3 est accroché à un composant, une broche ou une jonction qui n'existe pas. » | le fil |
+| `LABEL_CONFLICT` | erreur | « Le nœud porte deux noms : in et out. » | les étiquettes |
+| `LABEL_ON_GROUND` | erreur | « L'étiquette out est reliée à la masse. » | l'étiquette |
+| `BAD_LABEL_NAME` | erreur | « « 2out » n'est pas un nom de nœud valide. » | l'étiquette |
+| `AC_SOURCE_NOT_FOUND` | erreur | « La source d'entrée de l'analyse AC n'existe pas. » | aucune |
+| `DC_SOURCE_NOT_FOUND` | erreur | « La source balayée n'existe pas. » | aucune |
+| `WIRE_DANGLING` | avertissement | « Le fil w4 a un bout qui n'est relié à rien. » | le fil |
+| `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
+| `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
+
+Une broche non reliée est une **erreur** (et non un avertissement) : ngspice échoue sur un nœud
+flottant, autant le dire clairement avant. Un composant posé mais pas encore câblé donne donc une
+erreur `PIN_NOT_CONNECTED` par broche.
+
+Les codes des erreurs ngspice (par exemple `SIMULATION_FAILED`, `NO_CONVERGENCE`) seront ajoutés
+à la même liste par Antoine.
+
+### Règles
+
+- On **collecte toutes les erreurs** avant de répondre (pas seulement la première).
+- Circuit faux = HTTP **200** avec `errors` non vide. JSON mal formé = **422** (Pydantic).
+  Bug du serveur = **500**.
+
+## 9. Réponse du backend (`NetlistResult`)
+
+```json
+{
+  "netlist": "* Circuit RC\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n.tran 10u 5m\n.end\n",
+  "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
+  "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
   "warnings": []
 }
 ```
 
-- `nets` : quand on clique sur un fil, on sait quel nœud afficher (`v(out)`).
-- `components` : quand on clique sur un composant, on sait quel courant afficher.
-
-## 9. Exemple complet : circuit RC
-
-```json
-{
-  "version": 1,
-  "title": "Circuit RC",
-  "components": [
-    { "id": "comp-1", "type": "voltage_source", "name": "V1", "x": 0, "y": 4, "rotation": 0, "mirror": false,
-      "params": { "waveform": "PULSE", "v1": "0", "v2": "5", "delay": "0", "rise": "1u", "fall": "1u", "width": "5m", "period": "10m" } },
-    { "id": "comp-2", "type": "resistor", "name": "R1", "x": 4, "y": 2, "rotation": 90, "mirror": false,
-      "params": { "resistance": "1k" } },
-    { "id": "comp-3", "type": "capacitor", "name": "C1", "x": 8, "y": 4, "rotation": 0, "mirror": false,
-      "params": { "capacitance": "1u" } },
-    { "id": "comp-4", "type": "ground", "name": "GND", "x": 4, "y": 8, "rotation": 0, "mirror": false, "params": {} },
-    { "id": "comp-5", "type": "label", "name": "OUT", "x": 10, "y": 2, "rotation": 0, "mirror": false,
-      "params": { "net": "out" } }
-  ],
-  "junctions": [],
-  "wires": [
-    { "id": "wire-1", "from": { "comp": "comp-1", "pin": "+" }, "to": { "comp": "comp-2", "pin": "1" } },
-    { "id": "wire-2", "from": { "comp": "comp-2", "pin": "2" }, "to": { "comp": "comp-3", "pin": "1" } },
-    { "id": "wire-3", "from": { "comp": "comp-1", "pin": "-" }, "to": { "comp": "comp-4", "pin": "1" } },
-    { "id": "wire-4", "from": { "comp": "comp-3", "pin": "2" }, "to": { "comp": "comp-4", "pin": "1" } },
-    { "id": "wire-5", "from": { "comp": "comp-3", "pin": "1" }, "to": { "comp": "comp-5", "pin": "1" } }
-  ],
-  "analysis": { "type": "tran", "step": "10u", "stop": "10m" }
-}
-```
-
-Netlist produite :
-
-```
-* Circuit RC
-V1 n1 0 PULSE(0 5 0 1u 1u 5m 10m)
-R1 n1 out 1k
-C1 out 0 1u
-.tran 10u 10m
-.end
-```
-
-Les fichiers `backend/tests/fixtures/circuits/diviseur.json` et `rc.json` suivent ce format et
-contiennent aussi la netlist et les résultats attendus : toute l'équipe les utilise dans ses tests.
+- `netlist` : directement exécutable par ngspice. Chaîne vide `""` s'il y a des erreurs.
+- `nets` : nœud → fils qui le forment. Clic sur un fil → tension du nœud (`v(out)`).
+- `components` : nom SPICE → id. Clic sur un composant → son courant.
 
 ## 10. Questions encore ouvertes
 
-- **Courant dans une résistance ou un condensateur** (Antoine) : ngspice ne donne directement que
-  le courant des sources (`i(v1)`). Choisir entre `.save @r1[i]` et une source de 0 V en série.
-- **Signe du courant d'une source** (Noémi) : SPICE donne une valeur négative pour une source qui
-  fournit du courant (`i(v1) = -0.5 mA`). Faut-il inverser le signe à l'affichage ?
+| Question | Avec qui |
+| --- | --- |
+| Format exact du champ `symbol` de la bibliothèque. | Noé (il propose) |
+| Forme de la ligne `.tran` : `.tran 10u 10m` (vérifiée avec ngspice) ou `.tran 0 5m 0 10u` (fixture de `main`) ? | Antoine |
+| Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | Antoine |
+| Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Noémi |
+| Codes d'erreur de ngspice à ajouter à la liste fermée. | Antoine |
+
+Les exemples complets (ce que je reçois, ce que je renvoie) sont dans
+[`exemples-netlist.md`](exemples-netlist.md).
