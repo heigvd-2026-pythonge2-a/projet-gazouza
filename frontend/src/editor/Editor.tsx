@@ -33,8 +33,17 @@ function useKeyboardShortcuts() {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const s = useEditorStore.getState();
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        // Undo / redo. In a text field the browser's own undo applies instead (returned above).
+        const key = e.key.toLowerCase();
+        if (key === "z" && !e.shiftKey) s.undo();
+        else if (key === "y" || (key === "z" && e.shiftKey)) s.redo();
+        else return;
+        e.preventDefault();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       switch (e.key) {
         case "r":
         case "R":

@@ -3,3 +3,4 @@ export { SchematicCanvas } from "./Editor";
 export { Inspector } from "./Inspector";
 export { Palette } from "./Palette";
 export { StatusBar } from "./StatusBar";
+export { UndoRedoButtons } from "./UndoRedoButtons";

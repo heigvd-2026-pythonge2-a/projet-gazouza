@@ -4,7 +4,8 @@ import { UI } from "./theme";
 const HINTS: Record<Tool["kind"], string> = {
   select:
     "Clic : sélectionner · Maj + clic : sélection multiple · Tirer depuis une broche : fil · " +
-    "R : tourner · M : miroir · Suppr : supprimer · Molette : zoom · Clic molette : déplacer la vue",
+    "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
+    "Molette : zoom · Clic molette : déplacer la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter de poser",
   wire:
     "Clic : coude, ou fin du fil sur une broche ou un fil · Double-clic : finir dans le vide · " +

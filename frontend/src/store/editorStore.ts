@@ -20,6 +20,7 @@ import {
   type GridPoint,
   type Rotation,
 } from "./document";
+import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 
 export type Tool =
   | { kind: "select" }
@@ -61,6 +62,8 @@ interface EditorState {
   selection: string[];
   tool: Tool;
   draft: WireDraft | null;
+  /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
+  history: History<EditorDoc>;
 
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
@@ -97,6 +100,29 @@ interface EditorState {
    * current tool, else clears the selection.
    */
   cancel: () => void;
+  /** Ctrl+Z: goes back to the document before the last change. */
+  undo: () => void;
+  /** Ctrl+Y / Ctrl+Shift+Z: re-applies the last undone change. */
+  redo: () => void;
+}
+
+/**
+ * State update for a document change, recorded in the history. `key` merges consecutive edits of
+ * the same field into one undo step. No change, no step.
+ */
+function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
+  if (doc === s.doc) return {};
+  return { doc, history: record(s.history, s.doc, key) };
+}
+
+/** Keeps only the selected ids that still exist (after an undo or a redo). */
+function existing(doc: EditorDoc, selection: string[]): string[] {
+  const ids = new Set([
+    ...doc.components.map((c) => c.id),
+    ...doc.wires.map((w) => w.id),
+    ...doc.junctions.map((j) => j.id),
+  ]);
+  return selection.filter((id) => ids.has(id));
 }
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
@@ -104,6 +130,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   selection: [],
   tool: { kind: "select" },
   draft: null,
+  history: emptyHistory(),
 
   setTool: (tool) => set({ tool, draft: null }),
 
@@ -119,20 +146,33 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (s.tool.kind !== "place") return {};
       const { type, rotation, mirror } = s.tool;
       const { doc } = addComponent(s.doc, { type, position, rotation, mirror });
-      return { doc };
+      return change(s, doc);
     }),
 
   dropComponent: (type, position) =>
     set((s) => {
       const added = addComponent(s.doc, { type, position, rotation: 0, mirror: false });
-      return { doc: added.doc, selection: [added.id], tool: { kind: "select" }, draft: null };
+      return {
+        ...change(s, added.doc),
+        selection: [added.id],
+        tool: { kind: "select" },
+        draft: null,
+      };
     }),
 
-  moveComponent: (id, position) => set((s) => ({ doc: moveComponent(s.doc, id, position) })),
+  moveComponent: (id, position) =>
+    set((s) => {
+      const c = s.doc.components.find((x) => x.id === id);
+      if (!c || samePoint(c.position, position)) return {};
+      return change(s, moveComponent(s.doc, id, position));
+    }),
 
-  renameComponent: (id, name) => set((s) => ({ doc: renameComponent(s.doc, id, name) })),
+  // Typing in a field changes the document on every key: one undo step per field edited.
+  renameComponent: (id, name) =>
+    set((s) => change(s, renameComponent(s.doc, id, name), `name:${id}`)),
 
-  setParam: (id, param, value) => set((s) => ({ doc: setParam(s.doc, id, param, value) })),
+  setParam: (id, param, value) =>
+    set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
 
   startWiring: () => set({ tool: { kind: "wire" }, selection: [], draft: null }),
 
@@ -156,7 +196,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
       const added = addWire(s.doc, routeThrough(points));
       return {
-        doc: added ? added.doc : s.doc,
+        ...(added ? change(s, added.doc) : {}),
         draft: null,
         ...(draft.returnToSelect ? { tool: { kind: "select" } as const } : {}),
       };
@@ -180,23 +220,33 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
-        : { doc: rotateComponents(s.doc, new Set(s.selection)) },
+        : s.selection.length > 0
+          ? change(s, rotateComponents(s.doc, new Set(s.selection)))
+          : {},
     ),
 
   mirror: () =>
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, mirror: !s.tool.mirror } }
-        : { doc: mirrorComponents(s.doc, new Set(s.selection)) },
+        : s.selection.length > 0
+          ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
+          : {},
     ),
 
   deleteSelection: () =>
-    set((s) => ({ doc: deleteItems(s.doc, new Set(s.selection)), selection: [] })),
+    set((s) =>
+      s.selection.length > 0
+        ? { ...change(s, deleteItems(s.doc, new Set(s.selection))), selection: [] }
+        : {},
+    ),
 
-  select: (ids) => set({ selection: ids }),
+  // Changing the selection ends a field edit: editing the same field again later is a new step.
+  select: (ids) => set((s) => ({ selection: ids, history: seal(s.history) })),
 
   toggleSelected: (id) =>
     set((s) => ({
+      history: seal(s.history),
       selection: s.selection.includes(id)
         ? s.selection.filter((x) => x !== id)
         : [...s.selection, id],
@@ -208,4 +258,28 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     else if (s.tool.kind !== "select") set({ tool: { kind: "select" } });
     else set({ selection: [] });
   },
+
+  undo: () =>
+    set((s) => {
+      const step = undo(s.history, s.doc);
+      if (!step) return {};
+      return {
+        doc: step.state,
+        history: step.history,
+        selection: existing(step.state, s.selection),
+        draft: null,
+      };
+    }),
+
+  redo: () =>
+    set((s) => {
+      const step = redo(s.history, s.doc);
+      if (!step) return {};
+      return {
+        doc: step.state,
+        history: step.history,
+        selection: existing(step.state, s.selection),
+        draft: null,
+      };
+    }),
 }));
