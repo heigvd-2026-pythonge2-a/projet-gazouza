@@ -3,3 +3,4 @@
 export * from "./document";
 export * from "./editorStore";
 export * from "./library";
+export * from "./routing";

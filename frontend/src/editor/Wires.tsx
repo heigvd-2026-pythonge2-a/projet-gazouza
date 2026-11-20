@@ -1,4 +1,5 @@
 import type { KonvaEventObject } from "konva/lib/Node";
+import { useMemo } from "react";
 import { Circle, Group, Line, Rect } from "react-konva";
 
 import {
@@ -138,9 +139,18 @@ interface WireDraftProps {
 
 /** Wire being drawn (dashed), and a ring on what its end would attach to under the pointer. */
 export function WireDraft({ doc, points, pointer }: WireDraftProps) {
-  const path = points ? routeThrough(points) : [];
+  // Routing goes around the components: only redo it when the clicks or the document change,
+  // and for the last segment when the pointer moves to another grid point.
+  const path = useMemo(() => (points ? routeThrough(doc, points) : []), [doc, points]);
   const last = path[path.length - 1];
-  const preview = last && pointer ? [...path, ...routeTo(last, pointer)] : null;
+  const px = pointer?.x;
+  const py = pointer?.y;
+  const tail = useMemo(
+    () =>
+      last && px !== undefined && py !== undefined ? routeTo(doc, last, { x: px, y: py }) : null,
+    [doc, last, px, py],
+  );
+  const preview = tail ? [...path, ...tail] : null;
   const target = pointer ? anchorAt(doc, pointer) : null;
   return (
     <Group listening={false}>
