@@ -33,7 +33,10 @@ MAX_RAWFILE_BYTES: int = 50 * 1024 * 1024
 _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
 _SAVE_ITEMS_PER_LINE = 10
-_FORBIDDEN_DIRECTIVES: frozenset[str] = frozenset({".control", ".endc", ".shell", "shell"})
+_FORBIDDEN_DIRECTIVES: frozenset[str] = frozenset(
+    {".control", ".endc", ".include", ".lib", ".shell", "shell"}
+)
+_FORBIDDEN_PREFIXES: tuple[str, ...] = (".inc", ".lib")
 _CONTROL_DIRECTIVE = ".control"
 _MIN_CONTROL_PREFIX_LEN = 5
 
@@ -117,7 +120,7 @@ def _format_save_lines(tokens: list[str]) -> list[str]:
 def _is_forbidden_first_token(token: str) -> bool:
     """Return True if a lowercased first token is a forbidden SPICE/ngspice command."""
     base_token = token.split(";", 1)[0]
-    if base_token in _FORBIDDEN_DIRECTIVES:
+    if base_token in _FORBIDDEN_DIRECTIVES or base_token.startswith(_FORBIDDEN_PREFIXES):
         return True
     return len(base_token) >= _MIN_CONTROL_PREFIX_LEN and _CONTROL_DIRECTIVE.startswith(base_token)
 
@@ -133,7 +136,7 @@ def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
     compact_lines: list[str] = []
 
     for raw_line in normalized.splitlines():
-        stripped = raw_line.strip()
+        stripped = raw_line.strip().lstrip("\ufeff").strip()
         if not stripped or stripped.startswith("*"):
             continue
 
@@ -159,11 +162,12 @@ def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
 
 
 def validate_netlist_safety(netlist: str) -> None:
-    """Validate that a SPICE netlist contains no null bytes or forbidden shell/control directives.
+    """Validate that a SPICE netlist contains no null bytes or forbidden directives.
 
     Raises:
         UnsafeNetlistError: If null bytes or forbidden commands (``.control`` or
-            ngspice prefixes >=5 chars, ``.endc``, ``.shell``, ``shell``) are found.
+            ngspice prefixes >=5 chars, ``.endc``, ``.shell``, ``shell``, ``.include`` /
+            ``.inc*`` prefixes >=4 chars, or ``.lib`` / ``.lib*``) are found.
     """
     if "\x00" in netlist:
         raise UnsafeNetlistError(

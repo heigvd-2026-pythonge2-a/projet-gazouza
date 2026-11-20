@@ -917,6 +917,29 @@ def test_ngspice_real_failure_cases_return_v2_diagnostics() -> None:
         "* inline semicolon after control\nV1 in 0 DC 5\n.control;echo hi\n.end\n",
         "* control after .end\nV1 in 0 DC 5\n.op\n.end\n.control\nshell id\n.endc\n",
         ".control\n.op\n.end\n",
+        "* bad include\nV1 in 0 DC 5\n.include models/1n4148.lib\n.end\n",
+        "* bad uppercase include\nV1 in 0 DC 5\n  .INCLUDE evil.cir\n.end\n",
+        "* bad inc prefix 4\nV1 in 0 DC 5\n.inc evil.cir\n.end\n",
+        "* bad inc prefix 5\nV1 in 0 DC 5\n.incl evil.cir\n.end\n",
+        "* bad inc prefix 6\nV1 in 0 DC 5\n.inclu evil.cir\n.end\n",
+        "* bad inc prefix 7\nV1 in 0 DC 5\n.includ evil.cir\n.end\n",
+        "* bad inc extended\nV1 in 0 DC 5\n.included evil.cir\n.end\n",
+        "* bad lib\nV1 in 0 DC 5\n.lib models/diode.lib\n.end\n",
+        "* bad uppercase lib\nV1 in 0 DC 5\n\t.LIB models/diode.lib SEC\n.end\n",
+        "* bad lib extended\nV1 in 0 DC 5\n.library models/diode.lib SEC\n.end\n",
+        "* split include across continuation\nV1 in 0 DC 5\n.in\n+clude evil.cir\n.end\n",
+        "* split inc across continuation\nV1 in 0 DC 5\n.in\n+c evil.cir\n.end\n",
+        "* split inc with spaced arg\nV1 in 0 DC 5\n.inc\n+ evil.cir\n.end\n",
+        "* split dot before include\nV1 in 0 DC 5\n.\n+include evil.cir\n.end\n",
+        "* split lib across continuation\nV1 in 0 DC 5\n.li\n+b evil.lib SEC\n.end\n",
+        "* split dot before lib\nV1 in 0 DC 5\n.\n+lib evil.lib SEC\n.end\n",
+        "* continuation starting with .include\n* title\n+ .include evil.cir\n.end\n",
+        "* inline semicolon after include\nV1 in 0 DC 5\n.include;evil.cir\n.end\n",
+        "* include with UNC path\nV1 in 0 DC 5\n.include \\\\server\\share\\x.cir\n.end\n",
+        "* lib with UNC path\nV1 in 0 DC 5\n.lib \\\\server\\share\\x.lib SEC\n.end\n",
+        "* bom before include\n\ufeff.include evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
+        ".include evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
+        ".lib evil.lib SEC\nV1 in 0 DC 5\n.op\n.end\n",
         "* null byte in element\nV1 in 0 DC 5\x00\n.op\n.end\n",
         "* null byte in comment\x00\nV1 in 0 DC 5\n.op\n.end\n",
     ],
@@ -947,17 +970,53 @@ def test_unsafe_netlist_directives_and_null_bytes_rejected(
     assert result.warnings == [warning]
 
 
-def test_safe_comments_includes_and_identifiers_allowed() -> None:
+def test_include_and_lib_files_with_control_rejected_before_ngspice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    included_file = tmp_path / "included.cir"
+    included_file.write_text(".control\nshell echo PWNED\n.endc\n", encoding="utf-8")
+    lib_file = tmp_path / "included.lib"
+    lib_file.write_text(
+        ".lib SEC\n.control\nshell echo PWNED\n.endc\n.endl SEC\n", encoding="utf-8"
+    )
+
+    def _fail_call(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("ngspice must not be located or invoked for .include/.lib netlists")
+
+    monkeypatch.setattr(runner_module, "locate_ngspice", _fail_call)
+    monkeypatch.setattr(runner_module.subprocess, "run", _fail_call)
+
+    for directive_line in (f".include {included_file}", f".lib {lib_file} SEC"):
+        netlist = f"* repro\nV1 in 0 DC 5\nR1 in 0 1k\n{directive_line}\n.op\n.end\n"
+        with pytest.raises(UnsafeNetlistError) as exc_info:
+            validate_netlist_safety(netlist)
+        assert "autorisée" in exc_info.value.user_message
+
+        result = run_simulation(NetlistResult(netlist=netlist), OpAnalysis())
+        assert result.traces == []
+        assert len(result.errors) == 1
+        assert result.errors[0].code == "SIMULATION_FAILED"
+        assert result.errors[0].targets == []
+        assert result.errors[0].message == exc_info.value.user_message
+
+
+def test_safe_comments_and_identifiers_allowed() -> None:
     safe_netlist = (
         "* .control comment in title\n"
+        "\ufeff* bom comment before .include evil.cir\n"
         "  * .shell and shell and .endc in comment\n"
-        ".include models/1n4148.lib\n"
-        ".lib models/diode.lib\n"
+        "* .include evil.cir\n"
+        "  * .inc evil.cir and .lib evil.lib\n"
         "V1 in 0 DC 10\n"
         "+ \n"
         "R1 shell 0 1k\n"
         "R2 control 0 1k\n"
+        "R3 inc 0 1k\n"
+        "R4 lib 0 1k\n"
+        "Include1 in 0 1k\n"
+        "Lib1 in 0 1k\n"
         "Shell1 in 0 ctrl 0 SWMOD\n"
+        ".ic v(in)=5\n"
         ".op\n"
         ".end\n"
     )
@@ -970,9 +1029,9 @@ def test_safe_comments_includes_and_identifiers_allowed() -> None:
             components={"V1": "c1", "R1": "c2", "R2": "c3"},
         )
     )
-    assert ".include models/1n4148.lib" in prepared
-    assert ".lib models/diode.lib" in prepared
     assert "* .control comment in title" in prepared
+    assert "* .include evil.cir" in prepared
+    assert ".ic v(in)=5" in prepared
 
 
 def test_oversized_netlist_rejected_before_disk_write(monkeypatch: pytest.MonkeyPatch) -> None:
