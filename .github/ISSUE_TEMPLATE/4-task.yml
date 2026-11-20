@@ -1,0 +1,33 @@
+name: 🧰 Tâche technique
+description: Documentation, tests, CI, dépendances, refactor…
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ajoute ensuite le label `type:` (`docs`, `test` ou `chore`) et le label `area:`
+        correspondants.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Type
+      options:
+        - Documentation (type:docs)
+        - Tests (type:test)
+        - Outillage, CI, dépendances, refactor (type:chore)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Ce qu'il faut faire et pourquoi.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Définition de « terminé »
+      value: |
+        - [ ]
+    validations:
+      required: true

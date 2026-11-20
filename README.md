@@ -221,6 +221,14 @@ label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `sta
 | `prio:` | `haute`, `basse` | `haute` = bloque une démo ou d'autres modules. Sans label `prio:`, la priorité est normale |
 | `status:` | `bloqué`, `à discuter`, `abandonné` | Attend autre chose, demande une décision d'équipe, ou ne sera pas traité (doublon, invalide, hors périmètre) |
 
+Des modèles guident la rédaction (dossier [`.github/`](.github/)) :
+
+- **Issues** : Bug, Fonctionnalité, Contrat d'API, Tâche technique (docs, tests, chore) et
+  Question, proposés au moment de créer une issue. Ils posent le label `type:` ; le label
+  `area:` est à ajouter à la main, car GitHub ne sait pas le déduire du formulaire.
+- **PR** : [`pull_request_template.md`](.github/pull_request_template.md) pré-remplit la
+  description (résumé, issue liée, module touché, comment tester, checklist de relecture).
+
 ---
 
 ## Licence

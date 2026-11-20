@@ -1,0 +1,22 @@
+name: ❓ Question
+description: Point à clarifier ou décision à prendre en équipe.
+title: "[Question] "
+labels: ["type: question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Ce qui a déjà été envisagé, liens vers le code, la doc ou d'autres issues.
+  - type: checkboxes
+    id: decision
+    attributes:
+      label: Décision d'équipe
+      options:
+        - label: "Demande une décision d'équipe (ajouter le label `status: à discuter`)"

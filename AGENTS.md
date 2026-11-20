@@ -51,6 +51,15 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
   (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`), message court en anglais.
 - **Labels** : toute issue ou PR reçoit un label `type:` et un label `area:` (liste et usage
   dans la section « Issues et labels » du [README](README.md)).
+- **Modèles d'issue et de PR** : quand tu crées une issue ou une PR (par ex. avec `gh`),
+  suis la structure du modèle correspondant et remplis toutes ses sections :
+  - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,
+    `4-task.yml`, `5-question.yml`). Ce sont des formulaires : avec `gh issue create`,
+    reprends leurs champs comme titres `###` dans le corps et pose toi-même les labels
+    indiqués dans le modèle, plus le label `area:` ;
+  - PR : `.github/pull_request_template.md`. Avec `gh pr create --body-file`, pars d'une
+    copie de ce fichier, coche la checklist honnêtement (ne coche pas ce qui n'a pas été
+    vérifié) et lie l'issue avec `Closes #N`.
 - **Unités** : valeurs numériques en SI (`float`) dans le contrat ; les suffixes SPICE (`1k`,
   `10u`) ne servent que pour les paramètres saisis par l'utilisateur.
 - **Formatage** : ruff (Python) et Prettier (TS). Ne discute pas le style, lance l'outil.
