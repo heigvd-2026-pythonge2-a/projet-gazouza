@@ -33,6 +33,7 @@ import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
+import { useUnsavedChangesGuard } from "./unsavedGuard";
 import { registerViewCommands } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
@@ -219,6 +220,7 @@ export function SchematicCanvas() {
   const animation = useEditorStore((s) => s.animation);
 
   useKeyboardShortcuts();
+  useUnsavedChangesGuard();
 
   /** Fits the view to the whole circuit (F key, "Ajuster" button). */
   const fitView = useCallback(() => {
