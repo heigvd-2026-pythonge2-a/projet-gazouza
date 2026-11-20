@@ -1,6 +1,7 @@
 # Psice 
 
 [![CI](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)
+[![Couverture](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/coverage.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)
 [![Issues ouvertes](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/issues.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues)
 ![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white)

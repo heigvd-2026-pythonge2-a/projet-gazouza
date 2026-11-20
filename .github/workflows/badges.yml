@@ -28,21 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Checks out the default branch only (never the PR head): no PR code is run.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Generate badges
+      - name: Generate and publish badges
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/milestone-badges.sh "$RUNNER_TEMP/badges"
-
-      - name: Push to the badges branch
-        working-directory: ${{ runner.temp }}/badges
         run: |
-          git init -q -b badges
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -q -m "chore: update badges"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" badges
+          bash .github/scripts/milestone-badges.sh "$RUNNER_TEMP/badges"
+          bash .github/scripts/publish-badges.sh "$RUNNER_TEMP/badges"
