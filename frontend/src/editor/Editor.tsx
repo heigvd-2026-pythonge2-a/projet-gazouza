@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import { Layer, Rect, Stage } from "react-konva";
 
 import {
+  docBounds,
   itemsInRect,
   moveItems,
   moveWirePart,
@@ -20,10 +21,11 @@ import {
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
+import { fitViewport } from "./fitView";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
-import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
+import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
@@ -200,6 +202,23 @@ export function SchematicCanvas() {
   const dropComponent = useEditorStore((s) => s.dropComponent);
 
   useKeyboardShortcuts();
+
+  /** Fits the view to the whole circuit (F key, "Ajuster" button). */
+  const fitView = useCallback(() => {
+    setViewport(fitViewport(docBounds(useEditorStore.getState().doc), size.width, size.height));
+  }, [size]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== "f" && e.key !== "F")) return;
+      e.preventDefault();
+      fitView();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fitView]);
 
   // While dragging, show the dragged items (and the wires they pull) at their new place.
   const doc = drag
@@ -618,12 +637,31 @@ export function SchematicCanvas() {
           position: "absolute",
           right: 8,
           bottom: 6,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
           fontSize: 12,
           color: COLORS.text,
-          pointerEvents: "none",
         }}
       >
-        {Math.round(viewport.scale * 100)} %
+        <button
+          type="button"
+          title="Ajuster la vue au circuit (touche F)"
+          aria-keyshortcuts="F"
+          onClick={fitView}
+          style={{
+            font: "inherit",
+            padding: "1px 8px",
+            border: `1px solid ${UI.border}`,
+            borderRadius: 4,
+            background: "#ffffff",
+            color: COLORS.text,
+            cursor: "pointer",
+          }}
+        >
+          Ajuster
+        </button>
+        <span>{Math.round(viewport.scale * 100)} %</span>
       </div>
       {menu && (
         <ContextMenu

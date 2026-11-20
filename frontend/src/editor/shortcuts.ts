@@ -59,6 +59,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: "Vue",
     items: [
       { keys: "Molette", action: "Zoom" },
+      { keys: "F", action: "Ajuster la vue au circuit" },
       { keys: "Clic droit ou molette maintenus", action: "Déplacer la vue" },
     ],
   },

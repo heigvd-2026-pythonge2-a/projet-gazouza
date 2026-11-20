@@ -209,6 +209,28 @@ export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   return [...components, ...wires, ...junctions].map((item) => item.id);
 }
 
+/**
+ * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires and
+ * junctions. Null for an empty document.
+ */
+export function docBounds(doc: EditorDoc): GridRect | null {
+  const points: GridPoint[] = [
+    ...doc.components.flatMap((c) => {
+      const { min, max } = symbolBounds(getDef(c.type));
+      return [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }].map((p) => toWorld(p, c));
+    }),
+    ...doc.wires.flatMap((w) => wirePath(doc, w)),
+    ...doc.junctions.map((j) => j.position),
+  ];
+  if (points.length === 0) return null;
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return {
+    min: { x: Math.min(...xs), y: Math.min(...ys) },
+    max: { x: Math.max(...xs), y: Math.max(...ys) },
+  };
+}
+
 // --- Ids and names --------------------------------------------------------------------------
 
 /** Next value of the form `${prefix}${n}`, one above the highest existing n (case-insensitive). */
