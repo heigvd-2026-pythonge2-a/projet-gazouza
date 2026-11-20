@@ -1,27 +1,107 @@
-import { useEditorStore, type Tool } from "../store";
-import { UI } from "./theme";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
+import { useEditorStore, type Tool } from "../store";
+import { SHORTCUT_GROUPS } from "./shortcuts";
+import { COLORS, UI } from "./theme";
+
+/** Main gestures of the active tool; the full list is in the shortcuts panel. */
 const HINTS: Record<Tool["kind"], string> = {
-  select:
-    "Clic : sélectionner · Maj + clic : sélection multiple · " +
-    "Glisser dans le vide : sélection par zone · Clic droit sur un composant : menu · " +
-    "Tirer depuis une broche : fil · " +
-    "Clic sur un fil : coude ou tronçon, à glisser · Double-clic : fil entier · " +
-    "Glisser : déplacer la sélection · Flèches : la déplacer d'un pas · " +
-    "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
-    "1 à 8 : outil de la palette · " +
-    "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
-  place:
-    "Clic : poser · R : tourner · M : miroir · Échap ou clic droit : arrêter de poser · " +
-    "Clic droit maintenu : déplacer la vue",
-  wire:
-    "Clic : coude, ou fin du fil sur une broche ou un fil · Double-clic : finir dans le vide · " +
-    "Échap : enlever le dernier coude · Clic droit : abandonner le fil · " +
-    "Clic droit maintenu : déplacer la vue",
+  select: "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer",
+  place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
+  wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
 };
 
-/** Bottom bar: shortcuts of the active tool, and what is selected. */
+/** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */
+function ShortcutsPanel({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Close the panel only: the editor's Escape would also clear the selection.
+      e.stopPropagation();
+      onClose();
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Element | null;
+      if (ref.current?.contains(target) || target?.closest("[data-shortcuts-toggle]")) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Raccourcis"
+      style={{
+        position: "fixed",
+        right: 8,
+        bottom: 30,
+        zIndex: 20,
+        width: 420,
+        maxWidth: "calc(100vw - 16px)",
+        maxHeight: "70vh",
+        overflowY: "auto",
+        padding: "10px 14px",
+        background: "#ffffff",
+        border: `1px solid ${UI.border}`,
+        borderRadius: 6,
+        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
+        fontSize: 12,
+        color: COLORS.text,
+        whiteSpace: "normal",
+      }}
+    >
+      {SHORTCUT_GROUPS.map((group) => (
+        <section key={group.title}>
+          <h4 style={{ ...UI.heading, margin: "8px 0 4px" }}>{group.title}</h4>
+          <dl
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 11em) 1fr",
+              gap: "2px 12px",
+              margin: 0,
+            }}
+          >
+            {group.items.map((item) => (
+              <Fragment key={item.keys}>
+                <dt style={{ fontWeight: 600 }}>{item.keys}</dt>
+                <dd style={{ margin: 0 }}>{item.action}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Bottom bar: main shortcuts of the active tool, what is selected, and a button (or the ? key)
+ * that shows every shortcut.
+ */
 export function StatusBar() {
+  const [help, setHelp] = useState(false);
+  const closeHelp = useCallback(() => setHelp(false), []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      setHelp((open) => !open);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const tool = useEditorStore((s) => s.tool);
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
@@ -54,10 +134,29 @@ export function StatusBar() {
         overflow: "hidden",
       }}
     >
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }} title={HINTS[tool.kind]}>
-        {HINTS[tool.kind]}
-      </span>
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
       <span style={{ marginLeft: "auto" }}>{selected}</span>
+      <button
+        type="button"
+        data-shortcuts-toggle
+        aria-expanded={help}
+        title="Tous les raccourcis (touche ?)"
+        onClick={() => setHelp((open) => !open)}
+        style={{
+          font: "inherit",
+          flex: "none",
+          padding: "0 8px",
+          height: 18,
+          border: `1px solid ${help ? COLORS.selected : UI.border}`,
+          borderRadius: 4,
+          background: help ? UI.activeBackground : "#ffffff",
+          color: help ? COLORS.selected : UI.muted,
+          cursor: "pointer",
+        }}
+      >
+        Raccourcis (?)
+      </button>
+      {help && <ShortcutsPanel onClose={closeHelp} />}
     </footer>
   );
 }
