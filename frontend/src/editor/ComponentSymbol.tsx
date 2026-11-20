@@ -9,6 +9,7 @@ import {
   type PlacedComponent,
   type SymbolShape,
 } from "../store";
+import { arcPoints } from "./symbolGeometry";
 import { COLORS, GRID } from "./theme";
 
 const STROKE = 2;
@@ -20,16 +21,6 @@ const PIN_HIT = 0.8;
 function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
   const container = e.target.getStage()?.container();
   if (container) container.style.cursor = cursor;
-}
-
-function arcPoints(s: Extract<SymbolShape, { kind: "arc" }>): number[] {
-  const points: number[] = [];
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    const a = ((s.start + (s.sweep * i) / steps) * Math.PI) / 180;
-    points.push((s.x + s.radius * Math.cos(a)) * GRID, (s.y + s.radius * Math.sin(a)) * GRID);
-  }
-  return points;
 }
 
 function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }) {

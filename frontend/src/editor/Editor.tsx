@@ -1,12 +1,12 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Layer, Stage } from "react-konva";
 
 import { pinPosition, useEditorStore, type GridPoint, type PlacedComponent } from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { Grid, type Viewport } from "./Grid";
-import { Palette } from "./Palette";
+import { DRAG_TYPE } from "./Palette";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
 import { WireDraft, Wires } from "./Wires";
 
@@ -65,8 +65,8 @@ function useKeyboardShortcuts() {
   }, []);
 }
 
-/** Schematic editor: component palette + zoomable, pannable canvas. */
-export function Editor() {
+/** Schematic canvas: zoomable, pannable; accepts components dragged from the palette. */
+export function SchematicCanvas() {
   const [containerRef, size] = useElementSize<HTMLDivElement>();
   const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -84,6 +84,7 @@ export function Editor() {
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
   const cancelDraft = useEditorStore((s) => s.cancelDraft);
+  const dropComponent = useEditorStore((s) => s.dropComponent);
 
   useKeyboardShortcuts();
 
@@ -160,12 +161,27 @@ export function Editor() {
     else if (!selection.includes(id)) select([id]);
   };
 
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    const type = e.dataTransfer.getData(DRAG_TYPE);
+    const stage = stageRef.current;
+    if (!type || !stage) return;
+    e.preventDefault();
+    stage.setPointersPositions(e.nativeEvent);
+    const p = pointerGrid();
+    if (p) dropComponent(type, p);
+  };
+
   const ghost: PlacedComponent | null =
     tool.kind === "place" && pointer
       ? {
           id: "ghost",
           type: tool.type,
-          name: "",
           position: pointer,
           rotation: tool.rotation,
           mirror: tool.mirror,
@@ -174,82 +190,81 @@ export function Editor() {
       : null;
 
   return (
-    <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <Palette />
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          position: "relative",
-          overflow: "hidden",
-          background: COLORS.background,
-          cursor: tool.kind === "select" ? "default" : "crosshair",
+    <div
+      ref={containerRef}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        position: "relative",
+        overflow: "hidden",
+        background: COLORS.background,
+        cursor: tool.kind === "select" ? "default" : "crosshair",
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+    >
+      <Stage
+        ref={stageRef}
+        width={size.width}
+        height={size.height}
+        x={viewport.x}
+        y={viewport.y}
+        scaleX={viewport.scale}
+        scaleY={viewport.scale}
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={endPan}
+        onMouseLeave={() => {
+          endPan();
+          setPointer(null);
         }}
-        onContextMenu={(e) => e.preventDefault()}
       >
-        <Stage
-          ref={stageRef}
-          width={size.width}
-          height={size.height}
-          x={viewport.x}
-          y={viewport.y}
-          scaleX={viewport.scale}
-          scaleY={viewport.scale}
-          onWheel={onWheel}
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={endPan}
-          onMouseLeave={() => {
-            endPan();
-            setPointer(null);
-          }}
-        >
-          <Layer listening={false}>
-            <Grid viewport={viewport} width={size.width} height={size.height} />
-          </Layer>
-          <Layer>
-            <Wires
-              doc={doc}
-              selection={selection}
-              onSelect={tool.kind === "select" ? selectItem : undefined}
+        <Layer listening={false}>
+          <Grid viewport={viewport} width={size.width} height={size.height} />
+        </Layer>
+        <Layer>
+          <Wires
+            doc={doc}
+            selection={selection}
+            onSelect={tool.kind === "select" ? selectItem : undefined}
+          />
+          {doc.components.map((c) => (
+            <ComponentSymbol
+              key={c.id}
+              component={c}
+              selected={selection.includes(c.id)}
+              draggable={tool.kind === "select"}
+              onSelect={(e) => selectItem(c.id, e)}
+              onMove={(position) => moveComponent(c.id, position)}
+              onPinMouseDown={
+                tool.kind === "select"
+                  ? (pin) => {
+                      startWireFrom(pinPosition(c, pin));
+                      setPointer(pointerGrid());
+                    }
+                  : undefined
+              }
             />
-            {doc.components.map((c) => (
-              <ComponentSymbol
-                key={c.id}
-                component={c}
-                selected={selection.includes(c.id)}
-                draggable={tool.kind === "select"}
-                onSelect={(e) => selectItem(c.id, e)}
-                onMove={(position) => moveComponent(c.id, position)}
-                onPinMouseDown={
-                  tool.kind === "select"
-                    ? (pin) => {
-                        startWireFrom(pinPosition(c, pin));
-                        setPointer(pointerGrid());
-                      }
-                    : undefined
-                }
-              />
-            ))}
-            {ghost && <ComponentSymbol component={ghost} ghost />}
-            {tool.kind === "wire" && (
-              <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
-            )}
-          </Layer>
-        </Stage>
-        <div
-          style={{
-            position: "absolute",
-            right: 8,
-            bottom: 6,
-            fontSize: 12,
-            color: COLORS.text,
-            pointerEvents: "none",
-          }}
-        >
-          {Math.round(viewport.scale * 100)} %
-        </div>
+          ))}
+          {ghost && <ComponentSymbol component={ghost} ghost />}
+          {tool.kind === "wire" && (
+            <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
+          )}
+        </Layer>
+      </Stage>
+      <div
+        style={{
+          position: "absolute",
+          right: 8,
+          bottom: 6,
+          fontSize: 12,
+          color: COLORS.text,
+          pointerEvents: "none",
+        }}
+      >
+        {Math.round(viewport.scale * 100)} %
       </div>
     </div>
   );
