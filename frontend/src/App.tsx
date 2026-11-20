@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { getHealth } from "./api/client";
-import { Inspector, Palette, SchematicCanvas, StatusBar } from "./editor";
+import { Inspector, Palette, SchematicCanvas, StatusBar, UndoRedoButtons } from "./editor";
 import {
   DEFAULT_LAYOUT,
   MaximizeButton,
@@ -142,6 +142,7 @@ export default function App() {
           borderBottom: BORDER,
         }}
       >
+        <UndoRedoButtons />
         {/* Wired to POST /api/simulate in a later PR (simulation panel). */}
         <button
           type="button"
