@@ -68,10 +68,10 @@ export function Palette() {
   return (
     <aside
       style={{
-        width: 148,
-        flex: "none",
+        // Sized by the app shell (resizable column).
+        flex: 1,
+        minWidth: 0,
         padding: 8,
-        borderRight: `1px solid ${UI.border}`,
         background: UI.panel,
         overflowY: "auto",
       }}

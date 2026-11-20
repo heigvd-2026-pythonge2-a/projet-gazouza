@@ -2,12 +2,30 @@ import { useEffect, useState } from "react";
 
 import { getHealth } from "./api/client";
 import { Inspector, Palette, SchematicCanvas, StatusBar } from "./editor";
+import {
+  DEFAULT_SIZES,
+  Splitter,
+  clampPaletteWidth,
+  clampSideWidth,
+  inspectorHeight,
+  useElementSize,
+  type PanelSizes,
+} from "./layout";
 
 const BORDER = "1px solid #e5e7eb";
 
 // App shell, layout "C" chosen in issue #3: palette | schematic | results above the inspector.
 export default function App() {
   const [backend, setBackend] = useState("connexion…");
+  const [sizes, setSizes] = useState<PanelSizes>(DEFAULT_SIZES);
+  const [rowRef, row] = useElementSize<HTMLDivElement>();
+  const [columnRef, column] = useElementSize<HTMLDivElement>();
+
+  // Stored sizes are what the user asked for; clamp them to what fits the window right now.
+  const paletteWidth = clampPaletteWidth(sizes.paletteWidth);
+  const sideWidth = clampSideWidth(sizes.sideWidth, row.width, paletteWidth);
+  const inspector = inspectorHeight(sizes.inspectorFraction, column.height);
+  const update = (patch: Partial<PanelSizes>) => setSizes((s) => ({ ...s, ...patch }));
 
   useEffect(() => {
     getHealth()
@@ -77,24 +95,51 @@ export default function App() {
         </button>
       </div>
 
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        <Palette />
+      <div ref={rowRef} style={{ display: "flex", flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", width: paletteWidth, flex: "none" }}>
+          <Palette />
+        </div>
+        <Splitter
+          orientation="vertical"
+          label="Redimensionner la palette"
+          value={paletteWidth}
+          direction={1}
+          onChange={(w) => update({ paletteWidth: clampPaletteWidth(w) })}
+          onReset={() => update({ paletteWidth: DEFAULT_SIZES.paletteWidth })}
+        />
         <SchematicCanvas />
+        <Splitter
+          orientation="vertical"
+          label="Redimensionner le panneau de droite"
+          value={sideWidth}
+          direction={-1}
+          onChange={(w) => update({ sideWidth: clampSideWidth(w, row.width, paletteWidth) })}
+          onReset={() => update({ sideWidth: DEFAULT_SIZES.sideWidth })}
+        />
         <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            width: 440,
-            flex: "none",
-            borderLeft: BORDER,
-          }}
+          ref={columnRef}
+          style={{ display: "flex", flexDirection: "column", width: sideWidth, flex: "none" }}
         >
           {/* Slot for the plot module (src/plot). */}
           <section aria-label="Résultats" style={{ flex: 1, minHeight: 0, padding: "8px 10px" }}>
             <b>Résultats</b>
             <p style={{ color: "#6b7280" }}>Les courbes s'afficheront ici après une simulation.</p>
           </section>
-          <Inspector />
+          <Splitter
+            orientation="horizontal"
+            label="Redimensionner les propriétés"
+            value={inspector}
+            direction={-1}
+            onChange={(h) => {
+              if (column.height <= 0) return;
+              const clamped = inspectorHeight(h / column.height, column.height);
+              update({ inspectorFraction: clamped / column.height });
+            }}
+            onReset={() => update({ inspectorFraction: DEFAULT_SIZES.inspectorFraction })}
+          />
+          <div style={{ display: "flex", height: inspector, flex: "none" }}>
+            <Inspector />
+          </div>
         </div>
       </div>
 
