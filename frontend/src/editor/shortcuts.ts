@@ -13,6 +13,14 @@ export interface ShortcutGroup {
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
+    title: "Fichier",
+    items: [
+      { keys: "Ctrl+N", action: "Nouveau schéma" },
+      { keys: "Ctrl+O", action: "Ouvrir un schéma" },
+      { keys: "Ctrl+S", action: "Enregistrer le schéma" },
+    ],
+  },
+  {
     title: "Sélection",
     items: [
       { keys: "Clic", action: "Sélectionner" },

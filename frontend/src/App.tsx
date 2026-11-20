@@ -2,12 +2,12 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { getHealth } from "./api/client";
 import {
+  EditorToolbar,
   Inspector,
   Palette,
   SHOW_INSPECTOR_EVENT,
   SchematicCanvas,
   StatusBar,
-  UndoRedoButtons,
 } from "./editor";
 import {
   DEFAULT_LAYOUT,
@@ -151,14 +151,24 @@ export default function App() {
         style={{
           display: "flex",
           alignItems: "center",
+          // A narrow window wraps the groups onto a second line instead of hiding buttons.
+          flexWrap: "wrap",
           gap: 6,
           flex: "none",
           padding: "6px 10px",
           borderBottom: BORDER,
         }}
       >
-        <UndoRedoButtons />
-        {/* Wired to POST /api/simulate in a later PR (simulation panel). */}
+        <EditorToolbar />
+        {/* Simulation group. Wired to POST /api/simulate in a later PR (simulation panel). */}
+        <select
+          disabled
+          aria-label="Analyse"
+          title="Choix de l'analyse et de ses paramètres — Bientôt disponible"
+          style={{ ...TOOL_BUTTON, opacity: 0.5, cursor: "not-allowed" }}
+        >
+          <option>Analyse : point de fonctionnement (.op)</option>
+        </select>
         <button
           type="button"
           disabled
@@ -176,6 +186,14 @@ export default function App() {
           }}
         >
           ▶ Simuler
+        </button>
+        <button
+          type="button"
+          disabled
+          title="Animer le courant sur le schéma après une simulation — Bientôt disponible"
+          style={{ ...TOOL_BUTTON, opacity: 0.5, cursor: "not-allowed" }}
+        >
+          Animer le courant
         </button>
         <button
           type="button"

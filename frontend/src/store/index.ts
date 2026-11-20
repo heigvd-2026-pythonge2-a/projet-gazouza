@@ -2,5 +2,6 @@
 
 export * from "./document";
 export * from "./editorStore";
+export * from "./fileFormat";
 export * from "./library";
 export * from "./routing";
