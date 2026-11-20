@@ -1,0 +1,13 @@
+{
+  "type": "resistor",
+  "label": "Résistance",
+  "prefix": "R",
+  "pins": [
+    { "name": "1", "x": 0, "y": -2 },
+    { "name": "2", "x": 0, "y": 2 }
+  ],
+  "params": [
+    { "name": "resistance", "label": "Résistance", "unit": "Ω", "default": "1k" }
+  ],
+  "spice": "{name} {pin:1} {pin:2} {resistance}"
+}

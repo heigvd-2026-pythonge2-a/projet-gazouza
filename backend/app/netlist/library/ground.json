@@ -1,0 +1,7 @@
+{
+  "type": "ground",
+  "label": "Masse",
+  "prefix": null,
+  "pins": [{ "name": "1", "x": 0, "y": 0 }],
+  "spice": null
+}

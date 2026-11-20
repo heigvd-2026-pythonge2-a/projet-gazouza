@@ -1,0 +1,10 @@
+{
+  "type": "label",
+  "label": "Étiquette de nœud",
+  "prefix": null,
+  "pins": [{ "name": "1", "x": 0, "y": 0 }],
+  "params": [
+    { "name": "net", "label": "Nom du nœud", "default": "out", "kind": "text" }
+  ],
+  "spice": null
+}

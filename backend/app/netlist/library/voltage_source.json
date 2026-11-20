@@ -1,0 +1,41 @@
+{
+  "type": "voltage_source",
+  "label": "Source de tension",
+  "prefix": "V",
+  "pins": [
+    { "name": "+", "x": 0, "y": -2 },
+    { "name": "-", "x": 0, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "waveform",
+      "label": "Forme d'onde",
+      "default": "dc",
+      "kind": "choice",
+      "options": [
+        { "value": "dc", "label": "Continue" },
+        { "value": "pulse", "label": "Impulsion" },
+        { "value": "sin", "label": "Sinusoïde" }
+      ]
+    },
+    { "name": "dc", "label": "Tension continue", "unit": "V", "default": "5", "waveforms": ["dc"] },
+    { "name": "v1", "label": "Tension basse", "unit": "V", "default": "0", "waveforms": ["pulse"] },
+    { "name": "v2", "label": "Tension haute", "unit": "V", "default": "5", "waveforms": ["pulse"] },
+    { "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse", "sin"] },
+    { "name": "rise", "label": "Temps de montée", "unit": "s", "default": "1n", "waveforms": ["pulse"] },
+    { "name": "fall", "label": "Temps de descente", "unit": "s", "default": "1n", "waveforms": ["pulse"] },
+    { "name": "width", "label": "Durée haute", "unit": "s", "default": "1m", "waveforms": ["pulse"] },
+    { "name": "period", "label": "Période", "unit": "s", "default": "2m", "waveforms": ["pulse"] },
+    { "name": "offset", "label": "Décalage", "unit": "V", "default": "0", "waveforms": ["sin"] },
+    { "name": "amplitude", "label": "Amplitude", "unit": "V", "default": "1", "waveforms": ["sin"] },
+    { "name": "frequency", "label": "Fréquence", "unit": "Hz", "default": "1k", "waveforms": ["sin"] },
+    { "name": "damping", "label": "Amortissement", "unit": "1/s", "default": "0", "waveforms": ["sin"] },
+    { "name": "phase", "label": "Phase", "unit": "°", "default": "0", "waveforms": ["sin"] }
+  ],
+  "spice": "{name} {pin:+} {pin:-} {waveform}",
+  "waveforms": {
+    "dc": "DC {dc}",
+    "pulse": "PULSE({v1} {v2} {delay} {rise} {fall} {width} {period})",
+    "sin": "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
+  }
+}
