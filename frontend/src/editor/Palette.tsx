@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import { LIBRARY, useEditorStore } from "../store";
+import { paletteGroups, useEditorStore } from "../store";
 import { SymbolIcon } from "./SymbolIcon";
 import { COLORS, UI } from "./theme";
 
@@ -59,7 +59,19 @@ function WireIcon() {
   );
 }
 
-/** Component palette: one tile per library type, to drag onto the schematic or click. */
+const gridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 };
+
+const groupTitleStyle: CSSProperties = {
+  margin: "10px 0 4px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: UI.muted,
+};
+
+/**
+ * Component palette, grouped by category (`category` in the library): one tile per library
+ * type, to drag onto the schematic or click. The wire tool closes the "Connexions" group.
+ */
 export function Palette() {
   const tool = useEditorStore((s) => s.tool);
   const startPlacing = useEditorStore((s) => s.startPlacing);
@@ -77,22 +89,29 @@ export function Palette() {
       }}
     >
       <h3 style={UI.heading}>Composants</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-        {[...LIBRARY.values()].map((def) => (
-          <Tile
-            key={def.type}
-            label={def.label}
-            active={tool.kind === "place" && tool.type === def.type}
-            onClick={() => startPlacing(def.type)}
-            dragType={def.type}
-          >
-            <SymbolIcon def={def} />
-          </Tile>
-        ))}
-        <Tile label="Fil" active={tool.kind === "wire"} onClick={startWiring}>
-          <WireIcon />
-        </Tile>
-      </div>
+      {paletteGroups().map((group) => (
+        <section key={group.id} aria-label={group.label}>
+          <h4 style={groupTitleStyle}>{group.label}</h4>
+          <div style={gridStyle}>
+            {group.defs.map((def) => (
+              <Tile
+                key={def.type}
+                label={def.label}
+                active={tool.kind === "place" && tool.type === def.type}
+                onClick={() => startPlacing(def.type)}
+                dragType={def.type}
+              >
+                <SymbolIcon def={def} />
+              </Tile>
+            ))}
+            {group.id === "connection" && (
+              <Tile label="Fil" active={tool.kind === "wire"} onClick={startWiring}>
+                <WireIcon />
+              </Tile>
+            )}
+          </div>
+        </section>
+      ))}
       <p style={{ fontSize: 12, color: UI.muted, marginTop: 8 }}>Glisser sur le schéma</p>
     </aside>
   );

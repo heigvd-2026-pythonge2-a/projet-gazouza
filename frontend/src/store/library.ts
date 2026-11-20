@@ -38,9 +38,20 @@ export interface ParamDef {
   waveforms: string[];
 }
 
+/** Group of the palette a component is shown in. Frontend only: not part of the API contract. */
+export type Category = "passive" | "source" | "connection";
+
+/** Palette groups, in display order, with their French titles. */
+export const CATEGORIES: readonly { id: Category; label: string }[] = [
+  { id: "passive", label: "Passifs" },
+  { id: "source", label: "Sources" },
+  { id: "connection", label: "Connexions" },
+];
+
 export interface ComponentDef {
   type: string;
   label: string;
+  category: Category;
   /** SPICE prefix. `null` for ground and label, which have no SPICE line and no `name`. */
   prefix: string | null;
   pins: PinDef[];
@@ -117,6 +128,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "resistor",
     label: "Résistance",
+    category: "passive",
     prefix: "R",
     pins: twoPins("1", "2"),
     params: [value("resistance", "Résistance", "Ω", "1k")],
@@ -125,6 +137,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "capacitor",
     label: "Condensateur",
+    category: "passive",
     prefix: "C",
     pins: twoPins("1", "2"),
     params: [value("capacitance", "Capacité", "F", "1u")],
@@ -137,6 +150,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "inductor",
     label: "Bobine",
+    category: "passive",
     prefix: "L",
     pins: twoPins("1", "2"),
     params: [value("inductance", "Inductance", "H", "1m")],
@@ -155,6 +169,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "voltage_source",
     label: "Source de tension",
+    category: "source",
     prefix: "V",
     pins: twoPins("+", "-"),
     params: sourceParams("V"),
@@ -170,6 +185,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "current_source",
     label: "Source de courant",
+    category: "source",
     prefix: "I",
     pins: twoPins("+", "-"),
     params: sourceParams("A"),
@@ -185,6 +201,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "ground",
     label: "Masse",
+    category: "connection",
     prefix: null,
     pins: [{ name: "1", x: 0, y: 0 }],
     params: [],
@@ -198,6 +215,7 @@ const DEFS: ComponentDef[] = [
   {
     type: "label",
     label: "Étiquette de nœud",
+    category: "connection",
     prefix: null,
     pins: [{ name: "1", x: 0, y: 0 }],
     params: [
@@ -216,6 +234,14 @@ const DEFS: ComponentDef[] = [
 ];
 
 export const LIBRARY: ReadonlyMap<string, ComponentDef> = new Map(DEFS.map((d) => [d.type, d]));
+
+/** Library components grouped as in the palette: categories in order, empty ones left out. */
+export function paletteGroups(): { id: Category; label: string; defs: ComponentDef[] }[] {
+  return CATEGORIES.map((c) => ({
+    ...c,
+    defs: [...LIBRARY.values()].filter((d) => d.category === c.id),
+  })).filter((g) => g.defs.length > 0);
+}
 
 export function getDef(type: string): ComponentDef {
   const def = LIBRARY.get(type);
