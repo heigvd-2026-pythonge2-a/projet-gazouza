@@ -11,6 +11,20 @@ import { COLORS, GRID, MAX_SCALE, MIN_SCALE } from "./theme";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
+/** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
+const DRAG_THRESHOLD = 4;
+
+/** Middle or right button held on the canvas. */
+interface Press {
+  button: 1 | 2;
+  /** Where the press started (client coordinates) and the viewport offset at that moment. */
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** The view is being moved (always for the middle button, after the threshold for the right). */
+  panning: boolean;
+}
 
 /** Tracks the size of an element, so the Konva stage can fill its container. */
 function useElementSize<T extends HTMLElement>() {
@@ -80,7 +94,9 @@ export function SchematicCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
-  const panStart = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  /** Removes the window listeners of the press in progress, if any. */
+  const endPress = useRef<(() => void) | null>(null);
 
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
@@ -92,7 +108,6 @@ export function SchematicCanvas() {
   const draft = useEditorStore((s) => s.draft);
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
-  const cancelDraft = useEditorStore((s) => s.cancelDraft);
   const dropComponent = useEditorStore((s) => s.dropComponent);
 
   useKeyboardShortcuts();
@@ -104,6 +119,28 @@ export function SchematicCanvas() {
     centered.current = true;
     setViewport({ x: Math.round(size.width / 2), y: Math.round(size.height / 2), scale: 1 });
   }, [size]);
+
+  useEffect(() => () => endPress.current?.(), []);
+
+  // After a right-drag released outside the canvas (over the palette...), the browser would show
+  // its context menu there: swallow the one that follows a right press on the canvas.
+  const swallowContextMenu = useRef(false);
+  useEffect(() => {
+    const onMouseDown = () => {
+      swallowContextMenu.current = false;
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      if (!swallowContextMenu.current) return;
+      swallowContextMenu.current = false;
+      e.preventDefault();
+    };
+    window.addEventListener("mousedown", onMouseDown, true);
+    window.addEventListener("contextmenu", onContextMenu, true);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown, true);
+      window.removeEventListener("contextmenu", onContextMenu, true);
+    };
+  }, []);
 
   const pointerGrid = (): GridPoint | null => {
     const p = stageRef.current?.getRelativePointerPosition();
@@ -125,15 +162,64 @@ export function SchematicCanvas() {
     });
   };
 
+  /** Right click without moving: leaves the wire being drawn or the current tool (like Escape). */
+  const rightClick = () => {
+    const s = useEditorStore.getState();
+    if (s.draft) s.cancelDraft();
+    else if (s.tool.kind !== "select") s.cancel();
+  };
+
+  /**
+   * Middle or right press: follows the mouse on the window, so the view keeps moving (and stops)
+   * even outside the canvas. A right press that barely moves is a click, handled on release.
+   */
+  const startPress = (e: MouseEvent, button: 1 | 2) => {
+    endPress.current?.();
+    const press: Press = {
+      button,
+      x: e.clientX,
+      y: e.clientY,
+      vx: viewport.x,
+      vy: viewport.y,
+      panning: button === 1,
+    };
+    setPanning(press.panning);
+
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - press.x;
+      const dy = ev.clientY - press.y;
+      if (!press.panning) {
+        if (Math.hypot(dx, dy) <= DRAG_THRESHOLD) return;
+        press.panning = true;
+        setPanning(true);
+      }
+      setViewport((v) => ({ ...v, x: press.vx + dx, y: press.vy + dy }));
+    };
+    const onUp = (ev: MouseEvent) => {
+      if (ev.button !== press.button) return;
+      stop();
+      if (press.button === 2 && !press.panning) rightClick();
+    };
+    const stop = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      endPress.current = null;
+      setPanning(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    endPress.current = stop;
+  };
+
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 1) {
-      // Middle button: pan.
-      e.evt.preventDefault();
-      panStart.current = { x: e.evt.clientX, y: e.evt.clientY, vx: viewport.x, vy: viewport.y };
+      e.evt.preventDefault(); // no auto-scroll
+      startPress(e.evt, 1);
       return;
     }
     if (e.evt.button === 2) {
-      if (draft) cancelDraft();
+      swallowContextMenu.current = true;
+      startPress(e.evt, 2);
       return;
     }
     if (e.evt.button !== 0) return;
@@ -148,20 +234,8 @@ export function SchematicCanvas() {
     }
   };
 
-  const onMouseMove = (e: KonvaEventObject<MouseEvent>) => {
-    const pan = panStart.current;
-    if (pan) {
-      setViewport((v) => ({
-        ...v,
-        x: pan.vx + e.evt.clientX - pan.x,
-        y: pan.vy + e.evt.clientY - pan.y,
-      }));
-    }
+  const onMouseMove = () => {
     if (tool.kind !== "select") setPointer(pointerGrid());
-  };
-
-  const endPan = () => {
-    panStart.current = null;
   };
 
   const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
@@ -207,7 +281,7 @@ export function SchematicCanvas() {
         position: "relative",
         overflow: "hidden",
         background: COLORS.background,
-        cursor: tool.kind === "select" ? "default" : "crosshair",
+        cursor: panning ? "grabbing" : tool.kind === "select" ? "default" : "crosshair",
       }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={onDragOver}
@@ -224,11 +298,7 @@ export function SchematicCanvas() {
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
-        onMouseUp={endPan}
-        onMouseLeave={() => {
-          endPan();
-          setPointer(null);
-        }}
+        onMouseLeave={() => setPointer(null)}
       >
         <Layer listening={false}>
           <Grid viewport={viewport} width={size.width} height={size.height} />
