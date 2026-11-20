@@ -5,10 +5,11 @@ import { Layer, Shape } from "react-konva";
 import type { SimulationResult } from "../api/client";
 import {
   PLAYBACK_SECONDS,
+  applyFlowPlan,
   componentCurrents,
   flowNetwork,
+  flowPlan,
   maxCurrent,
-  solveFlows,
   timeSpan,
   type CurrentAnimation,
   type EditorDoc,
@@ -83,6 +84,16 @@ export function CurrentLayer({
   const imax = useMemo(() => maxCurrent(result), [result]);
   const [start, end] = useMemo(() => timeSpan(result), [result]);
   const transient = result.analysis === "tran";
+  // Which currents are deduced from which only depends on the network: planned once, so a frame
+  // only redoes the additions. An operating point does not change at all: solved once.
+  const plan = useMemo(
+    () => flowPlan(edges, new Set(componentCurrents(result).keys())),
+    [edges, result],
+  );
+  const steadyFlows = useMemo(
+    () => (transient ? null : applyFlowPlan(plan, componentCurrents(result))),
+    [plan, result, transient],
+  );
 
   /** Where the dots of each conductor are, as a distance along it (grid units). */
   const offsets = useRef(new Map<string, number>());
@@ -119,7 +130,7 @@ export function CurrentLayer({
       // Paused: nothing moves (the dots stay where they are).
       const moving = !transient || s.playing;
 
-      const flows = solveFlows(edges, componentCurrents(result, t));
+      const flows = steadyFlows ?? applyFlowPlan(plan, componentCurrents(result, t));
       const next: GridPoint[] = [];
       for (const { edge, length: len } of drawn) {
         const current = flows.get(edge.id);
@@ -139,7 +150,7 @@ export function CurrentLayer({
     return () => {
       animation.stop();
     };
-  }, [edges, drawn, result, imax, start, end, transient]);
+  }, [plan, steadyFlows, drawn, result, imax, start, end, transient]);
 
   return (
     <Layer ref={layerRef} listening={false}>
