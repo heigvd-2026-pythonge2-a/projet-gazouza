@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useEditorStore, type Tool } from "../store";
+import { unconnectedPins, useEditorStore, type Tool } from "../store";
 import { SHORTCUT_GROUPS } from "./shortcuts";
 import { COLORS, UI } from "./theme";
 
@@ -108,6 +108,8 @@ export function StatusBar() {
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
 
+  const unconnected = useMemo(() => unconnectedPins(doc).length, [doc]);
+
   let selected = "";
   if (wirePart) {
     selected = wirePart.kind === "bend" ? "Sélection : coude de fil" : "Sélection : tronçon de fil";
@@ -137,6 +139,14 @@ export function StatusBar() {
     >
       <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
       <span style={{ marginLeft: "auto" }}>{selected}</span>
+      {unconnected > 0 && (
+        <span
+          title="Ces broches sont marquées en rouge sur le schéma : reliez-les avant de simuler."
+          style={{ color: UI.error }}
+        >
+          {unconnected === 1 ? "1 broche non connectée" : `${unconnected} broches non connectées`}
+        </span>
+      )}
       <button
         type="button"
         data-shortcuts-toggle

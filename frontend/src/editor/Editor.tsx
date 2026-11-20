@@ -1,7 +1,7 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
-import { Layer, Rect, Stage } from "react-konva";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { Circle, Layer, Rect, Stage } from "react-konva";
 
 import {
   docBounds,
@@ -10,6 +10,7 @@ import {
   moveWirePart,
   pinPosition,
   rectFrom,
+  unconnectedPins,
   useEditorStore,
   wirePartAt,
   wirePartPoints,
@@ -29,6 +30,8 @@ import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
+/** Radius of the ring drawn around a pin connected to nothing, in grid units. */
+const UNCONNECTED_RADIUS = 0.4;
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
@@ -226,6 +229,7 @@ export function SchematicCanvas() {
     : partTarget && wirePart
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
+  const freePins = useMemo(() => unconnectedPins(doc), [doc]);
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
@@ -611,6 +615,18 @@ export function SchematicCanvas() {
                     }
                   : undefined
               }
+            />
+          ))}
+          {freePins.map((p) => (
+            <Circle
+              key={`${p.comp}/${p.pin}`}
+              x={p.position.x * GRID}
+              y={p.position.y * GRID}
+              radius={UNCONNECTED_RADIUS * GRID}
+              fill="rgba(220, 38, 38, 0.15)"
+              stroke={COLORS.pin}
+              strokeWidth={1.5}
+              listening={false}
             />
           ))}
           {ghost && <ComponentSymbol component={ghost} ghost />}
