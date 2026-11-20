@@ -1,6 +1,7 @@
 // Public API of the editor module: the pieces the app shell lays out.
 export { AnimateButton } from "./AnimationControls";
 export { SchematicCanvas } from "./Editor";
+export { saveRescueCopy } from "./fileActions";
 export { Inspector } from "./Inspector";
 export { SHOW_INSPECTOR_EVENT } from "./inspectorFocus";
 export { Palette } from "./Palette";

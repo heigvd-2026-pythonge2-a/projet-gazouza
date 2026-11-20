@@ -118,6 +118,35 @@ function download(name: string, content: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Name proposed for a rescue copy, so it does not replace the schematic's own file. */
+const RESCUE_FILE_NAME = "schema-recupere.psice.json";
+
+/**
+ * Saves a copy of the schematic in a new file, after an error in the interface: it always asks
+ * where, never overwrites the current file, and does not mark the document as saved.
+ */
+export function saveRescueCopy() {
+  const content = serializeDoc(useEditorStore.getState().doc);
+  const api = pickers();
+  if (!api) {
+    download(RESCUE_FILE_NAME, content);
+    return;
+  }
+  void (async () => {
+    try {
+      const handle = await api.showSaveFilePicker({
+        types: PICKER_TYPES,
+        suggestedName: RESCUE_FILE_NAME,
+      });
+      await write(handle, content);
+    } catch (error: unknown) {
+      if (isCancel(error)) return;
+      // Last resort: the download still gets the work out.
+      download(RESCUE_FILE_NAME, content);
+    }
+  })();
+}
+
 /**
  * Saves the schematic. The first time, asks where (system dialog); then writes to the same file.
  * Does nothing if the document is already saved in a file.
