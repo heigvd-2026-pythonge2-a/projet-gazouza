@@ -1,13 +1,16 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
-import { Layer, Stage } from "react-konva";
+import { Layer, Rect, Stage } from "react-konva";
 
 import {
+  itemsInRect,
   moveItems,
+  rectFrom,
   pinPosition,
   useEditorStore,
   type GridPoint,
+  type GridRect,
   type PlacedComponent,
 } from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
@@ -21,6 +24,8 @@ import { WireDraft, Wires } from "./Wires";
 const ZOOM_STEP = 1.1;
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
+/** A left press in the void that moves more than this (screen pixels) draws a selection box. */
+const BAND_THRESHOLD = 3;
 
 /** Grid step of each arrow key, to move the selection. */
 const ARROWS: Record<string, GridPoint> = {
@@ -143,6 +148,8 @@ export function SchematicCanvas() {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
+  /** Selection rectangle being drawn (grid units). */
+  const [band, setBand] = useState<GridRect | null>(null);
   /** Context menu, at this position in the canvas. */
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
@@ -287,6 +294,66 @@ export function SchematicCanvas() {
     endPress.current = stop;
   };
 
+  /** Pointer position in grid units, not rounded, for a mouse event anywhere on the page. */
+  const pointerAt = (ev: MouseEvent): GridPoint | null => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    stage.setPointersPositions(ev);
+    const p = stage.getRelativePointerPosition();
+    return p ? { x: p.x / GRID, y: p.y / GRID } : null;
+  };
+
+  /**
+   * Left press in the void with the select tool: dragging draws a selection rectangle, which
+   * selects what is entirely inside it (Shift adds to the selection). A click without moving
+   * clears the selection. Escape while drawing drops the rectangle.
+   */
+  const startBand = (e: MouseEvent) => {
+    endPress.current?.();
+    const start = pointerAt(e);
+    if (!start) return;
+    const additive = e.shiftKey;
+    const from = { x: e.clientX, y: e.clientY };
+    let rect: GridRect | null = null;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!rect && Math.hypot(ev.clientX - from.x, ev.clientY - from.y) <= BAND_THRESHOLD) return;
+      const p = pointerAt(ev);
+      if (!p) return;
+      rect = rectFrom(start, p);
+      setBand(rect);
+    };
+    const onUp = (ev: MouseEvent) => {
+      if (ev.button !== 0) return;
+      stop();
+      const s = useEditorStore.getState();
+      if (!rect) {
+        if (!additive) s.select([]);
+        return;
+      }
+      const inside = itemsInRect(s.doc, rect);
+      s.select(additive ? [...new Set([...s.selection, ...inside])] : inside);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      // Keep the global Escape (which clears the selection) from running too.
+      ev.stopPropagation();
+      ev.preventDefault();
+      stop();
+    };
+    const stop = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("keydown", onKeyDown, true);
+      endPress.current = null;
+      setBand(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("keydown", onKeyDown, true);
+    endPress.current = stop;
+  };
+
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 1) {
       e.evt.preventDefault(); // no auto-scroll
@@ -306,7 +373,7 @@ export function SchematicCanvas() {
       const p = pointerGrid();
       if (p) placeAt(p);
     } else if (e.target === e.target.getStage()) {
-      select([]);
+      startBand(e.evt);
     }
   };
 
@@ -425,6 +492,19 @@ export function SchematicCanvas() {
             />
           ))}
           {ghost && <ComponentSymbol component={ghost} ghost />}
+          {band && (
+            <Rect
+              x={band.min.x * GRID}
+              y={band.min.y * GRID}
+              width={(band.max.x - band.min.x) * GRID}
+              height={(band.max.y - band.min.y) * GRID}
+              fill="rgba(37, 99, 235, 0.08)"
+              stroke={COLORS.selected}
+              strokeWidth={1 / viewport.scale}
+              dash={[4 / viewport.scale, 4 / viewport.scale]}
+              listening={false}
+            />
+          )}
           {tool.kind === "wire" && (
             <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
           )}
