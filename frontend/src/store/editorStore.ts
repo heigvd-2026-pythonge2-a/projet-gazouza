@@ -163,8 +163,8 @@ interface EditorState {
   newDocument: () => void;
   /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
   openDocument: (doc: EditorDoc) => void;
-  /** Records that the current document was saved (Ctrl+S). */
-  markSaved: () => void;
+  /** Records that `doc` was saved (Ctrl+S); edits made while it was being written stay unsaved. */
+  markSaved: (doc: EditorDoc) => void;
 }
 
 /** Settings of the current animation. */
@@ -369,7 +369,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   openDocument: (doc) => set(freshDocument(doc)),
 
-  markSaved: () => set((s) => ({ savedDoc: s.doc })),
+  markSaved: (doc) => set({ savedDoc: doc }),
 
   selectWirePart: (part) =>
     set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),
