@@ -102,18 +102,29 @@ export function onSegment(p: GridPoint, a: GridPoint, b: GridPoint): boolean {
   );
 }
 
-/** Removes repeated points and bends lying on the straight line between their neighbours. */
+/**
+ * Removes repeated points and bends on the straight line through their neighbours: aligned bends,
+ * and U-turns where the wire goes back along itself (a dead end that connects nothing).
+ */
 export function simplifyPath(path: readonly GridPoint[]): GridPoint[] {
   const out: GridPoint[] = [];
   for (const p of path) {
-    const last = out[out.length - 1];
+    let last = out[out.length - 1];
     if (last && samePoint(last, p)) continue;
-    const prev = out[out.length - 2];
-    if (prev && last && onSegment(last, prev, p)) out.pop();
+    let prev = out[out.length - 2];
+    while (prev && last && collinear(prev, last, p)) {
+      out.pop();
+      last = prev;
+      prev = out[out.length - 2];
+    }
+    if (last && samePoint(last, p)) continue;
     out.push({ ...p });
   }
   return out;
 }
+
+const collinear = (a: GridPoint, b: GridPoint, c: GridPoint): boolean =>
+  (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) === 0;
 
 /** Grid position of a wire end. */
 export function endPosition(doc: EditorDoc, end: WireEnd): GridPoint {
@@ -324,6 +335,174 @@ export function realignWires(before: EditorDoc, after: EditorDoc): EditorDoc {
     return { ...w, points: realignedBends(w.points, a0, b0, a1, b1) };
   });
   return changed ? { ...after, wires } : after;
+}
+
+// --- Editing part of a wire ---------------------------------------------------------------------
+
+/**
+ * A bend or a straight segment of a wire, as indexes in its simplified path (`partPath`): bend
+ * `index` is the point `path[index]` (never an end), segment `index` goes from `path[index]` to
+ * `path[index + 1]`.
+ */
+export interface WirePart {
+  wire: string;
+  kind: "bend" | "segment";
+  index: number;
+}
+
+/** Distance (grid units) under which a press on a wire picks a bend rather than a segment. */
+export const BEND_PICK_RADIUS = 0.4;
+
+/** Path of a wire without repeated or aligned points: the one wire parts index into. */
+export function partPath(doc: EditorDoc, w: EditorWire): GridPoint[] {
+  return simplifyPath(wirePath(doc, w));
+}
+
+function distanceToSegment(p: GridPoint, a: GridPoint, b: GridPoint): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** The bend or segment of wire `wireId` closest to `p` (grid units, not rounded). */
+export function wirePartAt(doc: EditorDoc, wireId: string, p: GridPoint): WirePart | null {
+  const w = doc.wires.find((wire) => wire.id === wireId);
+  if (!w) return null;
+  const path = partPath(doc, w);
+  for (let i = 1; i + 1 < path.length; i++) {
+    const bend = path[i] as GridPoint;
+    if (Math.hypot(p.x - bend.x, p.y - bend.y) <= BEND_PICK_RADIUS) {
+      return { wire: wireId, kind: "bend", index: i };
+    }
+  }
+  let best: WirePart | null = null;
+  let bestDistance = Infinity;
+  for (let i = 0; i + 1 < path.length; i++) {
+    const d = distanceToSegment(p, path[i] as GridPoint, path[i + 1] as GridPoint);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = { wire: wireId, kind: "segment", index: i };
+    }
+  }
+  return best;
+}
+
+/** Points of a wire part (one for a bend, two for a segment), or null if it no longer exists. */
+export function wirePartPoints(doc: EditorDoc, part: WirePart): GridPoint[] | null {
+  const w = doc.wires.find((wire) => wire.id === part.wire);
+  if (!w) return null;
+  const path = partPath(doc, w);
+  const last = path.length - 1;
+  if (part.kind === "bend") {
+    const p = path[part.index];
+    return p && part.index > 0 && part.index < last ? [p] : null;
+  }
+  const a = path[part.index];
+  const b = path[part.index + 1];
+  return a && b ? [a, b] : null;
+}
+
+function withPath(doc: EditorDoc, wireId: string, path: readonly GridPoint[]): EditorDoc {
+  const points = simplifyPath(squarePath(path)).slice(1, -1);
+  const w = doc.wires.find((wire) => wire.id === wireId);
+  const same =
+    w?.points.length === points.length && w.points.every((p, i) => samePoint(p, points[i] ?? p));
+  if (same) return doc;
+  return {
+    ...doc,
+    wires: doc.wires.map((w) => (w.id === wireId ? { ...w, points } : w)),
+  };
+}
+
+/**
+ * Moves a wire part so it goes through `target` (grid units), keeping the wire orthogonal and its
+ * ends where they are. A bend moves to `target` and its neighbouring bends follow; a segment only
+ * moves across its direction (a horizontal one up or down). Where the neighbour is a wire end,
+ * which cannot move, a corner is added. Useless bends are removed afterwards.
+ */
+export function moveWirePart(doc: EditorDoc, part: WirePart, target: GridPoint): EditorDoc {
+  const w = doc.wires.find((wire) => wire.id === part.wire);
+  if (!w || !wirePartPoints(doc, part)) return doc;
+  const path = partPath(doc, w).map((p) => ({ ...p }));
+  const last = path.length - 1;
+  const isEnd = (i: number) => i === 0 || i === last;
+
+  if (part.kind === "bend") {
+    const i = part.index;
+    const old = path[i] as GridPoint;
+    for (const j of [i - 1, i + 1]) {
+      const n = path[j] as GridPoint;
+      if (isEnd(j)) continue;
+      if (n.y === old.y) n.y = target.y;
+      else n.x = target.x;
+    }
+    // A wire end cannot follow: add a corner between it and the bend, turning so the wire
+    // crosses the bend at a right angle instead of folding back on itself.
+    const prev = path[i - 1] as GridPoint;
+    const next = path[i + 1] as GridPoint;
+    let before = [prev];
+    if (isDiagonal(prev, target)) {
+      // Leaving horizontally: arrive vertically, and the other way round.
+      const nextHorizontal = next.y === target.y && next.x !== target.x;
+      before = [prev, nextHorizontal ? { x: target.x, y: prev.y } : { x: prev.x, y: target.y }];
+    }
+    let after = [next];
+    if (isDiagonal(target, next)) {
+      const arrival = before[before.length - 1] as GridPoint;
+      const arrivesHorizontal = arrival.y === target.y;
+      after = [arrivesHorizontal ? { x: target.x, y: next.y } : { x: next.x, y: target.y }, next];
+    }
+    return withPath(doc, w.id, [
+      ...path.slice(0, i - 1),
+      ...before,
+      { ...target },
+      ...after,
+      ...path.slice(i + 2),
+    ]);
+  }
+
+  const a = path[part.index] as GridPoint;
+  const b = path[part.index + 1] as GridPoint;
+  const horizontal = a.y === b.y;
+  const moved = (p: GridPoint): GridPoint =>
+    horizontal ? { x: p.x, y: target.y } : { x: target.x, y: p.y };
+  // A segment end that is a wire end stays and gets a new bend next to it instead.
+  const before = path.slice(0, part.index);
+  const after = path.slice(part.index + 2);
+  const start = isEnd(part.index) ? [a, moved(a)] : [moved(a)];
+  const end = isEnd(part.index + 1) ? [moved(b), b] : [moved(b)];
+  return withPath(doc, w.id, [...before, ...start, ...end, ...after]);
+}
+
+/**
+ * Removes a bend. To keep the wire orthogonal, a neighbouring bend is pulled into line with the
+ * point on the other side (the next bend if there is one, else the previous one). A bend between
+ * the two ends of the wire cannot go: `doc` is returned unchanged.
+ */
+export function deleteBend(doc: EditorDoc, part: WirePart): EditorDoc {
+  const w = doc.wires.find((wire) => wire.id === part.wire);
+  if (!w || part.kind !== "bend" || !wirePartPoints(doc, part)) return doc;
+  const path = partPath(doc, w).map((p) => ({ ...p }));
+  const i = part.index;
+  const last = path.length - 1;
+  const bend = path[i] as GridPoint;
+  const prev = path[i - 1] as GridPoint;
+  const next = path[i + 1] as GridPoint;
+  if (i + 1 < last) {
+    // bend -> next and next -> after turn at a right angle: next slides along the latter.
+    if (next.x === bend.x) next.x = prev.x;
+    else next.y = prev.y;
+  } else if (i - 1 > 0) {
+    if (prev.x === bend.x) prev.x = next.x;
+    else prev.y = next.y;
+  } else {
+    return doc;
+  }
+  const without = path.filter((_, j) => j !== i);
+  if (without.some((p, j) => j > 0 && isDiagonal(without[j - 1] as GridPoint, p))) return doc;
+  return withPath(doc, w.id, without);
 }
 
 const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });

@@ -6,12 +6,16 @@ import { Layer, Rect, Stage } from "react-konva";
 import {
   itemsInRect,
   moveItems,
-  rectFrom,
+  moveWirePart,
   pinPosition,
+  rectFrom,
   useEditorStore,
+  wirePartAt,
+  wirePartPoints,
   type GridPoint,
   type GridRect,
   type PlacedComponent,
+  type WirePart,
 } from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
@@ -156,11 +160,14 @@ export function SchematicCanvas() {
   const rightPressed = useRef<string | null>(null);
   /** Items being dragged and how far (grid units): shown moved before the store changes. */
   const [drag, setDrag] = useState<{ ids: ReadonlySet<string>; delta: GridPoint } | null>(null);
+  /** Where the selected wire part is being dragged (grid point), before the store changes. */
+  const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
   const endPress = useRef<(() => void) | null>(null);
 
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
+  const wirePart = useEditorStore((s) => s.wirePart);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
   const select = useEditorStore((s) => s.select);
@@ -174,7 +181,11 @@ export function SchematicCanvas() {
   useKeyboardShortcuts();
 
   // While dragging, show the dragged items (and the wires they pull) at their new place.
-  const doc = drag ? moveItems(storeDoc, drag.ids, drag.delta) : storeDoc;
+  const doc = drag
+    ? moveItems(storeDoc, drag.ids, drag.delta)
+    : partTarget && wirePart
+      ? moveWirePart(storeDoc, wirePart, partTarget)
+      : storeDoc;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
@@ -354,6 +365,74 @@ export function SchematicCanvas() {
     endPress.current = stop;
   };
 
+  /**
+   * Left press on a wire with the select tool: selects the bend or segment under the mouse, and
+   * dragging moves it (the wire stays orthogonal). Shift + click adds the whole wire instead.
+   */
+  const startWirePartPress = (wireId: string, e: KonvaEventObject<MouseEvent>) => {
+    if (e.evt.shiftKey) {
+      toggleSelected(wireId);
+      return;
+    }
+    const s = useEditorStore.getState();
+    const p = pointerAt(e.evt);
+    const part = p ? wirePartAt(s.doc, wireId, p) : null;
+    if (!p || !part) return;
+    s.selectWirePart(part);
+    endPress.current?.();
+    const start = { x: Math.round(p.x), y: Math.round(p.y) };
+    let target: GridPoint | null = null;
+
+    const onMove = (ev: MouseEvent) => {
+      const q = pointerAt(ev);
+      if (!q) return;
+      const g = { x: Math.round(q.x), y: Math.round(q.y) };
+      if (!target && g.x === start.x && g.y === start.y) return;
+      if (target && g.x === target.x && g.y === target.y) return;
+      target = g;
+      setPartTarget(g);
+    };
+    const onUp = (ev: MouseEvent) => {
+      if (ev.button !== 0) return;
+      stop();
+      if (target) dropWirePart(part, target);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape" || !target) return;
+      // Drops the move only; the global Escape would also clear the selection.
+      ev.stopPropagation();
+      ev.preventDefault();
+      stop();
+    };
+    const stop = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("keydown", onKeyDown, true);
+      endPress.current = null;
+      setPartTarget(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("keydown", onKeyDown, true);
+    endPress.current = stop;
+  };
+
+  /** Ends a wire part drag: moves it, and keeps it selected where it landed. */
+  const dropWirePart = (part: WirePart, target: GridPoint) => {
+    const s = useEditorStore.getState();
+    const before = wirePartPoints(s.doc, part);
+    if (!before) return;
+    // A point that is on the part once moved: the bend itself, or the middle of the segment.
+    let on = target;
+    const [a, b] = before;
+    if (part.kind === "segment" && a && b) {
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      on = a.y === b.y ? { x: mid.x, y: target.y } : { x: target.x, y: mid.y };
+    }
+    const landing = wirePartAt(moveWirePart(s.doc, part, target), part.wire, on);
+    s.moveWirePart(target, landing?.kind === part.kind ? landing : null);
+  };
+
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 1) {
       e.evt.preventDefault(); // no auto-scroll
@@ -456,7 +535,10 @@ export function SchematicCanvas() {
           <Wires
             doc={doc}
             selection={selection}
+            part={tool.kind === "select" ? wirePart : null}
             onSelect={tool.kind === "select" ? selectItem : undefined}
+            onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
+            onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
           />
           {doc.components.map((c) => (
             <ComponentSymbol

@@ -7,11 +7,13 @@ import {
   addComponent,
   addWire,
   anchorAt,
+  deleteBend,
   deleteItems,
   emptyDoc,
   mirrorComponents,
   moveComponent,
   moveItems,
+  moveWirePart,
   renameComponent,
   rotateComponents,
   rotateCw,
@@ -20,6 +22,7 @@ import {
   type EditorDoc,
   type GridPoint,
   type Rotation,
+  type WirePart,
 } from "./document";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 
@@ -61,6 +64,8 @@ export function routeThrough(clicks: readonly GridPoint[]): GridPoint[] {
 interface EditorState {
   doc: EditorDoc;
   selection: string[];
+  /** Bend or segment of a wire selected on its own (then `selection` is empty). */
+  wirePart: WirePart | null;
   tool: Tool;
   draft: WireDraft | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
@@ -100,6 +105,13 @@ interface EditorState {
   mirror: () => void;
   deleteSelection: () => void;
   select: (ids: string[]) => void;
+  /** Selects one bend or segment of a wire (clears the other selection). */
+  selectWirePart: (part: WirePart | null) => void;
+  /**
+   * Moves the selected wire part through `target` (see `moveWirePart`) and keeps it selected
+   * where it lands (`landing`, a point on the part after the move).
+   */
+  moveWirePart: (target: GridPoint, landing: WirePart | null) => void;
   toggleSelected: (id: string) => void;
   /**
    * Escape: removes the last bend of the wire being drawn (see `removeLastBend`), else leaves the
@@ -134,16 +146,18 @@ function existing(doc: EditorDoc, selection: string[]): string[] {
 export const useEditorStore = create<EditorState>()((set, get) => ({
   doc: emptyDoc(),
   selection: [],
+  wirePart: null,
   tool: { kind: "select" },
   draft: null,
   history: emptyHistory(),
 
-  setTool: (tool) => set({ tool, draft: null }),
+  setTool: (tool) => set({ tool, draft: null, wirePart: null }),
 
   startPlacing: (type) =>
     set({
       tool: { kind: "place", type, rotation: 0, mirror: false },
       selection: [],
+      wirePart: null,
       draft: null,
     }),
 
@@ -161,6 +175,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return {
         ...change(s, added.doc),
         selection: [added.id],
+        wirePart: null,
         tool: { kind: "select" },
         draft: null,
       };
@@ -186,12 +201,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setParam: (id, param, value) =>
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
 
-  startWiring: () => set({ tool: { kind: "wire" }, selection: [], draft: null }),
+  startWiring: () => set({ tool: { kind: "wire" }, selection: [], wirePart: null, draft: null }),
 
   startWireFrom: (position) =>
     set({
       tool: { kind: "wire" },
       selection: [],
+      wirePart: null,
       draft: { points: [{ ...position }], returnToSelect: true },
     }),
 
@@ -247,18 +263,35 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     ),
 
   deleteSelection: () =>
-    set((s) =>
-      s.selection.length > 0
+    set((s) => {
+      const part = s.wirePart;
+      // A bend goes only if the wire stays orthogonal; a segment takes its whole wire along.
+      if (part?.kind === "bend") {
+        const doc = deleteBend(s.doc, part);
+        return doc === s.doc ? {} : { ...change(s, doc), wirePart: null };
+      }
+      if (part) return { ...change(s, deleteItems(s.doc, new Set([part.wire]))), wirePart: null };
+      return s.selection.length > 0
         ? { ...change(s, deleteItems(s.doc, new Set(s.selection))), selection: [] }
-        : {},
-    ),
+        : {};
+    }),
 
   // Changing the selection ends a field edit: editing the same field again later is a new step.
-  select: (ids) => set((s) => ({ selection: ids, history: seal(s.history) })),
+  select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
+
+  selectWirePart: (part) =>
+    set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),
+
+  moveWirePart: (target, landing) =>
+    set((s) => {
+      if (!s.wirePart) return {};
+      return { ...change(s, moveWirePart(s.doc, s.wirePart, target)), wirePart: landing };
+    }),
 
   toggleSelected: (id) =>
     set((s) => ({
       history: seal(s.history),
+      wirePart: null,
       selection: s.selection.includes(id)
         ? s.selection.filter((x) => x !== id)
         : [...s.selection, id],
@@ -268,7 +301,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const s = get();
     if (s.draft) s.removeLastBend();
     else if (s.tool.kind !== "select") set({ tool: { kind: "select" } });
-    else set({ selection: [] });
+    else set({ selection: [], wirePart: null });
   },
 
   undo: () =>
@@ -279,6 +312,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         doc: step.state,
         history: step.history,
         selection: existing(step.state, s.selection),
+        wirePart: null,
         draft: null,
       };
     }),
@@ -291,6 +325,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         doc: step.state,
         history: step.history,
         selection: existing(step.state, s.selection),
+        wirePart: null,
         draft: null,
       };
     }),
