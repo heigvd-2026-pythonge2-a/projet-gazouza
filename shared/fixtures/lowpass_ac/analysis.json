@@ -1,0 +1,7 @@
+{
+  "kind": "ac",
+  "input_source_id": "c1",
+  "start_frequency": 10.0,
+  "stop_frequency": 100000.0,
+  "points_per_decade": 20
+}

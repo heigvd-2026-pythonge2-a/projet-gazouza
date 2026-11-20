@@ -1,0 +1,171 @@
+{
+  "version": 2,
+  "title": "Diviseur chargé",
+  "components": [
+    {
+      "id": "c1",
+      "type": "voltage_source",
+      "name": "V1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "waveform": "dc",
+        "dc": "10"
+      }
+    },
+    {
+      "id": "c2",
+      "type": "resistor",
+      "name": "R1",
+      "position": {
+        "x": 4,
+        "y": -2
+      },
+      "rotation": 90,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c3",
+      "type": "resistor",
+      "name": "R2",
+      "position": {
+        "x": 8,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c4",
+      "type": "resistor",
+      "name": "R3",
+      "position": {
+        "x": 12,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c5",
+      "type": "ground",
+      "position": {
+        "x": 6,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    }
+  ],
+  "junctions": [
+    {
+      "id": "j1",
+      "position": {
+        "x": 8,
+        "y": -2
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c2",
+        "pin": "1"
+      },
+      "points": [
+        {
+          "x": 0,
+          "y": -2
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "from": {
+        "comp": "c2",
+        "pin": "2"
+      },
+      "to": {
+        "junction": "j1"
+      }
+    },
+    {
+      "id": "w3",
+      "from": {
+        "junction": "j1"
+      },
+      "to": {
+        "comp": "c3",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w4",
+      "from": {
+        "junction": "j1"
+      },
+      "to": {
+        "comp": "c4",
+        "pin": "1"
+      },
+      "points": [
+        {
+          "x": 12,
+          "y": -2
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "from": {
+        "comp": "c1",
+        "pin": "-"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w6",
+      "from": {
+        "comp": "c3",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w7",
+      "from": {
+        "comp": "c4",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      }
+    }
+  ]
+}

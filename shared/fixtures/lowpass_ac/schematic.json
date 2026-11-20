@@ -1,0 +1,178 @@
+{
+  "version": 2,
+  "title": "Filtre passe-bas RC",
+  "components": [
+    {
+      "id": "c1",
+      "type": "voltage_source",
+      "name": "V1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "waveform": "dc",
+        "dc": "0"
+      }
+    },
+    {
+      "id": "c2",
+      "type": "resistor",
+      "name": "R1",
+      "position": {
+        "x": 4,
+        "y": -2
+      },
+      "rotation": 90,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c3",
+      "type": "capacitor",
+      "name": "C1",
+      "position": {
+        "x": 8,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "capacitance": "159.15n"
+      }
+    },
+    {
+      "id": "c4",
+      "type": "ground",
+      "position": {
+        "x": 0,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    },
+    {
+      "id": "c5",
+      "type": "ground",
+      "position": {
+        "x": 8,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    },
+    {
+      "id": "c6",
+      "type": "label",
+      "position": {
+        "x": 0,
+        "y": -3
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "net": "in"
+      }
+    },
+    {
+      "id": "c7",
+      "type": "label",
+      "position": {
+        "x": 8,
+        "y": -3
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "net": "out"
+      }
+    }
+  ],
+  "junctions": [],
+  "wires": [
+    {
+      "id": "w1",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c2",
+        "pin": "1"
+      },
+      "points": [
+        {
+          "x": 0,
+          "y": -2
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "from": {
+        "comp": "c2",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "points": [
+        {
+          "x": 8,
+          "y": -2
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "from": {
+        "comp": "c1",
+        "pin": "-"
+      },
+      "to": {
+        "comp": "c4",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w4",
+      "from": {
+        "comp": "c3",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w5",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c6",
+        "pin": "1"
+      }
+    },
+    {
+      "id": "w6",
+      "from": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "to": {
+        "comp": "c7",
+        "pin": "1"
+      }
+    }
+  ]
+}

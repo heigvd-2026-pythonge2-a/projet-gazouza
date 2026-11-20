@@ -32,7 +32,7 @@ export interface paths {
     put?: never;
     /**
      * Generate Netlist
-     * @description Schematic -> SPICE netlist. Owner: Damien.
+     * @description Schematic + analysis -> SPICE netlist (with its analysis line). Owner: Damien.
      */
     post: operations["generate_netlist_api_netlist_post"];
     delete?: never;
@@ -107,7 +107,7 @@ export interface components {
     };
     /**
      * Component
-     * @description A placed component instance.
+     * @description A placed component instance (including grounds and labels).
      */
     Component: {
       /**
@@ -122,28 +122,35 @@ export interface components {
       type: string;
       /**
        * Name
-       * @description Reference shown to the user (e.g. 'R1').
+       * @description SPICE name shown to the user (e.g. 'R1'). Absent for 'ground' and 'label'.
        */
-      name: string;
+      name?: string | null;
       position: components["schemas"]["Point"];
       /**
        * Rotation
+       * @description Clockwise, in degrees.
        * @default 0
        * @enum {integer}
        */
       rotation: 0 | 90 | 180 | 270;
       /**
        * Mirror
+       * @description Horizontal mirror (x -> -x), applied before the rotation.
        * @default false
        */
       mirror: boolean;
       /**
        * Params
-       * @description Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'}).
+       * @description Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'}). For a label: {'net': 'out'}.
        */
       params?: {
         [key: string]: string;
       };
+    };
+    /** ComponentTarget */
+    ComponentTarget: {
+      /** Comp */
+      comp: string;
     };
     /** DcAnalysis */
     DcAnalysis: {
@@ -166,27 +173,112 @@ export interface components {
     };
     /**
      * Diagnostic
-     * @description An error or warning, optionally pointing to the faulty element so the UI can
-     *     highlight it.
+     * @description An error or a warning. Whether it is one or the other depends on the list it is in.
      */
     Diagnostic: {
-      /** Message */
+      /**
+       * Code
+       * @description Stable code, checked by the tests.
+       * @enum {string}
+       */
+      code:
+        | "NO_GROUND"
+        | "PIN_NOT_CONNECTED"
+        | "MISSING_NAME"
+        | "DUPLICATE_ID"
+        | "DUPLICATE_NAME"
+        | "BAD_PREFIX"
+        | "BAD_VALUE"
+        | "MISSING_PARAM"
+        | "UNKNOWN_TYPE"
+        | "UNKNOWN_ENDPOINT"
+        | "LABEL_CONFLICT"
+        | "LABEL_ON_GROUND"
+        | "BAD_LABEL_NAME"
+        | "AC_SOURCE_NOT_FOUND"
+        | "DC_SOURCE_NOT_FOUND"
+        | "WIRE_DANGLING"
+        | "JUNCTION_DANGLING"
+        | "MILLI_SUFFIX"
+        | "SINGULAR_MATRIX"
+        | "VOLTAGE_SOURCE_LOOP"
+        | "NO_CONVERGENCE"
+        | "SIMULATION_TIMEOUT"
+        | "SIMULATION_FAILED";
+      /**
+       * Message
+       * @description French message for the student. May change.
+       */
       message: string;
-      /** Component Id */
-      component_id?: string | null;
-      /** Wire Id */
-      wire_id?: string | null;
+      /**
+       * Targets
+       * @description Elements to highlight. May be empty.
+       */
+      targets?: (
+        | components["schemas"]["ComponentTarget"]
+        | components["schemas"]["PinTarget"]
+        | components["schemas"]["WireTarget"]
+        | components["schemas"]["JunctionTarget"]
+        | components["schemas"]["NetTarget"]
+      )[];
+    };
+    /**
+     * FreeEnd
+     * @description Wire end attached to nothing (dangling). Produces a WIRE_DANGLING warning.
+     */
+    FreeEnd: {
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
     };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
     };
+    /**
+     * Junction
+     * @description A point where wires meet outside a pin (a 'T').
+     */
+    Junction: {
+      /**
+       * Id
+       * @description Stable unique id (e.g. 'j1').
+       */
+      id: string;
+      position: components["schemas"]["Point"];
+    };
+    /**
+     * JunctionEnd
+     * @description Wire end attached to a junction.
+     */
+    JunctionEnd: {
+      /**
+       * Junction
+       * @description Junction id (e.g. 'j1').
+       */
+      junction: string;
+    };
+    /** JunctionTarget */
+    JunctionTarget: {
+      /** Junction */
+      junction: string;
+    };
+    /**
+     * NetTarget
+     * @description A SPICE node (e.g. 'n3'). The editor finds its wires through `NetlistResult.nets`.
+     */
+    NetTarget: {
+      /** Net */
+      net: string;
+    };
     /** NetlistResult */
     NetlistResult: {
       /**
        * Netlist
-       * @description SPICE netlist, directly runnable by ngspice if no errors.
+       * @description SPICE netlist, directly runnable by ngspice. Empty if there are errors.
+       * @default
        */
       netlist: string;
       /**
@@ -217,8 +309,31 @@ export interface components {
       kind: "op";
     };
     /**
+     * PinEnd
+     * @description Wire end attached to a component pin.
+     */
+    PinEnd: {
+      /**
+       * Comp
+       * @description Component id (e.g. 'c1').
+       */
+      comp: string;
+      /**
+       * Pin
+       * @description Pin name from the library (e.g. '+', '1').
+       */
+      pin: string;
+    };
+    /** PinTarget */
+    PinTarget: {
+      /** Comp */
+      comp: string;
+      /** Pin */
+      pin: string;
+    };
+    /**
      * Point
-     * @description Position on the grid, in grid units.
+     * @description Position on the grid, in grid units. The y axis points down.
      */
     Point: {
       /** X */
@@ -233,12 +348,19 @@ export interface components {
     Schematic: {
       /**
        * Version
-       * @default 1
+       * @default 2
        * @constant
        */
-      version: 1;
+      version: 2;
+      /**
+       * Title
+       * @description Used as the netlist header.
+       */
+      title?: string | null;
       /** Components */
       components?: components["schemas"]["Component"][];
+      /** Junctions */
+      junctions?: components["schemas"]["Junction"][];
       /** Wires */
       wires?: components["schemas"]["Wire"][];
     };
@@ -341,13 +463,31 @@ export interface components {
     };
     /**
      * Wire
-     * @description A wire drawn as a polyline. Its two ends may touch pins or other wires.
+     * @description A wire between two explicit ends.
      */
     Wire: {
       /** Id */
       id: string;
-      /** Points */
-      points: components["schemas"]["Point"][];
+      /** From */
+      from:
+        | components["schemas"]["PinEnd"]
+        | components["schemas"]["JunctionEnd"]
+        | components["schemas"]["FreeEnd"];
+      /** To */
+      to:
+        | components["schemas"]["PinEnd"]
+        | components["schemas"]["JunctionEnd"]
+        | components["schemas"]["FreeEnd"];
+      /**
+       * Points
+       * @description Intermediate bends only, for drawing. Ignored by the netlist.
+       */
+      points?: components["schemas"]["Point"][];
+    };
+    /** WireTarget */
+    WireTarget: {
+      /** Wire */
+      wire: string;
     };
   };
   responses: never;
@@ -389,7 +529,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["Schematic"];
+        "application/json": components["schemas"]["SimulationRequest"];
       };
     };
     responses: {

@@ -272,6 +272,7 @@ uv run pytest tests/test_values.py -v
 
 - [ ] `NO_GROUND` : pas de masse.
 - [ ] `PIN_NOT_CONNECTED` : broche reliée à rien (erreur, une par broche).
+- [ ] `DUPLICATE_ID` : deux éléments (composants, jonctions, fils) avec le même id.
 - [ ] `MISSING_NAME` : composant sans nom (sauf masses et étiquettes, qui n'en ont pas).
 - [ ] `DUPLICATE_NAME` : deux composants avec le même nom (cibles = **les deux** ; masses et
   étiquettes non concernées).

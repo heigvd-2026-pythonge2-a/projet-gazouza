@@ -226,14 +226,14 @@ et `"title": "Filtre passe-bas RC"`. L'analyse :
 
 ```json
 { "kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 100000,
-  "points_per_decade": 100 }
+  "points_per_decade": 20 }
 ```
 
 ### 2. Je renvoie
 
 ```json
 {
-  "netlist": "* Filtre passe-bas RC\nV1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 100 10 100k\n.end\n",
+  "netlist": "* Filtre passe-bas RC\nV1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 20 10 100k\n.end\n",
   "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
   "components": { "V1": "c1", "R1": "c2", "C1": "c3" },
   "errors": [],
@@ -246,7 +246,7 @@ et `"title": "Filtre passe-bas RC"`. L'analyse :
 V1 in 0 DC 0 AC 1
 R1 in out 1k
 C1 out 0 159.15n
-.ac dec 100 10 100k
+.ac dec 20 10 100k
 .end
 ```
 
