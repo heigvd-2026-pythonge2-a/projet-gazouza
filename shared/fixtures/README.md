@@ -30,7 +30,8 @@ Les mêmes circuits sont expliqués pas à pas dans
 
 ## À savoir
 
-- Les valeurs de `result.json` sont **calculées analytiquement**, pas encore issues de
-  ngspice. Antoine les remplacera par les vraies sorties dès que le moteur tourne.
+- Les fichiers `result.json` de `divider_op` et `rc_tran` contiennent les vraies sorties
+  produites par `ngspice-47` ; ceux de `lowpass_ac` et `loaded_divider_dc` restent
+  **calculés analytiquement** en attendant la prise en charge de `.ac` et `.dc`.
 - Les positions des composants et les coudes des fils sont indicatifs : ils dépendront des
   positions de broches définies dans la bibliothèque. La netlist ne s'en sert pas.
