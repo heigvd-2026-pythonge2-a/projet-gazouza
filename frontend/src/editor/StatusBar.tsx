@@ -5,11 +5,14 @@ const HINTS: Record<Tool["kind"], string> = {
   select:
     "Clic : sélectionner · Maj + clic : sélection multiple · Tirer depuis une broche : fil · " +
     "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
-    "Molette : zoom · Clic molette : déplacer la vue",
-  place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter de poser",
+    "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
+  place:
+    "Clic : poser · R : tourner · M : miroir · Échap ou clic droit : arrêter de poser · " +
+    "Clic droit maintenu : déplacer la vue",
   wire:
     "Clic : coude, ou fin du fil sur une broche ou un fil · Double-clic : finir dans le vide · " +
-    "Échap : enlever le dernier coude · Clic droit : abandonner le fil",
+    "Échap : enlever le dernier coude · Clic droit : abandonner le fil · " +
+    "Clic droit maintenu : déplacer la vue",
 };
 
 /** Bottom bar: shortcuts of the active tool, and what is selected. */
