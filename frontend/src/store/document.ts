@@ -705,6 +705,85 @@ export function addWire(
   return { doc: { ...to.doc, wires: [...to.doc.wires, wire] }, id };
 }
 
+// --- Copy and paste ------------------------------------------------------------------------------
+
+/** Part of a document copied with Ctrl+C, ready to be pasted (possibly several times). */
+export type Clip = EditorDoc;
+
+/**
+ * The selected components and junctions, plus the wires whose two ends are inside the copy: both
+ * attached to copied items, or free ends of a selected wire. Wires going outside are left out.
+ */
+export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
+  const components = doc.components.filter((c) => ids.has(c.id));
+  const junctions = doc.junctions.filter((j) => ids.has(j.id));
+  const wires = doc.wires.filter((w) => {
+    const inside = (end: WireEnd) =>
+      "comp" in end ? ids.has(end.comp) : "junction" in end ? ids.has(end.junction) : ids.has(w.id);
+    return inside(w.from) && inside(w.to);
+  });
+  return structuredClone({ components, wires, junctions });
+}
+
+/**
+ * Adds a copy of `clip`, moved by `offset`, with new ids and new SPICE names (R1 becomes R3 if R1
+ * and R2 exist), so the netlist never gets two components with the same name. Returns the new
+ * doc and the ids of the pasted items.
+ */
+export function pasteClip(
+  doc: EditorDoc,
+  clip: Clip,
+  offset: GridPoint,
+): { doc: EditorDoc; ids: string[] } {
+  const taken = allIds(doc);
+  const names = doc.components.flatMap((c) => (c.name ? [c.name] : []));
+  const newId = new Map<string, string>();
+  const fresh = (oldId: string, prefix: string) => {
+    const id = nextIndexed(prefix, taken);
+    taken.push(id);
+    newId.set(oldId, id);
+    return id;
+  };
+
+  const components = clip.components.map((c): PlacedComponent => {
+    const copy: PlacedComponent = {
+      ...structuredClone(c),
+      id: fresh(c.id, "c"),
+      position: shift(c.position, offset),
+    };
+    const prefix = getDef(c.type).prefix;
+    if (prefix !== null) {
+      copy.name = nextIndexed(prefix, names);
+      names.push(copy.name);
+    }
+    return copy;
+  });
+  const junctions = clip.junctions.map((j) => ({
+    id: fresh(j.id, "j"),
+    position: shift(j.position, offset),
+  }));
+  const end = (e: WireEnd): WireEnd => {
+    if ("comp" in e) return { comp: newId.get(e.comp) ?? e.comp, pin: e.pin };
+    if ("junction" in e) return { junction: newId.get(e.junction) ?? e.junction };
+    return shift(e, offset);
+  };
+  const wires = clip.wires.map((w) => ({
+    id: fresh(w.id, "w"),
+    from: end(w.from),
+    to: end(w.to),
+    points: w.points.map((p) => shift(p, offset)),
+  }));
+
+  return {
+    doc: {
+      components: [...doc.components, ...components],
+      wires: [...doc.wires, ...wires],
+      junctions: [...doc.junctions, ...junctions],
+    },
+    ids: [...components, ...wires, ...junctions].map((item) => item.id),
+  };
+}
+
 /**
  * Deletes components, wires and junctions by id. Wire ends attached to a deleted component or
  * junction become free {x, y} ends at the same place, so no wire ever points to nothing.

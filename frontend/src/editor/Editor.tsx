@@ -61,6 +61,13 @@ function componentMenu(selectionSize: number): MenuItem[] {
     { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
     {
+      label: "Dupliquer",
+      shortcut: "Ctrl+D",
+      keys: ["d", "D"],
+      onSelect: () => s().duplicate(),
+    },
+    { label: "Copier", shortcut: "Ctrl+C", keys: ["c", "C"], onSelect: () => s().copy() },
+    {
       label: "Supprimer",
       shortcut: "Suppr",
       keys: ["Delete", "Backspace"],
@@ -99,10 +106,15 @@ function useKeyboardShortcuts() {
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
       const s = useEditorStore.getState();
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        // Undo / redo. In a text field the browser's own undo applies instead (returned above).
+        // In a text field the browser's own undo, copy... apply instead (returned above).
         const key = e.key.toLowerCase();
         if (key === "z" && !e.shiftKey) s.undo();
         else if (key === "y" || (key === "z" && e.shiftKey)) s.redo();
+        else if (key === "a") s.selectAll();
+        else if (key === "c") s.copy();
+        else if (key === "v") s.paste();
+        else if (key === "d")
+          s.duplicate(); // also keeps the browser from adding a bookmark
         else return;
         e.preventDefault();
         return;
