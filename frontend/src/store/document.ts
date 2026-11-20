@@ -8,7 +8,7 @@
 // Every operation returns a new document and never mutates its input, so undo/redo can later
 // be implemented by keeping snapshots.
 
-import { getDef } from "./library";
+import { getDef, symbolBounds } from "./library";
 
 export interface GridPoint {
   x: number;
@@ -166,6 +166,36 @@ export function anchorAt(doc: EditorDoc, p: GridPoint): Anchor | null {
     }
   }
   return null;
+}
+
+/** Axis-aligned rectangle in grid units (not necessarily on grid points). */
+export interface GridRect {
+  min: GridPoint;
+  max: GridPoint;
+}
+
+/** Rectangle with corners `a` and `b`, in any order. */
+export const rectFrom = (a: GridPoint, b: GridPoint): GridRect => ({
+  min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
+  max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
+});
+
+const inRect = (p: GridPoint, r: GridRect): boolean =>
+  r.min.x <= p.x && p.x <= r.max.x && r.min.y <= p.y && p.y <= r.max.y;
+
+/**
+ * Ids of what lies entirely inside `r`: components whose symbol box does, wires whose points all
+ * do, and junctions. Used by the selection rectangle.
+ */
+export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
+  const components = doc.components.filter((c) => {
+    const { min, max } = symbolBounds(getDef(c.type));
+    const corners = [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }];
+    return corners.every((p) => inRect(toWorld(p, c), r));
+  });
+  const wires = doc.wires.filter((w) => wirePath(doc, w).every((p) => inRect(p, r)));
+  const junctions = doc.junctions.filter((j) => inRect(j.position, r));
+  return [...components, ...wires, ...junctions].map((item) => item.id);
 }
 
 // --- Ids and names --------------------------------------------------------------------------
