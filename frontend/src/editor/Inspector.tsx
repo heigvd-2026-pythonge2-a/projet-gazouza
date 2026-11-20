@@ -9,6 +9,7 @@ import {
   type ParamOption,
   type PlacedComponent,
 } from "../store";
+import { INSPECTOR_ID } from "./inspectorFocus";
 import { COLORS, UI } from "./theme";
 
 const controlStyle: CSSProperties = {
@@ -157,6 +158,7 @@ export function Inspector() {
 
   return (
     <section
+      id={INSPECTOR_ID}
       aria-label="Propriétés"
       style={{
         padding: 10,

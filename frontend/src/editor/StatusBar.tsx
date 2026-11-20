@@ -3,7 +3,8 @@ import { UI } from "./theme";
 
 const HINTS: Record<Tool["kind"], string> = {
   select:
-    "Clic : sélectionner · Maj + clic : sélection multiple · Tirer depuis une broche : fil · " +
+    "Clic : sélectionner · Maj + clic : sélection multiple · Clic droit sur un composant : menu · " +
+    "Tirer depuis une broche : fil · " +
     "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
     "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
   place:
