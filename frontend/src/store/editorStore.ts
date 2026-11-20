@@ -3,6 +3,7 @@
 
 import { create } from "zustand";
 
+import type { SimulationResult } from "../api/client";
 import {
   addComponent,
   addWire,
@@ -80,6 +81,10 @@ interface EditorState {
   clipboard: Clip | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
   history: History<EditorDoc>;
+  /** Last simulation, with the document it was run on: stale once `doc` is another one. */
+  simulation: { result: SimulationResult; doc: EditorDoc } | null;
+  /** Current animation on the schematic (only shown while the simulation is up to date). */
+  animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
   savedDoc: EditorDoc;
 
@@ -150,6 +155,9 @@ interface EditorState {
    * field gets the focus: Escape can then undo exactly what was typed in it).
    */
   sealHistory: () => void;
+  /** Keeps the result of a simulation of the current document (null: forget it). */
+  setSimulation: (result: SimulationResult | null) => void;
+  setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
   /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
@@ -157,6 +165,24 @@ interface EditorState {
   /** Records that the current document was saved (Ctrl+S). */
   markSaved: () => void;
 }
+
+/** Settings of the current animation. */
+export interface CurrentAnimation {
+  on: boolean;
+  /** Dots move like electrons (against the conventional current). */
+  electrons: boolean;
+  /** Transient analysis: time runs (else it is paused). */
+  playing: boolean;
+  /** Transient analysis: playback speed, 1 = the whole simulation in `PLAYBACK_SECONDS`. */
+  speed: number;
+}
+
+/** Real duration of the playback of a transient simulation at speed 1, in seconds. */
+export const PLAYBACK_SECONDS = 5;
+
+/** The last simulation if it was run on the document shown now, else null. */
+export const freshSimulation = (s: Pick<EditorState, "doc" | "simulation">) =>
+  s.simulation && s.simulation.doc === s.doc ? s.simulation.result : null;
 
 /** State of a document just created or opened: nothing selected, nothing to undo. */
 function freshDocument(doc: EditorDoc) {
@@ -168,6 +194,8 @@ function freshDocument(doc: EditorDoc) {
     wirePart: null,
     tool: { kind: "select" } as const,
     draft: null,
+    // A result of another document would show as stale: forget it.
+    simulation: null,
   };
 }
 
@@ -197,6 +225,7 @@ function existing(doc: EditorDoc, selection: string[]): string[] {
 export const useEditorStore = create<EditorState>()((set, get) => ({
   ...freshDocument(emptyDoc()),
   clipboard: null,
+  animation: { on: false, electrons: false, playing: true, speed: 1 },
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null }),
 
@@ -327,6 +356,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
 
   sealHistory: () => set((s) => ({ history: seal(s.history) })),
+
+  setSimulation: (result) =>
+    set((s) => ({
+      simulation: result ? { result, doc: s.doc } : null,
+      animation: { ...s.animation, on: false },
+    })),
+
+  setAnimation: (patch) => set((s) => ({ animation: { ...s.animation, ...patch } })),
 
   newDocument: () => set(freshDocument(emptyDoc())),
 

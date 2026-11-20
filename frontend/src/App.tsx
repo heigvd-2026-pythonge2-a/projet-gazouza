@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { getHealth } from "./api/client";
 import {
+  AnimateButton,
   EditorToolbar,
   Inspector,
   Palette,
@@ -187,14 +188,7 @@ export default function App() {
         >
           ▶ Simuler
         </button>
-        <button
-          type="button"
-          disabled
-          title="Animer le courant sur le schéma après une simulation — Bientôt disponible"
-          style={{ ...TOOL_BUTTON, opacity: 0.5, cursor: "not-allowed" }}
-        >
-          Animer le courant
-        </button>
+        <AnimateButton style={TOOL_BUTTON} />
         <button
           type="button"
           title={right ? "Placer les résultats sous le schéma" : "Placer les résultats à droite"}
