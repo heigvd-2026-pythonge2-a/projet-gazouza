@@ -3,7 +3,13 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { Layer, Stage } from "react-konva";
 
-import { pinPosition, useEditorStore, type GridPoint, type PlacedComponent } from "../store";
+import {
+  moveItems,
+  pinPosition,
+  useEditorStore,
+  type GridPoint,
+  type PlacedComponent,
+} from "../store";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
@@ -15,6 +21,14 @@ import { WireDraft, Wires } from "./Wires";
 const ZOOM_STEP = 1.1;
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
+
+/** Grid step of each arrow key, to move the selection. */
+const ARROWS: Record<string, GridPoint> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+};
 
 /** Middle or right button held on the canvas. */
 interface Press {
@@ -84,6 +98,14 @@ function useKeyboardShortcuts() {
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const arrow = ARROWS[e.key];
+      if (arrow) {
+        if (s.tool.kind !== "select" || s.selection.length === 0) return;
+        // Holding the key down repeats it: one undo step for the whole move.
+        s.moveSelection(arrow, true);
+        e.preventDefault();
+        return;
+      }
       switch (e.key) {
         case "r":
         case "R":
@@ -125,22 +147,35 @@ export function SchematicCanvas() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
+  /** Items being dragged and how far (grid units): shown moved before the store changes. */
+  const [drag, setDrag] = useState<{ ids: ReadonlySet<string>; delta: GridPoint } | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
   const endPress = useRef<(() => void) | null>(null);
 
-  const doc = useEditorStore((s) => s.doc);
+  const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
-  const moveComponent = useEditorStore((s) => s.moveComponent);
+  const moveSelection = useEditorStore((s) => s.moveSelection);
   const draft = useEditorStore((s) => s.draft);
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
   const dropComponent = useEditorStore((s) => s.dropComponent);
 
   useKeyboardShortcuts();
+
+  // While dragging, show the dragged items (and the wires they pull) at their new place.
+  const doc = drag ? moveItems(storeDoc, drag.ids, drag.delta) : storeDoc;
+
+  /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
+  const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
+    new Set(selection.includes(c.id) ? selection : [c.id]);
+  const deltaFrom = (c: PlacedComponent, position: GridPoint): GridPoint => ({
+    x: position.x - c.position.x,
+    y: position.y - c.position.y,
+  });
 
   // Start with the origin in the middle of the canvas, once its size is known.
   const centered = useRef(false);
@@ -279,6 +314,10 @@ export function SchematicCanvas() {
     if (tool.kind !== "select") setPointer(pointerGrid());
   };
 
+  /** `c` as it is in the store (the one drawn may be shifted by the drag in progress). */
+  const storeComponent = (c: PlacedComponent): PlacedComponent =>
+    storeDoc.components.find((x) => x.id === c.id) ?? c;
+
   const closeMenu = useCallback(() => setMenu(null), []);
 
   const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
@@ -362,7 +401,19 @@ export function SchematicCanvas() {
               onContextPress={() => {
                 rightPressed.current = c.id;
               }}
-              onMove={(position) => moveComponent(c.id, position)}
+              onDrag={(position) => {
+                const delta = deltaFrom(storeComponent(c), position);
+                setDrag((d) =>
+                  d && d.delta.x === delta.x && d.delta.y === delta.y
+                    ? d
+                    : { ids: d?.ids ?? dragIds(c), delta },
+                );
+              }}
+              onMove={(position) => {
+                setDrag(null);
+                if (!selection.includes(c.id)) select([c.id]);
+                moveSelection(deltaFrom(storeComponent(c), position));
+              }}
               onPinMouseDown={
                 tool.kind === "select"
                   ? (pin) => {

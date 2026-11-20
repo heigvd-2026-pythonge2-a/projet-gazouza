@@ -11,6 +11,7 @@ import {
   emptyDoc,
   mirrorComponents,
   moveComponent,
+  moveItems,
   renameComponent,
   rotateComponents,
   rotateCw,
@@ -73,6 +74,11 @@ interface EditorState {
   /** Adds a component dropped from the palette, selects it and goes back to the select tool. */
   dropComponent: (type: string, position: GridPoint) => void;
   moveComponent: (id: string, position: GridPoint) => void;
+  /**
+   * Moves the selected items by `delta` (grid units). `merge` makes consecutive moves one undo
+   * step (arrow keys held down).
+   */
+  moveSelection: (delta: GridPoint, merge?: boolean) => void;
   renameComponent: (id: string, name: string) => void;
   setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
@@ -165,6 +171,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const c = s.doc.components.find((x) => x.id === id);
       if (!c || samePoint(c.position, position)) return {};
       return change(s, moveComponent(s.doc, id, position));
+    }),
+
+  moveSelection: (delta, merge = false) =>
+    set((s) => {
+      const doc = moveItems(s.doc, new Set(s.selection), delta);
+      return change(s, doc, merge ? `move:${s.selection.join(",")}` : null);
     }),
 
   // Typing in a field changes the document on every key: one undo step per field edited.
