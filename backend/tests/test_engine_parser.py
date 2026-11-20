@@ -7,6 +7,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from app.engines.parser import (
+    MAX_RESULT_POINTS,
     RawParseError,
     map_plot_to_simulation_result,
     parse_ngspice_output,
@@ -561,3 +562,62 @@ Values:
     assert result.errors == []
     assert result.traces == []
     assert json.loads(result.model_dump_json())["analysis"] == "op"
+
+
+def test_parse_raw_ascii_enforces_max_points_immediately_after_header() -> None:
+    assert MAX_RESULT_POINTS == 200_000
+
+    # Exact boundary (3 points with max_points=3) succeeds.
+    plot = parse_raw_ascii(RC_TRAN_RAW, max_points=3)
+    assert plot.num_points == 3
+
+    # Exceeding max_points fails cleanly.
+    with pytest.raises(RawParseError, match="exceeding maximum") as exc_info:
+        parse_raw_ascii(RC_TRAN_RAW, max_points=2)
+    assert "3 > 2" in exc_info.value.user_message
+
+    # Crafted header with huge No. Points and no Values: section must fail immediately on
+    # No. Points (before looking for Values: or allocating point series).
+    crafted_header = (
+        "Title: * dos\n"
+        "Plotname: Transient Analysis\n"
+        "Flags: real\n"
+        "No. Variables: 2\n"
+        "No. Points: 999999999\n"
+    )
+    with pytest.raises(RawParseError, match="999999999"):
+        parse_raw_ascii(crafted_header, max_points=100)
+
+    warning = Diagnostic(code="MILLI_SUFFIX", message="Avertissement")
+    netlist = _rc_netlist().model_copy(update={"warnings": [warning]})
+    result = parse_ngspice_output(
+        RC_TRAN_RAW,
+        netlist,
+        TranAnalysis(stop_time=0.005),
+        max_points=2,
+    )
+    assert result.traces == []
+    assert result.axis is None
+    assert len(result.errors) == 1
+    assert result.errors[0].code == "SIMULATION_FAILED"
+    assert result.errors[0].targets == []
+    assert "3 > 2" in result.errors[0].message
+    assert result.warnings == [warning]
+
+
+@pytest.mark.parametrize("bad_max_points", [0, -1, -100, False, True])
+def test_parse_raw_ascii_and_output_reject_invalid_max_points(bad_max_points: int) -> None:
+    with pytest.raises(RawParseError, match="positive integer"):
+        parse_raw_ascii(DIVIDER_OP_RAW, max_points=bad_max_points)
+
+    result = parse_ngspice_output(
+        DIVIDER_OP_RAW,
+        _divider_netlist(),
+        OpAnalysis(),
+        max_points=bad_max_points,
+    )
+    assert result.traces == []
+    assert len(result.errors) == 1
+    assert result.errors[0].code == "SIMULATION_FAILED"
+    assert result.errors[0].targets == []
+    assert "positif" in result.errors[0].message.lower()
