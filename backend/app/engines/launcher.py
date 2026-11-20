@@ -1,4 +1,10 @@
-"""Desktop application launcher using FastAPI, Uvicorn, and pywebview."""
+"""Desktop application launcher using FastAPI, Uvicorn, and pywebview.
+
+In normal mode, starts a local FastAPI/Uvicorn server on 127.0.0.1 and opens the built
+frontend in pywebview. When ``--dev-url`` or ``PSICE_DEV_URL`` is set, opens that Vite dev
+server URL directly without starting a backend server (Vite proxies ``/api`` to port 8000,
+so ``uv run uvicorn app.main:app --reload`` must run alongside ``pnpm dev``).
+"""
 
 import argparse
 import logging
@@ -66,30 +72,37 @@ def validate_dev_url(raw_url: str) -> str:
     """Validate that a frontend dev server URL uses HTTP(S) on localhost only."""
     cleaned = raw_url.strip()
     if not cleaned:
-        raise ValueError("Development URL must not be empty.")
+        raise ValueError("L'URL de développement ne doit pas être vide.")
 
     parsed = urlparse(cleaned)
     if parsed.scheme not in {"http", "https"}:
-        raise ValueError(f"Development URL must use http or https, got {parsed.scheme!r}.")
+        raise ValueError(
+            f"L'URL de développement doit utiliser http ou https, reçu {parsed.scheme!r}."
+        )
     if parsed.username is not None or parsed.password is not None:
-        raise ValueError("Development URL must not include user credentials.")
+        raise ValueError("L'URL de développement ne doit pas contenir d'identifiants.")
 
     try:
         _ = parsed.port
     except ValueError as exc:
-        raise ValueError(f"Development URL has an invalid port: {cleaned!r}.") from exc
+        raise ValueError(
+            f"L'URL de développement contient un port invalide : {cleaned!r}."
+        ) from exc
 
     hostname = (parsed.hostname or "").lower()
     if hostname not in _LOCALHOST_URL_HOSTS:
         raise ValueError(
-            f"Development URL must target localhost ({', '.join(sorted(_LOCALHOST_URL_HOSTS))}), "
-            f"got {hostname!r}."
+            "L'URL de développement doit cibler localhost "
+            f"({', '.join(sorted(_LOCALHOST_URL_HOSTS))}), reçu {hostname!r}."
         )
     return cleaned
 
 
 def resolve_dev_url(dev_url: str | None = None) -> str | None:
-    """Resolve and validate the optional frontend dev server URL."""
+    """Resolve and validate the optional frontend dev server URL.
+
+    When set, the launcher opens this URL directly without starting a backend server.
+    """
     if dev_url is not None:
         return validate_dev_url(dev_url)
 
@@ -191,8 +204,12 @@ def build_fallback_html() -> str:
       </p>
       <p>
         Compilez le frontend avec <code>pnpm build</code> dans <code>frontend/</code>,
-        ou lancez le serveur de développement Vite avec
-        <code>--dev-url http://127.0.0.1:5173</code> (ou <code>PSICE_DEV_URL</code>).
+        ou utilisez le mode développement avec <code>--dev-url http://127.0.0.1:5173</code>
+        (ou <code>PSICE_DEV_URL</code>) : le lanceur ne démarre pas de serveur backend
+        dans ce mode et nécessite d'exécuter
+        <code>uv run uvicorn app.main:app --reload</code> (port 8000) dans
+        <code>backend/</code> en parallèle de <code>pnpm dev</code> dans
+        <code>frontend/</code>.
       </p>
       <p><a href="/api/health">Vérifier l'état du backend (/api/health)</a></p>
     </main>
@@ -343,10 +360,14 @@ class RunningServer:
         while not self.server.started:
             if self._error is not None:
                 self.stop()
-                raise RuntimeError("Local backend server failed to start.") from self._error
+                raise RuntimeError(
+                    f"Local backend server failed to start on {self.host}:{self.port}."
+                ) from self._error
             if not self._thread.is_alive():
                 self.stop()
-                raise RuntimeError("Local backend server exited before becoming ready.")
+                raise RuntimeError(
+                    f"Local backend server on {self.host}:{self.port} exited before becoming ready."
+                )
             if time.monotonic() >= deadline:
                 self.stop()
                 raise TimeoutError("Timed out waiting for local backend server to start.")
@@ -385,8 +406,15 @@ def _get_winforms_do_events(window: Any) -> Callable[[], None] | None:
     return winforms.Application.DoEvents
 
 
-def _has_unsaved_changes(window: Any, *, timeout: float = JS_EVAL_TIMEOUT_S) -> bool:
-    """Safely query window.psiceHasUnsavedChanges?.(), failing open on error or timeout."""
+def _has_unsaved_changes(window: Any, *, timeout: float | None = None) -> bool:
+    """Query window.psiceHasUnsavedChanges?.(), failing closed on error or timeout.
+
+    Returns False when ``window.events._pywebviewready.is_set()`` explicitly reports
+    False (the page has not finished loading yet). Once the page is ready, JS
+    evaluation exceptions or timeouts return True so the user is asked to confirm
+    before closing.
+    """
+    resolved_timeout = JS_EVAL_TIMEOUT_S if timeout is None else timeout
     events = getattr(window, "events", None)
     ready_event = getattr(events, "_pywebviewready", None)
     is_set = getattr(ready_event, "is_set", None)
@@ -394,15 +422,18 @@ def _has_unsaved_changes(window: Any, *, timeout: float = JS_EVAL_TIMEOUT_S) -> 
         return False
 
     done = threading.Event()
-    result_box: list[bool] = [False]
+    result_box: list[bool] = [True]
 
     def _evaluate() -> None:
         try:
             value = window.evaluate_js(UNSAVED_CHANGES_JS)
             result_box[0] = bool(value)
         except Exception:
-            logger.debug("Unsaved changes JS query failed; allowing close.", exc_info=True)
-            result_box[0] = False
+            logger.warning(
+                "Failed to query unsaved changes; prompting user before closing.",
+                exc_info=True,
+            )
+            result_box[0] = True
         finally:
             done.set()
 
@@ -411,24 +442,21 @@ def _has_unsaved_changes(window: Any, *, timeout: float = JS_EVAL_TIMEOUT_S) -> 
 
     do_events = _get_winforms_do_events(window)
     if do_events is None:
-        if not done.wait(timeout):
-            logger.warning("Timed out querying unsaved changes; allowing close.")
-            return False
-        return result_box[0]
-
-    deadline = time.monotonic() + timeout
-    while not done.is_set() and time.monotonic() < deadline:
-        do_events()
-        done.wait(0.01)
+        done.wait(resolved_timeout)
+    else:
+        deadline = time.monotonic() + resolved_timeout
+        while not done.is_set() and time.monotonic() < deadline:
+            do_events()
+            done.wait(0.01)
 
     if not done.is_set():
-        logger.warning("Timed out querying unsaved changes; allowing close.")
-        return False
+        logger.warning("Timed out querying unsaved changes; prompting user before closing.")
+        return True
     return result_box[0]
 
 
 def on_window_closing(window: Any) -> bool:
-    """Confirm before closing the window when unsaved schematic changes exist."""
+    """Confirm before closing the window when unsaved changes exist or cannot be verified."""
     window_key = id(window)
     with _closing_lock:
         if window_key in _closing_windows:
@@ -454,6 +482,22 @@ def on_window_closing(window: Any) -> bool:
             _closing_windows.discard(window_key)
 
 
+def _open_webview_window(target_url: str, *, debug: bool) -> None:
+    """Create the pywebview window, attach the close guard, and run the GUI loop."""
+    window = webview.create_window(
+        WINDOW_TITLE,
+        target_url,
+        width=DEFAULT_WINDOW_WIDTH,
+        height=DEFAULT_WINDOW_HEIGHT,
+        min_size=DEFAULT_MIN_SIZE,
+        confirm_close=False,
+    )
+    if window is None:
+        raise RuntimeError("Failed to create the Psice desktop window.")
+    window.events.closing += on_window_closing
+    webview.start(debug=debug)
+
+
 def launch(
     *,
     dev_url: str | None = None,
@@ -461,35 +505,48 @@ def launch(
     port: int | None = None,
     debug: bool = False,
 ) -> None:
-    """Start the local backend server and open the pywebview desktop window."""
-    resolved_dev_url = resolve_dev_url(dev_url)
-    app = create_launcher_app(frontend_dist=frontend_dist)
+    """Open the pywebview desktop window, starting a local backend unless dev_url is set.
 
+    When ``dev_url`` (or ``PSICE_DEV_URL``) is set, the launcher opens that URL directly
+    without starting ``RunningServer`` because Vite proxies ``/api`` to
+    ``http://127.0.0.1:8000``; run ``uv run uvicorn app.main:app --reload`` (port 8000)
+    alongside ``pnpm dev``. Combining ``port`` with ``dev_url`` or ``PSICE_DEV_URL`` raises
+    ``ValueError``.
+    """
+    resolved_dev_url = resolve_dev_url(dev_url)
+    if resolved_dev_url is not None:
+        if port is not None:
+            raise ValueError(
+                f"L'option --port ne peut pas être utilisée avec --dev-url ou {DEV_URL_ENV_VAR} : "
+                "aucun serveur backend n'est démarré dans ce mode "
+                "(lancez `uv run uvicorn app.main:app --reload` sur le port 8000)."
+            )
+        _open_webview_window(resolved_dev_url, debug=debug)
+        return
+
+    app = create_launcher_app(frontend_dist=frontend_dist)
     with RunningServer(app, host=LOCALHOST_HOST, port=port) as server:
-        target_url = resolved_dev_url or server.url
-        window = webview.create_window(
-            WINDOW_TITLE,
-            target_url,
-            width=DEFAULT_WINDOW_WIDTH,
-            height=DEFAULT_WINDOW_HEIGHT,
-            min_size=DEFAULT_MIN_SIZE,
-            confirm_close=False,
-        )
-        if window is None:
-            raise RuntimeError("Failed to create the Psice desktop window.")
-        window.events.closing += on_window_closing
-        webview.start(debug=debug)
+        _open_webview_window(server.url, debug=debug)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="psice",
         description="Launch the Psice desktop application.",
+        epilog=(
+            "Dev mode: run 'uv run uvicorn app.main:app --reload' (port 8000) in backend/ "
+            "alongside 'pnpm dev' in frontend/, then pass --dev-url http://127.0.0.1:5173."
+        ),
     )
     parser.add_argument(
         "--dev-url",
         default=None,
-        help=f"Localhost frontend dev server URL (overrides {DEV_URL_ENV_VAR}).",
+        help=(
+            f"Localhost frontend dev server URL (overrides {DEV_URL_ENV_VAR}). "
+            "Opens the window directly without starting the backend server; requires running "
+            "'uv run uvicorn app.main:app --reload' (port 8000) alongside 'pnpm dev'. "
+            "Cannot be combined with --port."
+        ),
     )
     parser.add_argument(
         "--frontend-dist",
@@ -501,7 +558,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--port",
         type=int,
         default=None,
-        help="Localhost port for the backend server (default: ephemeral free port).",
+        help=(
+            "Localhost port for the embedded backend server "
+            "(default: ephemeral free port; cannot be combined with --dev-url)."
+        ),
     )
     parser.add_argument(
         "--debug",
@@ -509,6 +569,61 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Enable pywebview developer tools and debug logging.",
     )
     return parser
+
+
+def _format_launch_error(exc: Exception, *, port: int | None = None) -> str:
+    """Translate a launcher exception into a clear French user-facing error message."""
+    raw = str(exc)
+    if isinstance(exc, ValueError):
+        if "Port must be" in raw:
+            return f"Numéro de port invalide ({port}) : le port doit être compris entre 0 et 65535."
+        return raw
+    if isinstance(exc, TimeoutError):
+        if port is not None:
+            return f"Délai d'attente dépassé lors du démarrage du serveur local sur le port {port}."
+        return "Délai d'attente dépassé lors du démarrage du serveur backend local."
+    if isinstance(exc, OSError):
+        if port is not None:
+            return (
+                f"Impossible de démarrer le serveur local sur le port {port} "
+                f"(port déjà utilisé ou erreur système : {raw})."
+            )
+        return f"Erreur système lors du démarrage de Psice : {raw}"
+    if "failed to start" in raw or "exited before becoming ready" in raw:
+        if port is not None:
+            return (
+                f"Impossible de démarrer le serveur local sur le port {port} "
+                "(port déjà occupé ou erreur de démarrage)."
+            )
+        return "Impossible de démarrer le serveur backend local de Psice."
+    if "Failed to create the Psice desktop window" in raw:
+        return "Impossible de créer la fenêtre de l'application Psice."
+    return f"Erreur lors du lancement de Psice : {raw}"
+
+
+def _notify_error(message: str) -> None:
+    """Show a native error dialog on frozen Windows windowed builds without blocking tests."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import ctypes
+
+        mb_iconerror = 0x10
+        windll = getattr(ctypes, "windll", None)
+        if windll is not None:
+            windll.user32.MessageBoxW(None, message, WINDOW_TITLE, mb_iconerror)
+    except Exception:
+        logger.debug("Failed to display native error dialog.", exc_info=True)
+
+
+def _report_error(exc: Exception, message: str) -> None:
+    """Log a startup failure and present a French error message to the user."""
+    logger.error("Launcher failed (%s): %s", type(exc).__name__, exc)
+    logger.debug("Launcher failure details:", exc_info=exc)
+    if sys.stderr is not None:
+        print(f"Erreur : {message}", file=sys.stderr)
+    else:
+        _notify_error(message)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -523,9 +638,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             debug=args.debug,
         )
     except ValueError as exc:
-        if sys.stderr is not None:
-            print(f"Error: {exc}", file=sys.stderr)
+        _report_error(exc, _format_launch_error(exc, port=args.port))
         return 2
+    except (RuntimeError, TimeoutError, OSError) as exc:
+        _report_error(exc, _format_launch_error(exc, port=args.port))
+        return 1
     return 0
 
 

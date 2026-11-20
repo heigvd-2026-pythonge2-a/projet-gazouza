@@ -244,6 +244,10 @@ def test_launcher_app_serves_french_fallback_when_dist_missing(
         assert "text/html" in root_res.headers["content-type"]
         assert "Interface frontend non compilée" in root_res.text
         assert "pnpm build" in root_res.text
+        assert "--dev-url" in root_res.text
+        assert "uv run uvicorn app.main:app --reload" in root_res.text
+        assert "port 8000" in root_res.text
+        assert "pnpm dev" in root_res.text
         assert "/api/health" in root_res.text
 
         idx_res = client.get("/index.html")
@@ -411,23 +415,45 @@ def test_on_window_closing_skips_eval_when_js_not_ready() -> None:
     window.create_confirmation_dialog.assert_not_called()
 
 
-def test_on_window_closing_fails_open_on_js_or_dialog_error() -> None:
+def test_on_window_closing_fails_closed_on_js_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     window = MagicMock()
     window.native = None
     window.events._pywebviewready.is_set.return_value = True
     window.evaluate_js.side_effect = RuntimeError("JS bridge unavailable")
+    window.create_confirmation_dialog.return_value = False
 
+    with caplog.at_level("WARNING"):
+        assert launcher.on_window_closing(window) is False
+
+    window.create_confirmation_dialog.assert_called_once_with(
+        "Psice",
+        "Le schéma contient des modifications non enregistrées. Fermer quand même ?",
+    )
+    assert "Failed to query unsaved changes" in caplog.text
+
+    window.create_confirmation_dialog.return_value = True
     assert launcher.on_window_closing(window) is True
-    window.create_confirmation_dialog.assert_not_called()
 
-    window.evaluate_js.side_effect = None
+
+def test_on_window_closing_allows_close_when_confirmation_dialog_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
     window.evaluate_js.return_value = True
     window.create_confirmation_dialog.side_effect = RuntimeError("dialog error")
-    assert launcher.on_window_closing(window) is True
+
+    with caplog.at_level("ERROR"):
+        assert launcher.on_window_closing(window) is True
+    assert "Failed to show unsaved changes confirmation dialog" in caplog.text
 
 
 def test_has_unsaved_changes_timeout_and_winforms_do_events(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     release = threading.Event()
     do_events_calls = 0
@@ -457,14 +483,26 @@ def test_has_unsaved_changes_timeout_and_winforms_do_events(
     assert launcher._has_unsaved_changes(window, timeout=0.5) is True
     assert do_events_calls >= 1
 
-    # Also verify fail-open on timeout (both standard and WinForms wait paths).
+    # Also verify fail-closed on timeout (both standard and WinForms wait paths).
     never_done = threading.Event()
     slow_win = SimpleNamespace(
         native=None,
         events=SimpleNamespace(_pywebviewready=SimpleNamespace(is_set=lambda: True)),
         evaluate_js=lambda _script: never_done.wait(1.0),
+        create_confirmation_dialog=MagicMock(return_value=False),
     )
-    assert launcher._has_unsaved_changes(slow_win, timeout=0.02) is False
+    monkeypatch.setattr(launcher, "JS_EVAL_TIMEOUT_S", 0.02)
+    with caplog.at_level("WARNING"):
+        assert launcher._has_unsaved_changes(slow_win, timeout=0.02) is True
+        assert launcher.on_window_closing(slow_win) is False
+    slow_win.create_confirmation_dialog.assert_called_once_with(
+        "Psice",
+        "Le schéma contient des modifications non enregistrées. Fermer quand même ?",
+    )
+    assert "Timed out querying unsaved changes" in caplog.text
+
+    slow_win.create_confirmation_dialog.return_value = True
+    assert launcher.on_window_closing(slow_win) is True
 
     winforms_timeout_win = SimpleNamespace(
         native=SimpleNamespace(InvokeRequired=False),
@@ -472,7 +510,7 @@ def test_has_unsaved_changes_timeout_and_winforms_do_events(
         evaluate_js=lambda _script: never_done.wait(1.0),
     )
     winforms_mod.Application = SimpleNamespace(DoEvents=lambda: None)  # type: ignore[attr-defined]
-    assert launcher._has_unsaved_changes(winforms_timeout_win, timeout=0.03) is False
+    assert launcher._has_unsaved_changes(winforms_timeout_win, timeout=0.03) is True
     never_done.set()
 
     # If System.Windows.Forms is unavailable, _get_winforms_do_events returns None cleanly.
@@ -522,18 +560,9 @@ class _FakeEventHook:
         return self
 
 
-@pytest.mark.parametrize(
-    ("dev_url", "expected_url_prefix"),
-    [
-        (None, "http://127.0.0.1:"),
-        ("http://127.0.0.1:5173", "http://127.0.0.1:5173"),
-    ],
-)
 def test_launch_starts_server_creates_window_and_shuts_down(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    dev_url: str | None,
-    expected_url_prefix: str,
 ) -> None:
     created_windows: list[dict[str, object]] = []
     started_servers: list[object] = []
@@ -566,7 +595,7 @@ def test_launch_starts_server_creates_window_and_shuts_down(
     monkeypatch.setattr(launcher.webview, "create_window", fake_create_window)
     monkeypatch.setattr(launcher.webview, "start", fake_start)
 
-    launcher.launch(dev_url=dev_url, frontend_dist=tmp_path / "missing", port=49152, debug=True)
+    launcher.launch(frontend_dist=tmp_path / "missing", port=49152, debug=True)
 
     assert len(started_servers) == 1
     fake_srv = started_servers[0]
@@ -576,9 +605,88 @@ def test_launch_starts_server_creates_window_and_shuts_down(
 
     assert len(created_windows) == 1
     assert created_windows[0]["title"] == "Psice"
-    assert str(created_windows[0]["url"]).startswith(expected_url_prefix)
+    assert created_windows[0]["url"] == "http://127.0.0.1:49152/"
     assert launcher.on_window_closing in closing_hook.handlers
     assert start_calls == [{"debug": True}]
+
+
+@pytest.mark.parametrize(
+    ("cli_dev_url", "env_dev_url", "expected_url"),
+    [
+        ("http://127.0.0.1:5173", None, "http://127.0.0.1:5173"),
+        (None, "http://localhost:5173", "http://localhost:5173"),
+    ],
+)
+def test_launch_dev_url_opens_directly_without_starting_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    cli_dev_url: str | None,
+    env_dev_url: str | None,
+    expected_url: str,
+) -> None:
+    if env_dev_url is not None:
+        monkeypatch.setenv(launcher.DEV_URL_ENV_VAR, env_dev_url)
+
+    created_windows: list[dict[str, object]] = []
+    closing_hook = _FakeEventHook()
+    fake_window = SimpleNamespace(events=SimpleNamespace(closing=closing_hook))
+
+    def fake_create_window(title: str, url: str, **kwargs: object) -> SimpleNamespace:
+        created_windows.append({"title": title, "url": url, "kwargs": kwargs})
+        return fake_window
+
+    start_calls: list[dict[str, object]] = []
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Backend server must not be created or started in --dev-url mode")
+
+    monkeypatch.setattr(launcher, "RunningServer", fail_if_called)
+    monkeypatch.setattr(launcher, "create_launcher_app", fail_if_called)
+    monkeypatch.setattr(launcher.webview, "create_window", fake_create_window)
+    monkeypatch.setattr(
+        launcher.webview, "start", lambda *, debug=False: start_calls.append({"debug": debug})
+    )
+
+    launcher.launch(dev_url=cli_dev_url, debug=True)
+
+    assert len(created_windows) == 1
+    assert created_windows[0]["title"] == "Psice"
+    assert created_windows[0]["url"] == expected_url
+    assert launcher.on_window_closing in closing_hook.handlers
+    assert start_calls == [{"debug": True}]
+
+
+@pytest.mark.parametrize(
+    ("cli_dev_url", "env_dev_url", "port"),
+    [
+        ("http://127.0.0.1:5173", None, 8000),
+        ("http://127.0.0.1:5173", None, 0),
+        (None, "http://localhost:5173", 8000),
+    ],
+)
+def test_launch_rejects_port_combined_with_dev_url(
+    monkeypatch: pytest.MonkeyPatch,
+    cli_dev_url: str | None,
+    env_dev_url: str | None,
+    port: int,
+) -> None:
+    if env_dev_url is not None:
+        monkeypatch.setenv(launcher.DEV_URL_ENV_VAR, env_dev_url)
+
+    with pytest.raises(ValueError, match="--port") as exc_info:
+        launcher.launch(dev_url=cli_dev_url, port=port)
+
+    message = str(exc_info.value)
+    assert "--dev-url" in message
+    assert "aucun serveur backend" in message
+
+
+def test_cli_help_documents_dev_url_uvicorn_and_pnpm_dev() -> None:
+    help_text = launcher._build_parser().format_help()
+    assert "--dev-url" in help_text
+    assert "--port" in help_text
+    assert "uv run uvicorn app.main:app --reload" in help_text
+    assert "8000" in help_text
+    assert "pnpm dev" in help_text
 
 
 def test_launch_stops_server_if_webview_start_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -637,9 +745,10 @@ def test_launch_stops_server_if_window_creation_returns_none(
     assert servers[0].should_exit is True  # type: ignore[attr-defined]
 
 
-def test_main_cli_success_and_non_localhost_rejection(
+def test_main_cli_success_and_validation_errors(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
     tmp_path: Path,
 ) -> None:
     captured: list[dict[str, object]] = []
@@ -665,8 +774,6 @@ def test_main_cli_success_and_non_localhost_rejection(
     assert (
         launcher.main(
             [
-                "--dev-url",
-                "http://127.0.0.1:5173",
                 "--frontend-dist",
                 str(tmp_path),
                 "--port",
@@ -676,22 +783,172 @@ def test_main_cli_success_and_non_localhost_rejection(
         )
         == 0
     )
+    assert launcher.main(["--dev-url", "http://127.0.0.1:5173", "--debug"]) == 0
     assert captured == [
         {"dev_url": None, "frontend_dist": None, "port": None, "debug": False},
         {
-            "dev_url": "http://127.0.0.1:5173",
+            "dev_url": None,
             "frontend_dist": tmp_path,
             "port": 8123,
+            "debug": True,
+        },
+        {
+            "dev_url": "http://127.0.0.1:5173",
+            "frontend_dist": None,
+            "port": None,
             "debug": True,
         },
     ]
 
     # Restore real launch to verify ValueError -> exit code 2 without starting server.
     monkeypatch.undo()
-    exit_code = launcher.main(["--dev-url", "https://evil.example:5173"])
+    with caplog.at_level("ERROR"):
+        exit_code = launcher.main(["--dev-url", "https://evil.example:5173"])
     assert exit_code == 2
-    assert "localhost" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "Erreur :" in err
+    assert "localhost" in err
+    assert "Launcher failed (ValueError)" in caplog.text
+
+    # Combining --port and --dev-url is also rejected with a clear French message.
+    assert launcher.main(["--dev-url", "http://127.0.0.1:5173", "--port", "8123"]) == 2
+    combo_err = capsys.readouterr().err
+    assert "Erreur :" in combo_err
+    assert "--port" in combo_err
+    assert "--dev-url" in combo_err
+
+    # Out-of-range --port produces a clear French message.
+    assert launcher.main(["--port", "99999"]) == 2
+    port_err = capsys.readouterr().err
+    assert "Erreur :" in port_err
+    assert "99999" in port_err
+    assert "65535" in port_err
 
     # Also safe when sys.stderr is None (PyInstaller --windowed).
     monkeypatch.setattr(sys, "stderr", None)
     assert launcher.main(["--dev-url", "https://evil.example:5173"]) == 2
+
+
+def test_main_occupied_port_returns_error_without_traceback(
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
+        blocker.bind((launcher.LOCALHOST_HOST, 0))
+        blocker.listen(1)
+        occupied_port = int(blocker.getsockname()[1])
+
+        with caplog.at_level("ERROR"):
+            exit_code = launcher.main(["--port", str(occupied_port)])
+
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "Erreur :" in err
+    assert str(occupied_port) in err
+    assert "Traceback" not in err
+    assert "Launcher failed (RuntimeError)" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("exc", "port", "expected_fragment"),
+    [
+        (TimeoutError("Timed out waiting for local backend server to start."), 8123, "8123"),
+        (TimeoutError("Timed out waiting for local backend server to start."), None, "Délai"),
+        (OSError("address already in use"), 8123, "8123"),
+        (OSError("socket permission denied"), None, "Erreur système"),
+        (
+            RuntimeError("Local backend server failed to start on 127.0.0.1:8123."),
+            None,
+            "Impossible de démarrer le serveur backend local",
+        ),
+        (RuntimeError("Failed to create the Psice desktop window."), None, "fenêtre"),
+        (RuntimeError("unexpected gui error"), None, "unexpected gui error"),
+    ],
+)
+def test_main_handles_startup_exceptions_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+    exc: Exception,
+    port: int | None,
+    expected_fragment: str,
+) -> None:
+    def failing_launch(**_kwargs: object) -> None:
+        raise exc
+
+    monkeypatch.setattr(launcher, "launch", failing_launch)
+    argv = ["--port", str(port)] if port is not None else []
+    with caplog.at_level("ERROR"):
+        exit_code = launcher.main(argv)
+
+    assert exit_code == 1
+    err = capsys.readouterr().err
+    assert "Erreur :" in err
+    assert expected_fragment in err
+    assert f"Launcher failed ({type(exc).__name__})" in caplog.text
+
+
+def test_main_windowed_startup_error_notifies_without_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    notifications: list[str] = []
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(launcher, "_notify_error", notifications.append)
+    monkeypatch.setattr(
+        launcher,
+        "launch",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("Local backend server failed to start on 127.0.0.1:8000.")
+        ),
+    )
+
+    with caplog.at_level("ERROR"):
+        exit_code = launcher.main(["--port", "8000"])
+
+    assert exit_code == 1
+    assert len(notifications) == 1
+    assert "8000" in notifications[0]
+    assert "Launcher failed (RuntimeError)" in caplog.text
+
+
+def test_notify_error_behavior_across_frozen_and_non_frozen_modes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[object, str, str, int]] = []
+
+    def fake_message_box(hwnd: object, text: str, title: str, flags: int) -> int:
+        calls.append((hwnd, text, title, flags))
+        return 1
+
+    fake_ctypes = ModuleType("ctypes")
+    fake_ctypes.windll = SimpleNamespace(  # type: ignore[attr-defined]
+        user32=SimpleNamespace(MessageBoxW=fake_message_box)
+    )
+    monkeypatch.setitem(sys.modules, "ctypes", fake_ctypes)
+
+    # Non-frozen mode never triggers a blocking native dialog.
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    launcher._notify_error("Erreur test")
+    assert calls == []
+
+    # Non-Windows platform also skips the Windows dialog.
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    launcher._notify_error("Erreur test")
+    assert calls == []
+
+    # Frozen Windows windowed mode displays the native error dialog.
+    monkeypatch.setattr(sys, "platform", "win32")
+    launcher._notify_error("Port occupé")
+    assert calls == [(None, "Port occupé", "Psice", 0x10)]
+
+    # Exceptions in MessageBoxW are swallowed safely.
+    def broken_message_box(*_args: object) -> int:
+        raise RuntimeError("user32 unavailable")
+
+    fake_ctypes.windll = SimpleNamespace(  # type: ignore[attr-defined]
+        user32=SimpleNamespace(MessageBoxW=broken_message_box)
+    )
+    launcher._notify_error("Port occupé")
