@@ -60,8 +60,14 @@ def test_wire_uses_from_in_json() -> None:
     )
     assert wire.from_ == PinEnd(comp="c1", pin="+")
     assert wire.points == []
-    # Written back to JSON as "from", not "from_".
-    assert '"from"' in wire.model_dump_json(by_alias=True)
+
+
+def test_wire_is_written_back_with_from() -> None:
+    # Even without `by_alias=True`: the backend may save a `.psice.json` itself (LTspice import).
+    wire = Wire(id="w1", from_=PinEnd(comp="c1", pin="+"), to=JunctionEnd(junction="j1"))
+    assert "from" in wire.model_dump()
+    assert '"from"' in wire.model_dump_json()
+    assert "from_" not in wire.model_dump_json()
 
 
 def test_wire_without_from_is_rejected() -> None:
@@ -102,11 +108,23 @@ def test_ground_and_label_have_no_name() -> None:
 
 
 def test_rotation_must_be_a_quarter_turn() -> None:
+    component = {"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0}, "rotation": 45}
     with pytest.raises(ValidationError):
-        Schematic.model_validate(
-            {"components": [{"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0},
-                             "rotation": 45}]}
-        )  # fmt: skip
+        Schematic.model_validate({"components": [component]})
+
+
+def test_unknown_keys_are_ignored() -> None:
+    # Deliberate: a file saved by a newer editor (extra display metadata) still opens.
+    schematic = Schematic.model_validate(
+        {
+            "zoom": 2,
+            "components": [
+                {"id": "c1", "type": "ground", "position": {"x": 0, "y": 0}, "color": "red"}
+            ],
+        }
+    )
+    assert "zoom" not in schematic.model_dump()
+    assert "color" not in schematic.components[0].model_dump()
 
 
 # --- Diagnostics --------------------------------------------------------------------------

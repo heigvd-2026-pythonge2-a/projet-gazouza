@@ -185,6 +185,7 @@ export interface components {
         | "NO_GROUND"
         | "PIN_NOT_CONNECTED"
         | "MISSING_NAME"
+        | "DUPLICATE_ID"
         | "DUPLICATE_NAME"
         | "BAD_PREFIX"
         | "BAD_VALUE"

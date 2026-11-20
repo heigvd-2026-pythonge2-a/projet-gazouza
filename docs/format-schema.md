@@ -53,6 +53,12 @@ du schéma (`SimulationRequest`, clé `kind`, nombres en unités SI).
 
 L'**analyse** n'est pas dans le schéma : elle est envoyée à côté (section 6).
 
+**Clés inconnues** : une clé que le format ne connaît pas (dans le schéma, un composant, une
+jonction ou un fil) est **ignorée**, sans erreur. C'est voulu : un fichier enregistré par une
+version plus récente de l'éditeur (avec des métadonnées d'affichage en plus) s'ouvre quand même.
+Seules les extrémités de fil et les cibles d'erreur refusent les clés en trop, car c'est ce qui
+garantit qu'elles n'ont qu'une seule forme.
+
 ## 3. Composants
 
 ```json
@@ -296,6 +302,7 @@ produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 | `NO_GROUND` | erreur | « Le circuit n'a pas de masse. » | aucune |
 | `PIN_NOT_CONNECTED` | erreur | « La broche 2 de R1 n'est reliée à rien. » | la broche |
 | `MISSING_NAME` | erreur | « Un composant n'a pas de nom. » | le composant |
+| `DUPLICATE_ID` | erreur | « Deux éléments ont le même identifiant c2. » (composants, jonctions et fils partagent les mêmes ids) | les éléments |
 | `DUPLICATE_NAME` | erreur | « Deux composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
 | `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour une résistance. » | le composant |
 | `BAD_VALUE` | erreur | « R1 : la résistance « 1kk » n'est pas une valeur valide. » | le composant |

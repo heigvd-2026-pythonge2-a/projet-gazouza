@@ -56,6 +56,18 @@ def test_mappings_point_to_existing_elements(circuit: str) -> None:
 
 
 @pytest.mark.parametrize("circuit", CIRCUITS)
+def test_ids_are_unique(circuit: str) -> None:
+    # Components, junctions and wires share one id space: `nets` and `targets` refer to them.
+    schematic = Schematic.model_validate_json(read(circuit, "schematic.json"))
+    ids = (
+        [c.id for c in schematic.components]
+        + [j.id for j in schematic.junctions]
+        + [w.id for w in schematic.wires]
+    )
+    assert len(ids) == len(set(ids)), f"duplicate ids: {sorted(i for i in ids if ids.count(i) > 1)}"
+
+
+@pytest.mark.parametrize("circuit", CIRCUITS)
 def test_wire_ends_point_to_existing_elements(circuit: str) -> None:
     schematic = Schematic.model_validate_json(read(circuit, "schematic.json"))
     component_ids = {c.id for c in schematic.components}
