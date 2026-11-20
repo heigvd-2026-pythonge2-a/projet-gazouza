@@ -29,6 +29,7 @@ import {
   type WirePart,
 } from "./document";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
+import { routeAround } from "./routing";
 
 /** Grid units between a copied (or pasted) group and the next paste. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
@@ -50,20 +51,21 @@ export interface WireDraft {
 }
 
 /**
- * Route from `a` to `b` as seen while drawing: straight if aligned, else horizontal then
- * vertical. Returns the points after `a` (the corner if any, then `b`).
+ * Route from `a` to `b` as seen while drawing: around the components (see `routeAround`),
+ * straight or as an L when nothing is in the way. Returns the points after `a` (the corners,
+ * then `b`).
  */
-export function routeTo(a: GridPoint, b: GridPoint): GridPoint[] {
-  if (a.x === b.x || a.y === b.y) return [b];
-  return [{ x: b.x, y: a.y }, b];
+export function routeTo(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
+  return routeAround(doc, a, b);
 }
 
 /** Full path through the clicked points, with the corners `routeTo` adds between them. */
-export function routeThrough(clicks: readonly GridPoint[]): GridPoint[] {
+export function routeThrough(doc: EditorDoc, clicks: readonly GridPoint[]): GridPoint[] {
   const path: GridPoint[] = [];
+  let last: GridPoint | undefined;
   for (const p of clicks) {
-    const last = path[path.length - 1];
-    path.push(...(last ? routeTo(last, p) : [p]));
+    path.push(...(last ? routeTo(doc, last, p) : [p]));
+    last = p;
   }
   return path;
 }
@@ -83,6 +85,8 @@ interface EditorState {
   simulation: { result: SimulationResult; doc: EditorDoc } | null;
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
+  /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
+  savedDoc: EditorDoc;
 
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
@@ -154,6 +158,12 @@ interface EditorState {
   /** Keeps the result of a simulation of the current document (null: forget it). */
   setSimulation: (result: SimulationResult | null) => void;
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
+  /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
+  newDocument: () => void;
+  /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
+  openDocument: (doc: EditorDoc) => void;
+  /** Records that the current document was saved (Ctrl+S). */
+  markSaved: () => void;
 }
 
 /** Settings of the current animation. */
@@ -173,6 +183,25 @@ export const PLAYBACK_SECONDS = 5;
 /** The last simulation if it was run on the document shown now, else null. */
 export const freshSimulation = (s: Pick<EditorState, "doc" | "simulation">) =>
   s.simulation && s.simulation.doc === s.doc ? s.simulation.result : null;
+
+/** State of a document just created or opened: nothing selected, nothing to undo. */
+function freshDocument(doc: EditorDoc) {
+  return {
+    doc,
+    savedDoc: doc,
+    history: emptyHistory<EditorDoc>(),
+    selection: [],
+    wirePart: null,
+    tool: { kind: "select" } as const,
+    draft: null,
+    // A result of another document would show as stale: forget it.
+    simulation: null,
+  };
+}
+
+/** True if the document has changes that were not saved. */
+export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
+  s.doc !== s.savedDoc;
 
 /**
  * State update for a document change, recorded in the history. `key` merges consecutive edits of
@@ -194,14 +223,8 @@ function existing(doc: EditorDoc, selection: string[]): string[] {
 }
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
-  doc: emptyDoc(),
-  selection: [],
-  wirePart: null,
-  tool: { kind: "select" },
-  draft: null,
+  ...freshDocument(emptyDoc()),
   clipboard: null,
-  history: emptyHistory(),
-  simulation: null,
   animation: { on: false, electrons: false, playing: true, speed: 1 },
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null }),
@@ -275,7 +298,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const points = doubleClick ? draft.points : [...draft.points, { ...position }];
       if (!doubleClick && !anchorAt(s.doc, position)) return { draft: { ...draft, points } };
 
-      const added = addWire(s.doc, routeThrough(points));
+      const added = addWire(s.doc, routeThrough(s.doc, points));
       return {
         ...(added ? change(s, added.doc) : {}),
         draft: null,
@@ -341,6 +364,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     })),
 
   setAnimation: (patch) => set((s) => ({ animation: { ...s.animation, ...patch } })),
+
+  newDocument: () => set(freshDocument(emptyDoc())),
+
+  openDocument: (doc) => set(freshDocument(doc)),
+
+  markSaved: () => set((s) => ({ savedDoc: s.doc })),
 
   selectWirePart: (part) =>
     set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),

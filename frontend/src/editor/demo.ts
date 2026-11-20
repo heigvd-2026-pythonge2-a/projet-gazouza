@@ -33,13 +33,7 @@ export function loadDemo(name: string) {
     junctions: schematic.junctions,
     wires: schematic.wires.map((w: EditorWire) => ({ ...w, points: w.points ?? [] })),
   };
-  useEditorStore.setState({
-    doc,
-    history: { past: [], future: [], lastKey: null },
-    selection: [],
-    wirePart: null,
-    draft: null,
-  });
+  useEditorStore.getState().openDocument(doc);
   useEditorStore.getState().setSimulation(result);
   useEditorStore.getState().setAnimation({ on: true });
 }

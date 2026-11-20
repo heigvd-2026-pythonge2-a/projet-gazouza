@@ -26,14 +26,18 @@ import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport } from "./fitView";
+import { newFile, openFile, saveFile } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
+import { registerViewCommands } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
+/** Zoom factor of the toolbar zoom buttons (bigger than one wheel step). */
+const BUTTON_ZOOM_STEP = 1.25;
 /** Radius of the ring drawn around a pin connected to nothing, in grid units. */
 const UNCONNECTED_RADIUS = 0.4;
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
@@ -124,6 +128,9 @@ function useKeyboardShortcuts() {
         else if (key === "v") s.paste();
         else if (key === "d")
           s.duplicate(); // also keeps the browser from adding a bookmark
+        else if (key === "n") newFile();
+        else if (key === "o") openFile();
+        else if (key === "s") saveFile();
         else return;
         e.preventDefault();
         return;
@@ -280,19 +287,31 @@ export function SchematicCanvas() {
     return p ? { x: Math.round(p.x / GRID), y: Math.round(p.y / GRID) } : null;
   };
 
-  const onWheel = (e: KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault();
-    const stage = stageRef.current;
-    const p = stage?.getPointerPosition();
-    if (!p) return;
+  /** Zooms by `factor`, keeping the canvas point `p` (pixels) where it is on screen. */
+  const zoomAt = useCallback((factor: number, p: { x: number; y: number }) => {
     setViewport((v) => {
-      const factor = e.evt.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
       const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * factor));
-      // Keep the point under the cursor fixed.
       const wx = (p.x - v.x) / v.scale;
       const wy = (p.y - v.y) / v.scale;
       return { scale, x: p.x - wx * scale, y: p.y - wy * scale };
     });
+  }, []);
+
+  // Toolbar zoom buttons: zoom around the middle of the canvas.
+  useEffect(() => {
+    const centre = { x: size.width / 2, y: size.height / 2 };
+    return registerViewCommands({
+      zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
+      zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
+      fit: fitView,
+    });
+  }, [size, zoomAt, fitView]);
+
+  const onWheel = (e: KonvaEventObject<WheelEvent>) => {
+    e.evt.preventDefault();
+    const p = stageRef.current?.getPointerPosition();
+    // Keep the point under the cursor fixed.
+    if (p) zoomAt(e.evt.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, p);
   };
 
   /**

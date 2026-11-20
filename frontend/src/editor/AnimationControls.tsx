@@ -40,9 +40,50 @@ function TimeReadout({ end }: { end: number }) {
 }
 
 /**
- * Controls of the current animation, over the bottom-left corner of the schematic. Shown once a
- * simulation of the current schematic has succeeded; a schematic changed since then shows why
- * the animation stopped.
+ * Toolbar button that starts and stops the current animation. Enabled once a simulation of the
+ * current schematic has succeeded (operating point or transient analysis).
+ */
+export function AnimateButton({ style }: { style?: CSSProperties }) {
+  const result = useEditorStore(freshSimulation);
+  const on = useEditorStore((s) => s.animation.on);
+  const setAnimation = useEditorStore((s) => s.setAnimation);
+  const enabled = result !== null && animatable(result);
+  const title = !result
+    ? "Animer le courant sur le schéma — disponible après une simulation"
+    : !enabled
+      ? "L'animation est disponible pour les analyses .op et .tran"
+      : on
+        ? "Arrêter l'animation du courant"
+        : "Animer le courant sur le schéma";
+  const active = enabled && on;
+  return (
+    <button
+      type="button"
+      disabled={!enabled}
+      aria-pressed={active}
+      title={title}
+      onClick={() => setAnimation({ on: !on })}
+      style={{
+        ...style,
+        ...(enabled ? {} : { opacity: 0.5, cursor: "not-allowed" }),
+        ...(active
+          ? {
+              borderColor: COLORS.selected,
+              background: UI.activeBackground,
+              color: COLORS.selected,
+            }
+          : {}),
+      }}
+    >
+      {active ? "Arrêter l'animation" : "Animer le courant"}
+    </button>
+  );
+}
+
+/**
+ * Settings of the running animation, over the bottom-left corner of the schematic: direction,
+ * and for a transient analysis play/pause, speed and simulated time. A schematic changed since
+ * the simulation shows why the animation stopped instead.
  */
 export function AnimationControls() {
   const result = useEditorStore(freshSimulation);
@@ -50,12 +91,14 @@ export function AnimationControls() {
   const settings = useEditorStore((s) => s.animation);
   const setAnimation = useEditorStore((s) => s.setAnimation);
 
-  if (!result && !stale) return null;
   const box: CSSProperties = {
     position: "absolute",
     left: 8,
     bottom: 6,
+    // Leave room for the zoom box in the bottom-right corner; wrap when the canvas is narrow.
+    maxWidth: "calc(100% - 140px)",
     display: "flex",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 6,
     padding: "4px 6px",
@@ -66,87 +109,53 @@ export function AnimationControls() {
     color: COLORS.text,
   };
 
-  if (!result) {
+  if (stale && settings.on) {
     return (
       <div style={{ ...box, color: UI.muted }}>
         Schéma modifié depuis la simulation : relancez-la pour animer le courant.
       </div>
     );
   }
-  if (!animatable(result)) {
-    return (
-      <div style={box}>
-        <button
-          type="button"
-          disabled
-          title="L'animation est disponible pour les analyses .op et .tran"
-          style={{ ...control, opacity: 0.5, cursor: "default" }}
-        >
-          Animer le courant
-        </button>
-      </div>
-    );
-  }
+  if (!result || !animatable(result) || !settings.on) return null;
 
   const transient = result.analysis === "tran";
   const [, end] = timeSpan(result);
   return (
     <div role="group" aria-label="Animation du courant" style={box}>
-      <button
-        type="button"
-        aria-pressed={settings.on}
-        onClick={() => setAnimation({ on: !settings.on })}
-        style={{
-          ...control,
-          ...(settings.on
-            ? {
-                borderColor: COLORS.selected,
-                background: UI.activeBackground,
-                color: COLORS.selected,
-              }
-            : {}),
-        }}
+      <select
+        aria-label="Sens du courant"
+        value={settings.electrons ? "electrons" : "conventional"}
+        onChange={(e) => setAnimation({ electrons: e.target.value === "electrons" })}
+        style={control}
       >
-        {settings.on ? "Arrêter l'animation" : "Animer le courant"}
-      </button>
-      {settings.on && (
+        <option value="conventional">Sens conventionnel</option>
+        <option value="electrons">Sens des électrons</option>
+      </select>
+      {transient && (
         <>
+          <button
+            type="button"
+            title={settings.playing ? "Pause" : "Lecture"}
+            aria-label={settings.playing ? "Pause" : "Lecture"}
+            onClick={() => setAnimation({ playing: !settings.playing })}
+            style={{ ...control, width: 28, padding: 0 }}
+          >
+            {settings.playing ? "❚❚" : "▶"}
+          </button>
           <select
-            aria-label="Sens du courant"
-            value={settings.electrons ? "electrons" : "conventional"}
-            onChange={(e) => setAnimation({ electrons: e.target.value === "electrons" })}
+            aria-label="Vitesse de lecture"
+            title="Vitesse de lecture"
+            value={settings.speed}
+            onChange={(e) => setAnimation({ speed: Number(e.target.value) })}
             style={control}
           >
-            <option value="conventional">Sens conventionnel</option>
-            <option value="electrons">Sens des électrons</option>
+            {SPEEDS.map((v) => (
+              <option key={v} value={v}>
+                ×{v.toLocaleString("fr-CH")}
+              </option>
+            ))}
           </select>
-          {transient && (
-            <>
-              <button
-                type="button"
-                title={settings.playing ? "Pause" : "Lecture"}
-                aria-label={settings.playing ? "Pause" : "Lecture"}
-                onClick={() => setAnimation({ playing: !settings.playing })}
-                style={{ ...control, width: 28, padding: 0 }}
-              >
-                {settings.playing ? "❚❚" : "▶"}
-              </button>
-              <select
-                aria-label="Vitesse de lecture"
-                title="Vitesse de lecture"
-                value={settings.speed}
-                onChange={(e) => setAnimation({ speed: Number(e.target.value) })}
-                style={control}
-              >
-                {SPEEDS.map((v) => (
-                  <option key={v} value={v}>
-                    ×{v.toLocaleString("fr-CH")}
-                  </option>
-                ))}
-              </select>
-              <TimeReadout end={end} />
-            </>
-          )}
+          <TimeReadout end={end} />
         </>
       )}
     </div>
