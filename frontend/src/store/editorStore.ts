@@ -7,6 +7,7 @@ import {
   addComponent,
   addWire,
   anchorAt,
+  copyItems,
   deleteBend,
   deleteItems,
   emptyDoc,
@@ -14,17 +15,22 @@ import {
   moveComponent,
   moveItems,
   moveWirePart,
+  pasteClip,
   renameComponent,
   rotateComponents,
   rotateCw,
   samePoint,
   setParam,
+  type Clip,
   type EditorDoc,
   type GridPoint,
   type Rotation,
   type WirePart,
 } from "./document";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
+
+/** Grid units between a copied (or pasted) group and the next paste. */
+export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
 
 export type Tool =
   | { kind: "select" }
@@ -68,6 +74,8 @@ interface EditorState {
   wirePart: WirePart | null;
   tool: Tool;
   draft: WireDraft | null;
+  /** Items copied with Ctrl+C (an internal clipboard, not the system one). */
+  clipboard: Clip | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
   history: History<EditorDoc>;
 
@@ -118,6 +126,17 @@ interface EditorState {
    * current tool, else clears the selection.
    */
   cancel: () => void;
+  /** Ctrl+A: selects every component, wire and junction. */
+  selectAll: () => void;
+  /** Ctrl+C: copies the selection (and the wires between selected items) to the clipboard. */
+  copy: () => void;
+  /**
+   * Ctrl+V: pastes the clipboard a few grid units further, and selects the pasted items. Pasting
+   * again goes further again.
+   */
+  paste: () => void;
+  /** Ctrl+D: copies and pastes the selection in one go (the clipboard is left as it is). */
+  duplicate: () => void;
   /** Ctrl+Z: goes back to the document before the last change. */
   undo: () => void;
   /** Ctrl+Y / Ctrl+Shift+Z: re-applies the last undone change. */
@@ -149,6 +168,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   wirePart: null,
   tool: { kind: "select" },
   draft: null,
+  clipboard: null,
   history: emptyHistory(),
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null }),
@@ -303,6 +323,48 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     else if (s.tool.kind !== "select") set({ tool: { kind: "select" } });
     else set({ selection: [], wirePart: null });
   },
+
+  selectAll: () =>
+    set((s) => ({
+      selection: [
+        ...s.doc.components.map((c) => c.id),
+        ...s.doc.wires.map((w) => w.id),
+        ...s.doc.junctions.map((j) => j.id),
+      ],
+      wirePart: null,
+      tool: { kind: "select" },
+      draft: null,
+      history: seal(s.history),
+    })),
+
+  copy: () =>
+    set((s) =>
+      s.selection.length > 0 ? { clipboard: copyItems(s.doc, new Set(s.selection)) } : {},
+    ),
+
+  paste: () =>
+    set((s) => {
+      if (!s.clipboard || s.clipboard.components.length + s.clipboard.wires.length === 0) return {};
+      const pasted = pasteClip(s.doc, s.clipboard, PASTE_OFFSET);
+      return {
+        ...change(s, pasted.doc),
+        selection: pasted.ids,
+        wirePart: null,
+        tool: { kind: "select" },
+        draft: null,
+        // The next paste lands next to this one, not on top of it.
+        clipboard: copyItems(pasted.doc, new Set(pasted.ids)),
+      };
+    }),
+
+  duplicate: () =>
+    set((s) => {
+      if (s.selection.length === 0) return {};
+      const clip = copyItems(s.doc, new Set(s.selection));
+      if (clip.components.length + clip.wires.length === 0) return {};
+      const pasted = pasteClip(s.doc, clip, PASTE_OFFSET);
+      return { ...change(s, pasted.doc), selection: pasted.ids, wirePart: null };
+    }),
 
   undo: () =>
     set((s) => {
