@@ -28,6 +28,7 @@ import {
   type WirePart,
 } from "./document";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
+import { routeAround } from "./routing";
 
 /** Grid units between a copied (or pasted) group and the next paste. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
@@ -49,20 +50,21 @@ export interface WireDraft {
 }
 
 /**
- * Route from `a` to `b` as seen while drawing: straight if aligned, else horizontal then
- * vertical. Returns the points after `a` (the corner if any, then `b`).
+ * Route from `a` to `b` as seen while drawing: around the components (see `routeAround`),
+ * straight or as an L when nothing is in the way. Returns the points after `a` (the corners,
+ * then `b`).
  */
-export function routeTo(a: GridPoint, b: GridPoint): GridPoint[] {
-  if (a.x === b.x || a.y === b.y) return [b];
-  return [{ x: b.x, y: a.y }, b];
+export function routeTo(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
+  return routeAround(doc, a, b);
 }
 
 /** Full path through the clicked points, with the corners `routeTo` adds between them. */
-export function routeThrough(clicks: readonly GridPoint[]): GridPoint[] {
+export function routeThrough(doc: EditorDoc, clicks: readonly GridPoint[]): GridPoint[] {
   const path: GridPoint[] = [];
+  let last: GridPoint | undefined;
   for (const p of clicks) {
-    const last = path[path.length - 1];
-    path.push(...(last ? routeTo(last, p) : [p]));
+    path.push(...(last ? routeTo(doc, last, p) : [p]));
+    last = p;
   }
   return path;
 }
@@ -247,7 +249,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const points = doubleClick ? draft.points : [...draft.points, { ...position }];
       if (!doubleClick && !anchorAt(s.doc, position)) return { draft: { ...draft, points } };
 
-      const added = addWire(s.doc, routeThrough(points));
+      const added = addWire(s.doc, routeThrough(s.doc, points));
       return {
         ...(added ? change(s, added.doc) : {}),
         draft: null,
