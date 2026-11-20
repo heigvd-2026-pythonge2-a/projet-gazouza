@@ -1,0 +1,13 @@
+{
+  "type": "inductor",
+  "label": "Bobine",
+  "prefix": "L",
+  "pins": [
+    { "name": "1", "x": 0, "y": -2 },
+    { "name": "2", "x": 0, "y": 2 }
+  ],
+  "params": [
+    { "name": "inductance", "label": "Inductance", "unit": "H", "default": "1m" }
+  ],
+  "spice": "{name} {pin:1} {pin:2} {inductance}"
+}
