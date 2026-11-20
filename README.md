@@ -208,6 +208,19 @@ Aucune installation n'est nécessaire sur la machine cible.
 | S9–10 | Import `.asc`, annuler/rétablir, mesures et export |
 | S11–12 | Tests, stabilisation, build final, rapport et démo |
 
+### Issues et labels
+
+Les tâches sont suivies dans GitHub Issues. Chaque issue (et chaque PR) porte en principe un
+label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`.
+
+| Famille | Labels | Usage |
+|---|---|---|
+| `type:` | `bug`, `feat`, `docs`, `test`, `chore`, `question` | Nature du travail (alignée sur les Conventional Commits ; `chore` couvre aussi CI, dépendances et refactor) |
+| `area:` | `editor`, `plot`, `backend`, `engine`, `fixtures`, `shared` | Module concerné, donc son propriétaire (voir le tableau ci-dessus et [AGENTS.md](AGENTS.md)) ; `shared` = fichiers à coordonner en équipe |
+| `area:` | `contract` | Modification du contrat d'API (`backend/app/models/`) : PR dédiée, relue par les modules qui le consomment |
+| `prio:` | `haute`, `basse` | `haute` = bloque une démo ou d'autres modules. Sans label `prio:`, la priorité est normale |
+| `status:` | `bloqué`, `à discuter`, `abandonné` | Attend autre chose, demande une décision d'équipe, ou ne sera pas traité (doublon, invalide, hors périmètre) |
+
 ---
 
 ## Licence

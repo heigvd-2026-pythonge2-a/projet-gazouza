@@ -49,6 +49,8 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
   (`*.md`) et textes affichés à l'utilisateur en français.
 - **Commits** : [Conventional Commits](https://www.conventionalcommits.org/)
   (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`), message court en anglais.
+- **Labels** : toute issue ou PR reçoit un label `type:` et un label `area:` (liste et usage
+  dans la section « Issues et labels » du [README](README.md)).
 - **Unités** : valeurs numériques en SI (`float`) dans le contrat ; les suffixes SPICE (`1k`,
   `10u`) ne servent que pour les paramètres saisis par l'utilisateur.
 - **Formatage** : ruff (Python) et Prettier (TS). Ne discute pas le style, lance l'outil.
