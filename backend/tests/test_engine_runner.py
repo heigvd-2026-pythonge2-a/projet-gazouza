@@ -101,8 +101,19 @@ def test_returns_early_when_netlist_has_errors(monkeypatch: pytest.MonkeyPatch) 
     assert result.errors == netlist_result.errors
     assert result.warnings == netlist_result.warnings
 
+    empty_with_errors = NetlistResult(
+        netlist="",
+        errors=[Diagnostic(code="NO_GROUND", message="Le circuit n'a pas de masse.")],
+        warnings=netlist_result.warnings,
+    )
+    empty_result = run_simulation(empty_with_errors, OpAnalysis())
+    assert empty_result.errors == empty_with_errors.errors
+    assert empty_result.warnings == empty_with_errors.warnings
 
-def test_returns_early_when_netlist_is_blank(monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_blank_netlist_without_errors_returns_simulation_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def _fail_locate() -> Path:
         raise AssertionError("locate_ngspice must not be called")
 
@@ -121,7 +132,10 @@ def test_returns_early_when_netlist_is_blank(monkeypatch: pytest.MonkeyPatch) ->
     result = run_simulation(netlist_result, TranAnalysis(stop_time=1e-3))
 
     assert result.analysis == "tran"
-    assert result.errors == []
+    assert len(result.errors) == 1
+    assert result.errors[0].code == "SIMULATION_FAILED"
+    assert result.errors[0].targets == []
+    assert "vide" in result.errors[0].message.lower()
     assert result.warnings == netlist_result.warnings
     assert result.traces == []
 
@@ -158,17 +172,19 @@ def test_invalid_timeout_returns_french_diagnostic() -> None:
     assert "délai" in result.errors[0].message.lower()
 
 
-def test_prepare_netlist_injects_op_save_and_end_preserving_title() -> None:
-    netlist_result = NetlistResult(
-        netlist="Custom Title Line\r\n* comment .tran\r\nV1 in 0 DC 10\r\nR1 in out 1k\r\n\r\n",
+def test_prepare_netlist_preserves_directives_title_and_appends_save_and_end() -> None:
+    op_netlist = NetlistResult(
+        netlist=(
+            "Custom Title Line\r\n* comment .tran\r\nV1 in 0 DC 10\r\nR1 in out 1k\r\n.op\r\n\r\n"
+        ),
         nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
         components={"V1": "c1", "L1": "c2", "R1": "c3"},
     )
 
-    prepared = prepare_netlist(netlist_result, OpAnalysis())
+    prepared_op = prepare_netlist(op_netlist)
 
-    assert "\r" not in prepared
-    assert prepared.splitlines() == [
+    assert "\r" not in prepared_op
+    assert prepared_op.splitlines() == [
         "Custom Title Line",
         "* comment .tran",
         "V1 in 0 DC 10",
@@ -178,57 +194,50 @@ def test_prepare_netlist_injects_op_save_and_end_preserving_title() -> None:
         ".end",
     ]
 
-
-def test_prepare_netlist_normalizes_zero_tstep_and_replaces_conflicting_directive() -> None:
-    netlist_result = NetlistResult(
-        netlist="* rc_tran\nV1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\nR1 in out 1k\nC1 out 0 1u\n"
-        ".tran 0 5m 0 10u\n.end\n",
+    tran_netlist = NetlistResult(
+        netlist=(
+            ".op\n"
+            "* first line above is SPICE title and stays untouched\n"
+            "V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\n"
+            "R1 in out 1k\n"
+            "C1 out 0 1u\n"
+            ".tran 10u 5m 0 10u\n"
+            ".end\n"
+        ),
         nets={"in": ["w1"], "out": ["w2"], "0": ["w3", "w4"]},
         components={"V1": "c1", "R1": "c2", "C1": "c3"},
     )
 
-    prepared = prepare_netlist(netlist_result, TranAnalysis(stop_time=0.005, max_step=1e-5))
-    assert prepared.splitlines() == [
-        "* rc_tran",
+    prepared_tran = prepare_netlist(tran_netlist)
+    assert prepared_tran.splitlines() == [
+        ".op",
+        "* first line above is SPICE title and stays untouched",
         "V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)",
         "R1 in out 1k",
         "C1 out 0 1u",
-        ".tran 1e-05 0.005 0 1e-05",
+        ".tran 10u 5m 0 10u",
         ".save all @r1[i] @c1[i]",
         ".end",
     ]
 
-    # When netlist has conflicting .op and duplicate .tran, keep single target directive.
-    without_max_step = NetlistResult(
-        netlist="* rc\nV1 in 0 DC 5\n.op\n.tran 1u 5m\n.end\n",
-        components={"V1": "c1"},
-    )
-    prepared_no_max = prepare_netlist(without_max_step, TranAnalysis(stop_time=0.005))
-    assert prepared_no_max.splitlines() == [
-        "* rc",
-        "V1 in 0 DC 5",
-        ".tran 5e-06 0.005",
-        ".save all",
-        ".end",
-    ]
 
-
-def test_prepare_netlist_preserves_valid_tran_and_deduplicates_existing_save() -> None:
+def test_prepare_netlist_deduplicates_existing_save_and_is_idempotent() -> None:
     netlist_result = NetlistResult(
-        netlist="* test\nV1 in 0 DC 5\nR1 in out 1k\nR2 out 0 1k\n"
-        ".tran 10u 5m 0 10u\n.save all\n+ @R1[i]\n.end\n",
+        netlist="* test\n\nV1 in 0 DC 5\nR1 in out 1k\nR2 out 0 1k\n"
+        ".tran 10u 5m 0 10u\n.save ALL\n+ @R1[i]\n.end\n* trailing ignored\n",
         components={"V1": "c1", "R1": "c2", "r1": "c2", "R2": "c3"},
     )
 
-    prepared = prepare_netlist(netlist_result, TranAnalysis(stop_time=0.005, max_step=1e-5))
+    prepared = prepare_netlist(netlist_result)
 
     assert prepared.splitlines() == [
         "* test",
+        "",
         "V1 in 0 DC 5",
         "R1 in out 1k",
         "R2 out 0 1k",
         ".tran 10u 5m 0 10u",
-        ".save all",
+        ".save ALL",
         "+ @R1[i]",
         ".save @r2[i]",
         ".end",
@@ -236,37 +245,27 @@ def test_prepare_netlist_preserves_valid_tran_and_deduplicates_existing_save() -
 
     # Calling prepare_netlist a second time is idempotent for .save tokens.
     re_prepared = prepare_netlist(
-        NetlistResult(netlist=prepared, components=netlist_result.components),
-        TranAnalysis(stop_time=0.005, max_step=1e-5),
+        NetlistResult(netlist=prepared, components=netlist_result.components)
     )
     assert re_prepared == prepared
 
 
-def test_prepare_netlist_wraps_long_save_lines_and_handles_edge_cases() -> None:
+def test_prepare_netlist_wraps_long_save_lines_and_rejects_empty_netlist() -> None:
     components = {f"R{i}": f"c{i}" for i in range(1, 13)}
     netlist_result = NetlistResult(
-        netlist="* many\nV1 n0 0 DC 1\n.tran 0s 1m\n.end\n",
+        netlist="* many\nV1 n0 0 DC 1\n.tran 1u 1m\n.end\n",
         components=components,
     )
-    prepared = prepare_netlist(netlist_result, TranAnalysis(stop_time=1e-3))
+    prepared = prepare_netlist(netlist_result)
     lines = prepared.splitlines()
-    assert ".tran 1e-06 0.001" in lines
+    assert ".tran 1u 1m" in lines
     assert ".save all @r1[i] @r2[i] @r3[i] @r4[i] @r5[i] @r6[i] @r7[i] @r8[i] @r9[i]" in lines
     assert "+ @r10[i] @r11[i] @r12[i]" in lines
 
-    # Invalid directive / suffix parsing checks and direct prepare_netlist error guards.
-    assert runner_module._parse_spice_number("1Meg") == pytest.approx(1e6)
-    assert runner_module._parse_spice_number("not-a-num") is None
-    assert runner_module._parse_spice_number("1e99999999") == float("inf")
-    assert runner_module._is_valid_tran_directive(".tran") is False
-
-    with pytest.raises(ValueError, match="Unsupported analysis kind"):
-        prepare_netlist(
-            netlist_result,
-            AcAnalysis(input_source_id="c1", start_frequency=1.0, stop_frequency=10.0),
-        )
     with pytest.raises(ValueError, match="empty netlist"):
-        prepare_netlist(NetlistResult(netlist=""), OpAnalysis())
+        prepare_netlist(NetlistResult(netlist=""))
+    with pytest.raises(ValueError, match="empty netlist"):
+        prepare_netlist(NetlistResult(netlist="  \n\t  "))
 
 
 def test_missing_ngspice_binary_returns_french_diagnostic(

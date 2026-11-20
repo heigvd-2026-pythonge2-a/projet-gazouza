@@ -30,21 +30,7 @@ DEFAULT_TIMEOUT_SECONDS: float = 10.0
 _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
 _SAVE_ITEMS_PER_LINE = 10
-_ANALYSIS_DIRECTIVES = frozenset({".op", ".tran", ".ac", ".dc"})
 
-_SPICE_MULTIPLIERS: dict[str, float] = {
-    "t": 1e12,
-    "g": 1e9,
-    "meg": 1e6,
-    "k": 1e3,
-    "mil": 25.4e-6,
-    "m": 1e-3,
-    "u": 1e-6,
-    "n": 1e-9,
-    "p": 1e-12,
-    "f": 1e-15,
-}
-_SPICE_NUMBER_RE = re.compile(r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([a-zA-Z]*)$")
 _CHECK_BRANCH_RE = re.compile(r"check\s+nodes?\s+([A-Za-z0-9_]+)#branch\b", re.IGNORECASE)
 _ANY_BRANCH_RE = re.compile(r"\b([A-Za-z0-9_]+)#branch\b", re.IGNORECASE)
 _CHECK_NODE_RE = re.compile(r"check\s+nodes?\s+([^\s,;]+)", re.IGNORECASE)
@@ -73,51 +59,6 @@ def _error_result(
         ],
         warnings=list(warnings),
     )
-
-
-def _parse_spice_number(token: str) -> float | None:
-    """Parse a SPICE numeric literal with optional SI/SPICE scale suffix."""
-    match = _SPICE_NUMBER_RE.match(token.strip())
-    if match is None:
-        return None
-    mantissa_str, suffix = match.groups()
-    value = float(mantissa_str)
-
-    lowered_suffix = suffix.lower()
-    if lowered_suffix:
-        for prefix, factor in _SPICE_MULTIPLIERS.items():
-            if lowered_suffix.startswith(prefix):
-                return value * factor
-    return value
-
-
-def _format_spice_number(value: float) -> str:
-    """Format a float cleanly as a plain SPICE number without units."""
-    formatted = f"{value:.12g}"
-    return "0" if formatted == "-0" else formatted
-
-
-def _format_analysis_directive(analysis: OpAnalysis | TranAnalysis) -> str:
-    """Format the SPICE analysis directive matching an OpAnalysis or TranAnalysis."""
-    if isinstance(analysis, OpAnalysis):
-        return ".op"
-
-    tstop = _format_spice_number(analysis.stop_time)
-    if analysis.max_step is not None:
-        tmax = _format_spice_number(analysis.max_step)
-        return f".tran {tmax} {tstop} 0 {tmax}"
-
-    tstep = _format_spice_number(analysis.stop_time / 1000.0)
-    return f".tran {tstep} {tstop}"
-
-
-def _is_valid_tran_directive(line: str) -> bool:
-    """Return True if a .tran line specifies a strictly positive display step."""
-    parts = line.strip().split()
-    if len(parts) < 3:
-        return False
-    tstep = _parse_spice_number(parts[1])
-    return tstep is not None and tstep > 0.0
 
 
 def _collect_save_tokens(
@@ -158,29 +99,22 @@ def _format_save_lines(tokens: list[str]) -> list[str]:
     return lines
 
 
-def prepare_netlist(netlist_result: NetlistResult, analysis: Analysis) -> str:
+def prepare_netlist(netlist_result: NetlistResult) -> str:
     """Prepare a netlist string for ngspice batch execution.
 
-    Ensures the SPICE title line remains first, an analysis directive matching
-    ``analysis`` is present (replacing ``.tran 0 ...`` or conflicting analysis lines),
-    node voltages and component branch currents are requested via ``.save``, and
-    the netlist terminates cleanly with ``.end``.
+    Preserves the SPICE title line and existing analysis directives, injects any
+    missing ``.save`` tokens for node voltages and component branch currents
+    before ``.end``, and terminates cleanly with ``.end``.
     """
-    if not isinstance(analysis, OpAnalysis | TranAnalysis):
-        raise ValueError(f"Unsupported analysis kind for netlist preparation: {analysis.kind}")
+    if not netlist_result.netlist.strip():
+        raise ValueError("Cannot prepare an empty netlist.")
 
     normalized = netlist_result.netlist.replace("\r\n", "\n").replace("\r", "\n")
     raw_lines = normalized.splitlines()
-    if not raw_lines:
-        raise ValueError("Cannot prepare an empty netlist.")
-
-    target_directive = _format_analysis_directive(analysis)
-    expected_keyword = f".{analysis.kind}"
 
     # Preserve line 0 intact because SPICE treats the first line as the circuit title.
     body_lines: list[str] = [raw_lines[0]]
     existing_save_tokens: set[str] = set()
-    has_matching_analysis = False
     in_existing_save = False
 
     for line in raw_lines[1:]:
@@ -212,26 +146,10 @@ def prepare_netlist(netlist_result: NetlistResult, analysis: Analysis) -> str:
             body_lines.append(line)
             continue
 
-        if first_token in _ANALYSIS_DIRECTIVES:
-            if has_matching_analysis:
-                continue
-            if first_token == expected_keyword:
-                if isinstance(analysis, TranAnalysis) and not _is_valid_tran_directive(stripped):
-                    body_lines.append(target_directive)
-                else:
-                    body_lines.append(line)
-            else:
-                body_lines.append(target_directive)
-            has_matching_analysis = True
-            continue
-
         body_lines.append(line)
 
-    while body_lines and len(body_lines) > 1 and not body_lines[-1].strip():
+    while len(body_lines) > 1 and not body_lines[-1].strip():
         body_lines.pop()
-
-    if not has_matching_analysis:
-        body_lines.append(target_directive)
 
     save_tokens = _collect_save_tokens(netlist_result.components, existing_save_tokens)
     body_lines.extend(_format_save_lines(save_tokens))
@@ -628,11 +546,19 @@ def run_simulation(
     """
     warnings = list(netlist_result.warnings)
 
-    if netlist_result.errors or not netlist_result.netlist.strip():
+    if netlist_result.errors:
         return SimulationResult(
             analysis=analysis.kind,
             errors=list(netlist_result.errors),
             warnings=warnings,
+        )
+
+    if not netlist_result.netlist.strip():
+        return _error_result(
+            analysis,
+            "SIMULATION_FAILED",
+            "La netlist SPICE est vide.",
+            warnings,
         )
 
     if not isinstance(analysis, OpAnalysis | TranAnalysis):
@@ -665,7 +591,7 @@ def run_simulation(
     else:
         executable = ngspice_path
 
-    prepared_netlist = prepare_netlist(netlist_result, analysis)
+    prepared_netlist = prepare_netlist(netlist_result)
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
     env = {**os.environ, "SPICE_ASCIIRAWFILE": "1"}
 
