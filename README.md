@@ -1,5 +1,20 @@
 # Psice 
 
+[![CI](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)
+[![Issues ouvertes](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/issues.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues)
+![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white)
+![React + TypeScript](https://img.shields.io/badge/React-TypeScript-3178c6?logo=typescript&logoColor=white)
+![ngspice](https://img.shields.io/badge/moteur-ngspice-555)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
+
+**Jalons :**
+[![S1-2](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-1.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/1)
+[![S3-5](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-2.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/2)
+[![S6-8](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-3.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/3)
+[![S9-10](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-4.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/4)
+[![S11-12](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-5.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/5)
+
 Simulateur de circuits électroniques inspiré de LTspice, avec une interface moderne
 et ngspice comme moteur de simulation.
 
