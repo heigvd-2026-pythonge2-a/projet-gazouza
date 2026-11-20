@@ -70,6 +70,8 @@ interface ComponentSymbolProps {
   ghost?: boolean;
   draggable?: boolean;
   onSelect?: (e: KonvaEventObject<MouseEvent>) => void;
+  /** Right press on the component (the canvas decides on release what it means). */
+  onContextPress?: () => void;
   onMove?: (position: { x: number; y: number }) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
@@ -85,6 +87,7 @@ export function ComponentSymbol({
   ghost = false,
   draggable = false,
   onSelect,
+  onContextPress,
   onMove,
   onPinMouseDown,
 }: ComponentSymbolProps) {
@@ -111,6 +114,7 @@ export function ComponentSymbol({
       draggable={draggable}
       onMouseDown={(e) => {
         if (e.evt.button === 0) onSelect?.(e);
+        else if (e.evt.button === 2) onContextPress?.();
       }}
       onDragMove={(e) => {
         const node = e.target;
