@@ -1,4 +1,4 @@
-import { useId, type CSSProperties } from "react";
+import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 import {
   getDef,
@@ -9,7 +9,7 @@ import {
   type ParamOption,
   type PlacedComponent,
 } from "../store";
-import { INSPECTOR_ID } from "./inspectorFocus";
+import { INSPECTOR_ID, VALUE_FIELD_ATTR } from "./inspectorFocus";
 import { COLORS, UI } from "./theme";
 
 const controlStyle: CSSProperties = {
@@ -30,10 +30,25 @@ function Field(props: {
   /** For a "choice" parameter: a drop-down list instead of a text field. */
   options?: ParamOption[];
   problem?: string | null;
+  /** The component's main value: the field a double-click on the component goes to. */
+  valueField?: boolean;
   onChange: (value: string) => void;
 }) {
-  const { label, value, unit, options, problem, onChange } = props;
+  const { label, value, unit, options, problem, valueField, onChange } = props;
   const id = useId();
+  /** True once the text was changed since the field got the focus. */
+  const edited = useRef(false);
+
+  // Enter keeps what was typed, Escape takes it back; both give the keys back to the schematic.
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" && e.key !== "Escape") return;
+    e.preventDefault();
+    // Escape must not also reach the app (it would leave full screen or clear the selection).
+    e.stopPropagation();
+    if (e.key === "Escape" && edited.current) useEditorStore.getState().undo();
+    edited.current = false;
+    e.currentTarget.blur();
+  };
   return (
     <div style={{ marginBottom: 10 }}>
       <label
@@ -68,7 +83,17 @@ function Field(props: {
           <input
             id={id}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              edited.current = true;
+              onChange(e.target.value);
+            }}
+            onFocus={() => {
+              edited.current = false;
+              // The edits typed from now on are one undo step of their own, for Escape.
+              useEditorStore.getState().sealHistory();
+            }}
+            onKeyDown={onKeyDown}
+            {...(valueField ? { [VALUE_FIELD_ATTR]: "" } : {})}
             spellCheck={false}
             aria-invalid={problem ? true : undefined}
             style={controlStyle}
@@ -87,7 +112,8 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
   const setParam = useEditorStore((s) => s.setParam);
   const def = getDef(c.type);
   const params = visibleParams(def, c.params);
-  const hasValues = params.some((p) => p.kind === "value");
+  const mainValue = params.find((p) => p.kind === "value");
+  const hasValues = mainValue !== undefined;
 
   return (
     <>
@@ -112,6 +138,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
             value={value}
             unit={p.unit}
             options={p.kind === "choice" ? p.options : undefined}
+            valueField={p.name === mainValue?.name}
             problem={c.type === "label" && p.name === "net" ? netNameProblem(value) : null}
             onChange={(v) => setParam(c.id, p.name, v)}
           />

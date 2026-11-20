@@ -80,7 +80,7 @@ function componentMenu(selectionSize: number): MenuItem[] {
       // The properties panel only shows the fields of a single component.
       disabled: selectionSize !== 1,
       // After the menu has closed and given the focus back to where it was.
-      onSelect: () => setTimeout(focusInspector),
+      onSelect: () => setTimeout(() => focusInspector()),
     },
   ];
 }
@@ -603,6 +603,14 @@ export function SchematicCanvas() {
                 if (!selection.includes(c.id)) select([c.id]);
                 moveSelection(deltaFrom(storeComponent(c), position));
               }}
+              onDoubleClick={
+                tool.kind === "select"
+                  ? () => {
+                      select([c.id]);
+                      focusInspector({ value: true });
+                    }
+                  : undefined
+              }
               onPinMouseDown={
                 tool.kind === "select"
                   ? (pin) => {
