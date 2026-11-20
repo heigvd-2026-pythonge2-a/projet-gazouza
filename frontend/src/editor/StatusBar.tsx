@@ -6,7 +6,8 @@ import { COLORS, UI } from "./theme";
 
 /** Main gestures of the active tool; the full list is in the shortcuts panel. */
 const HINTS: Record<Tool["kind"], string> = {
-  select: "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer",
+  select:
+    "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer · F : ajuster la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
 };
