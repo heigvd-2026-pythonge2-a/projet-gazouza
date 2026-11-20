@@ -6,6 +6,7 @@ import {
   symbolBounds,
   toWorld,
   visibleParams,
+  type Bounds,
   type ComponentDef,
   type PlacedComponent,
   type SymbolShape,
@@ -15,6 +16,9 @@ import { COLORS, GRID } from "./theme";
 
 const STROKE = 2;
 const TEXT_WIDTH = 80;
+const FONT_SIZE = 12;
+/** Space between the symbol and its caption, in grid units. */
+const CAPTION_GAP = 0.3;
 const PIN_SIZE = 0.3;
 /** Clickable area around a pin, larger than its drawn square. */
 const PIN_HIT = 0.8;
@@ -64,6 +68,47 @@ function caption(c: PlacedComponent, def: ComponentDef): string | null {
   return value ? `${name}\n${value}${main?.unit ?? ""}` : name;
 }
 
+interface CaptionBox {
+  /** Top-left corner of the text box, in pixels relative to the component position. */
+  x: number;
+  y: number;
+  align: "left" | "center" | "right";
+}
+
+/**
+ * Where to draw the caption so it never covers the symbol, its pins or its marks ("+", arrow).
+ * The symbol bounds are turned like the symbol first; the caption then goes right of a vertical
+ * symbol (centred on it) or centred above a horizontal one.
+ */
+function captionPlacement(c: PlacedComponent, bounds: Bounds, text: string): CaptionBox {
+  const origin = { ...c, position: { x: 0, y: 0 } };
+  const a = toWorld(bounds.min, origin);
+  const b = toWorld(bounds.max, origin);
+  const min = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
+  const max = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) };
+  const height = text.split("\n").length * FONT_SIZE;
+
+  if (c.type === "label") {
+    // A label's net name follows the flag's tip, wherever the flag points.
+    const tip = toWorld({ x: bounds.max.x + 0.3, y: 0 }, origin);
+    const right = tip.x >= -0.01;
+    return {
+      x: tip.x * GRID - (right ? 0 : TEXT_WIDTH),
+      y: tip.y * GRID - height / 2,
+      align: right ? "left" : "right",
+    };
+  }
+  const centre = { x: ((min.x + max.x) / 2) * GRID, y: ((min.y + max.y) / 2) * GRID };
+  if (max.y - min.y >= max.x - min.x) {
+    return { x: (max.x + CAPTION_GAP) * GRID, y: centre.y - height / 2, align: "left" };
+  }
+  return {
+    x: centre.x - TEXT_WIDTH / 2,
+    y: (min.y - CAPTION_GAP) * GRID - height,
+    align: "center",
+  };
+}
+
 interface ComponentSymbolProps {
   component: PlacedComponent;
   selected?: boolean;
@@ -100,12 +145,8 @@ export function ComponentSymbol({
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
-  // Caption anchor: right of the symbol at rotation 0, then transformed like the symbol.
-  const anchorLocal =
-    c.type === "label" ? { x: bounds.max.x + 0.3, y: 0 } : { x: bounds.max.x + 0.4, y: -0.6 };
-  const anchor = toWorld(anchorLocal, { ...c, position: { x: 0, y: 0 } });
   const text = caption(c, def);
-  const alignRight = anchor.x < -0.01;
+  const textBox = text === null ? null : captionPlacement(c, bounds, text);
 
   const snap = (v: number) => Math.round(v / GRID) * GRID;
 
@@ -181,14 +222,14 @@ export function ComponentSymbol({
             />
           ))}
       </Group>
-      {text !== null && (
+      {text !== null && textBox !== null && (
         <Text
           text={text}
-          x={anchor.x * GRID - (alignRight ? TEXT_WIDTH : 0)}
-          y={anchor.y * GRID - (c.type === "label" ? 6 : 0)}
+          x={textBox.x}
+          y={textBox.y}
           width={TEXT_WIDTH}
-          align={alignRight ? "right" : "left"}
-          fontSize={12}
+          align={textBox.align}
+          fontSize={FONT_SIZE}
           fill={selected ? COLORS.selected : COLORS.text}
           listening={false}
         />
