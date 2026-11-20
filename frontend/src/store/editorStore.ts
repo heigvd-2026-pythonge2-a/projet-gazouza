@@ -11,9 +11,11 @@ import {
   emptyDoc,
   mirrorComponents,
   moveComponent,
+  renameComponent,
   rotateComponents,
   rotateCw,
   samePoint,
+  setParam,
   type EditorDoc,
   type GridPoint,
   type Rotation,
@@ -65,7 +67,11 @@ interface EditorState {
   startPlacing: (type: string) => void;
   /** Places the component of the active "place" tool at this grid position. */
   placeAt: (position: GridPoint) => void;
+  /** Adds a component dropped from the palette, selects it and goes back to the select tool. */
+  dropComponent: (type: string, position: GridPoint) => void;
   moveComponent: (id: string, position: GridPoint) => void;
+  renameComponent: (id: string, name: string) => void;
+  setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
   /** Presses on a pin with the select tool: starts a wire there. */
@@ -116,7 +122,17 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return { doc };
     }),
 
+  dropComponent: (type, position) =>
+    set((s) => {
+      const added = addComponent(s.doc, { type, position, rotation: 0, mirror: false });
+      return { doc: added.doc, selection: [added.id], tool: { kind: "select" }, draft: null };
+    }),
+
   moveComponent: (id, position) => set((s) => ({ doc: moveComponent(s.doc, id, position) })),
+
+  renameComponent: (id, name) => set((s) => ({ doc: renameComponent(s.doc, id, name) })),
+
+  setParam: (id, param, value) => set((s) => ({ doc: setParam(s.doc, id, param, value) })),
 
   startWiring: () => set({ tool: { kind: "wire" }, selection: [], draft: null }),
 

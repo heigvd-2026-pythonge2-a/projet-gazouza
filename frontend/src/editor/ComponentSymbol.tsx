@@ -5,10 +5,12 @@ import {
   getDef,
   symbolBounds,
   toWorld,
+  visibleParams,
   type ComponentDef,
   type PlacedComponent,
   type SymbolShape,
 } from "../store";
+import { arcPoints } from "./symbolGeometry";
 import { COLORS, GRID } from "./theme";
 
 const STROKE = 2;
@@ -20,16 +22,6 @@ const PIN_HIT = 0.8;
 function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
   const container = e.target.getStage()?.container();
   if (container) container.style.cursor = cursor;
-}
-
-function arcPoints(s: Extract<SymbolShape, { kind: "arc" }>): number[] {
-  const points: number[] = [];
-  const steps = 12;
-  for (let i = 0; i <= steps; i++) {
-    const a = ((s.start + (s.sweep * i) / steps) * Math.PI) / 180;
-    points.push((s.x + s.radius * Math.cos(a)) * GRID, (s.y + s.radius * Math.sin(a)) * GRID);
-  }
-  return points;
 }
 
 function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }) {
@@ -56,13 +48,19 @@ function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }
   }
 }
 
-/** Text shown next to the component: its name and main value (or the net name for a label). */
+/**
+ * Text shown next to the component: its name and main value (or the net name for a label).
+ * A source that is not DC shows its waveform ("Impulsion"), since one value would mislead.
+ */
 function caption(c: PlacedComponent, def: ComponentDef): string | null {
   if (c.type === "ground") return null;
   if (c.type === "label") return c.params.net ?? "";
-  const main = def.params.find((p) => p.name !== "waveform");
-  const value = main ? (c.params[main.name] ?? "") : "";
   const name = c.name ?? "";
+  const waveform = def.params.find((p) => p.name === "waveform");
+  const selected = waveform?.options.find((o) => o.value === c.params.waveform);
+  if (selected && selected.value !== "dc") return `${name}\n${selected.label}`;
+  const main = visibleParams(def, c.params).find((p) => p.kind === "value");
+  const value = main ? (c.params[main.name] ?? "") : "";
   return value ? `${name}\n${value}${main?.unit ?? ""}` : name;
 }
 

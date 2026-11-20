@@ -222,6 +222,46 @@ export function moveComponent(doc: EditorDoc, id: string, position: GridPoint): 
   return updateComponents(doc, new Set([id]), (c) => ({ ...c, position: { ...position } }));
 }
 
+export function renameComponent(doc: EditorDoc, id: string, name: string): EditorDoc {
+  return updateComponents(doc, new Set([id]), (c) => ({ ...c, name }));
+}
+
+export function setParam(doc: EditorDoc, id: string, param: string, value: string): EditorDoc {
+  return updateComponents(doc, new Set([id]), (c) => ({
+    ...c,
+    params: { ...c.params, [param]: value },
+  }));
+}
+
+// --- Checks shown while editing ---------------------------------------------------------------
+// The document accepts any value: the netlist module reports the same problems (MISSING_NAME,
+// DUPLICATE_NAME, BAD_LABEL_NAME...). These checks only warn the user earlier. Texts in French.
+
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+/** Problem with the SPICE name of `c` (whose type has `prefix`), or null if it is fine. */
+export function nameProblem(doc: EditorDoc, c: PlacedComponent, prefix: string): string | null {
+  const name = c.name ?? "";
+  if (name === "") return "Le nom est obligatoire.";
+  if (!name.toUpperCase().startsWith(prefix.toUpperCase()))
+    return `Le nom doit commencer par « ${prefix} ».`;
+  if (!IDENTIFIER.test(name)) return "Lettres, chiffres et _ seulement.";
+  // SPICE ignores case: R1 and r1 are the same element.
+  const taken = doc.components.some(
+    (other) => other.id !== c.id && other.name?.toUpperCase() === name.toUpperCase(),
+  );
+  return taken ? `Un autre composant s'appelle déjà ${name}.` : null;
+}
+
+/** Problem with a label's node name, or null if it is fine (docs/format-schema.md). */
+export function netNameProblem(net: string): string | null {
+  if (net === "") return "Le nom du nœud est obligatoire.";
+  if (!IDENTIFIER.test(net))
+    return "Lettres, chiffres et _ seulement, en commençant par une lettre.";
+  if (/^n\d+$/i.test(net)) return "Ce nom est réservé aux nœuds automatiques (n1, n2…).";
+  return null;
+}
+
 export const rotateCw = (r: Rotation): Rotation => ((r + 90) % 360) as Rotation;
 
 export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
