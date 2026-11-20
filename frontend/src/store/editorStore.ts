@@ -78,6 +78,8 @@ interface EditorState {
   clipboard: Clip | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
   history: History<EditorDoc>;
+  /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
+  savedDoc: EditorDoc;
 
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
@@ -146,7 +148,30 @@ interface EditorState {
    * field gets the focus: Escape can then undo exactly what was typed in it).
    */
   sealHistory: () => void;
+  /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
+  newDocument: () => void;
+  /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
+  openDocument: (doc: EditorDoc) => void;
+  /** Records that the current document was saved (Ctrl+S). */
+  markSaved: () => void;
 }
+
+/** State of a document just created or opened: nothing selected, nothing to undo. */
+function freshDocument(doc: EditorDoc) {
+  return {
+    doc,
+    savedDoc: doc,
+    history: emptyHistory<EditorDoc>(),
+    selection: [],
+    wirePart: null,
+    tool: { kind: "select" } as const,
+    draft: null,
+  };
+}
+
+/** True if the document has changes that were not saved. */
+export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
+  s.doc !== s.savedDoc;
 
 /**
  * State update for a document change, recorded in the history. `key` merges consecutive edits of
@@ -168,13 +193,8 @@ function existing(doc: EditorDoc, selection: string[]): string[] {
 }
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
-  doc: emptyDoc(),
-  selection: [],
-  wirePart: null,
-  tool: { kind: "select" },
-  draft: null,
+  ...freshDocument(emptyDoc()),
   clipboard: null,
-  history: emptyHistory(),
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null }),
 
@@ -305,6 +325,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
 
   sealHistory: () => set((s) => ({ history: seal(s.history) })),
+
+  newDocument: () => set(freshDocument(emptyDoc())),
+
+  openDocument: (doc) => set(freshDocument(doc)),
+
+  markSaved: () => set((s) => ({ savedDoc: s.doc })),
 
   selectWirePart: (part) =>
     set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),

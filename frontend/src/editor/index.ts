@@ -4,4 +4,4 @@ export { Inspector } from "./Inspector";
 export { SHOW_INSPECTOR_EVENT } from "./inspectorFocus";
 export { Palette } from "./Palette";
 export { StatusBar } from "./StatusBar";
-export { UndoRedoButtons } from "./UndoRedoButtons";
+export { EditorToolbar } from "./Toolbar";
