@@ -12,6 +12,7 @@ import {
   moveWirePart,
   pinPosition,
   rectFrom,
+  samePoint,
   unconnectedPins,
   useEditorStore,
   wirePartAt,
@@ -287,6 +288,15 @@ export function SchematicCanvas() {
     return p ? { x: Math.round(p.x / GRID), y: Math.round(p.y / GRID) } : null;
   };
 
+  /**
+   * Follows the pointer on the grid. The state only changes when it reaches another grid point:
+   * moving within a cell must not redraw the schematic and route the wire being drawn again.
+   */
+  const trackPointer = () => {
+    const p = pointerGrid();
+    setPointer((prev) => (prev && p && samePoint(prev, p) ? prev : p));
+  };
+
   /** Zooms by `factor`, keeping the canvas point `p` (pixels) where it is on screen. */
   const zoomAt = useCallback((factor: number, p: { x: number; y: number }) => {
     setViewport((v) => {
@@ -526,7 +536,7 @@ export function SchematicCanvas() {
   };
 
   const onMouseMove = () => {
-    if (tool.kind !== "select") setPointer(pointerGrid());
+    if (tool.kind !== "select") trackPointer();
   };
 
   /** `c` as it is in the store (the one drawn may be shifted by the drag in progress). */
@@ -644,7 +654,7 @@ export function SchematicCanvas() {
                 tool.kind === "select"
                   ? (pin) => {
                       startWireFrom(pinPosition(c, pin));
-                      setPointer(pointerGrid());
+                      trackPointer();
                     }
                   : undefined
               }
