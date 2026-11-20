@@ -1,14 +1,16 @@
 import type { KonvaEventObject } from "konva/lib/Node";
-import { Circle, Group, Line } from "react-konva";
+import { Circle, Group, Line, Rect } from "react-konva";
 
 import {
   anchorAt,
   endPosition,
   routeThrough,
   routeTo,
+  wirePartPoints,
   wirePath,
   type EditorDoc,
   type GridPoint,
+  type WirePart,
 } from "../store";
 import { COLORS, GRID } from "./theme";
 
@@ -16,6 +18,8 @@ const WIRE_WIDTH = 2;
 /** Clickable width of a wire, in pixels. */
 const WIRE_HIT = 10;
 const DOT_RADIUS = 4;
+/** Side of the square handle drawn on a selected bend, in pixels. */
+const HANDLE = 8;
 
 const flat = (points: readonly GridPoint[]) => points.flatMap((p) => [p.x * GRID, p.y * GRID]);
 
@@ -41,16 +45,35 @@ function dotPositions(doc: EditorDoc): { id: string; position: GridPoint }[] {
 interface WiresProps {
   doc: EditorDoc;
   selection: readonly string[];
+  /** Bend or segment selected on its own, highlighted. */
+  part?: WirePart | null;
   /** Left press on a wire or junction, with the select tool. */
   onSelect?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
+  /** Left press on a wire (instead of `onSelect`), to pick one of its bends or segments. */
+  onWirePress?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
+  /** Double click on a wire. */
+  onWireDoubleClick?: (id: string) => void;
 }
 
 /** Wires of the document, and the dots of their junctions. */
-export function Wires({ doc, selection, onSelect }: WiresProps) {
+export function Wires({
+  doc,
+  selection,
+  part = null,
+  onSelect,
+  onWirePress,
+  onWireDoubleClick,
+}: WiresProps) {
   const color = (id: string) => (selection.includes(id) ? COLORS.selected : COLORS.wire);
   const press = (id: string) => (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 0) onSelect?.(id, e);
   };
+  const wirePress = (id: string) => (e: KonvaEventObject<MouseEvent>) => {
+    if (e.evt.button !== 0) return;
+    if (onWirePress) onWirePress(id, e);
+    else onSelect?.(id, e);
+  };
+  const partPoints = part ? wirePartPoints(doc, part) : null;
   return (
     <Group>
       {doc.wires.map((w) => (
@@ -63,9 +86,21 @@ export function Wires({ doc, selection, onSelect }: WiresProps) {
           lineCap="round"
           lineJoin="round"
           listening={onSelect !== undefined}
-          onMouseDown={press(w.id)}
+          onMouseDown={wirePress(w.id)}
+          onDblClick={(e) => {
+            if (e.evt.button === 0) onWireDoubleClick?.(w.id);
+          }}
         />
       ))}
+      {partPoints?.length === 2 && (
+        <Line
+          points={flat(partPoints)}
+          stroke={COLORS.selected}
+          strokeWidth={WIRE_WIDTH + 1}
+          lineCap="round"
+          listening={false}
+        />
+      )}
       {dotPositions(doc).map((d) => (
         <Circle
           key={d.id}
@@ -78,6 +113,18 @@ export function Wires({ doc, selection, onSelect }: WiresProps) {
           onMouseDown={press(d.id)}
         />
       ))}
+      {partPoints?.length === 1 && partPoints[0] && (
+        <Rect
+          x={partPoints[0].x * GRID - HANDLE / 2}
+          y={partPoints[0].y * GRID - HANDLE / 2}
+          width={HANDLE}
+          height={HANDLE}
+          fill="#ffffff"
+          stroke={COLORS.selected}
+          strokeWidth={1.5}
+          listening={false}
+        />
+      )}
     </Group>
   );
 }

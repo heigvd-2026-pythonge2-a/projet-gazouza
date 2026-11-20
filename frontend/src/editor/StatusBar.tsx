@@ -6,6 +6,7 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic : sélectionner · Maj + clic : sélection multiple · " +
     "Glisser dans le vide : sélection par zone · Clic droit sur un composant : menu · " +
     "Tirer depuis une broche : fil · " +
+    "Clic sur un fil : coude ou tronçon, à glisser · Double-clic : fil entier · " +
     "Glisser : déplacer la sélection · Flèches : la déplacer d'un pas · " +
     "R : tourner · M : miroir · Suppr : supprimer · Ctrl+Z / Ctrl+Y : annuler / rétablir · " +
     "Molette : zoom · Clic droit ou molette maintenu : déplacer la vue",
@@ -23,9 +24,12 @@ export function StatusBar() {
   const tool = useEditorStore((s) => s.tool);
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
+  const wirePart = useEditorStore((s) => s.wirePart);
 
   let selected = "";
-  if (selection.length === 1) {
+  if (wirePart) {
+    selected = wirePart.kind === "bend" ? "Sélection : coude de fil" : "Sélection : tronçon de fil";
+  } else if (selection.length === 1) {
     const c = doc.components.find((x) => x.id === selection[0]);
     selected = c ? `Sélection : ${c.name ?? c.params.net ?? "masse"}` : "Sélection : fil";
   } else if (selection.length > 1) {
