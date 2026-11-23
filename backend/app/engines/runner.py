@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from collections import deque
+from collections.abc import Iterable
 from pathlib import Path
 
 from app.engines.locator import NgspiceNotFoundError, locate_ngspice
@@ -36,12 +37,29 @@ _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
 _SAVE_ITEMS_PER_LINE = 10
 _AC_SENSED_PREFIXES: tuple[str, ...] = ("r", "c", "d", "i")
-_FORBIDDEN_DIRECTIVES: frozenset[str] = frozenset(
-    {".control", ".endc", ".include", ".lib", ".shell", "shell"}
+_ALLOWED_DOT_DIRECTIVES: frozenset[str] = frozenset(
+    {
+        ".model",
+        ".subckt",
+        ".ends",
+        ".param",
+        ".ic",
+        ".nodeset",
+        ".op",
+        ".tran",
+        ".ac",
+        ".dc",
+        ".end",
+        ".save",
+    }
 )
-_FORBIDDEN_PREFIXES: tuple[str, ...] = (".inc", ".lib")
-_CONTROL_DIRECTIVE = ".control"
-_MIN_CONTROL_PREFIX_LEN = 5
+_ALLOWED_MODEL_TYPES: frozenset[str] = frozenset(
+    {"r", "c", "l", "d", "npn", "pnp", "nmos", "pmos", "njf", "pjf", "sw", "csw"}
+)
+_ALLOWED_ELEMENT_PREFIXES: frozenset[str] = frozenset(
+    {"r", "c", "l", "v", "i", "d", "q", "m", "j", "e", "f", "g", "h", "s", "w", "x"}
+)
+_MODEL_TYPE_RE = re.compile(r"^[a-z0-9_]+")
 
 
 class UnsafeNetlistError(ValueError):
@@ -82,6 +100,18 @@ def _error_result(
     )
 
 
+def _validate_save_component_name(spice_name: str) -> None:
+    """Reject SPICE component names containing whitespace, control chars, or ';'."""
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 or ch == ";" for ch in spice_name):
+        raise UnsafeNetlistError(
+            f"Unsafe SPICE component name for .save: {spice_name!r}.",
+            user_message=(
+                "Un nom de composant SPICE contient des caractères interdits "
+                "pour des raisons de sécurité."
+            ),
+        )
+
+
 def _collect_save_tokens(
     components: dict[str, str],
     existing_tokens: set[str],
@@ -102,7 +132,8 @@ def _collect_save_tokens(
         return needed
 
     for spice_name in components:
-        comp_lower = spice_name.strip().lower()
+        _validate_save_component_name(spice_name)
+        comp_lower = spice_name.lower()
         # Voltage sources and inductors are already saved by `all` as `i(v*)` / `i(l*)`.
         # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
         # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
@@ -134,32 +165,58 @@ def _format_save_lines(tokens: list[str]) -> list[str]:
     return lines
 
 
-def _is_forbidden_first_token(token: str) -> bool:
-    """Return True if a lowercased first token is a forbidden SPICE/ngspice command."""
-    base_token = token.split(";", 1)[0]
-    if base_token in _FORBIDDEN_DIRECTIVES or base_token.startswith(_FORBIDDEN_PREFIXES):
-        return True
-    return len(base_token) >= _MIN_CONTROL_PREFIX_LEN and _CONTROL_DIRECTIVE.startswith(base_token)
+def _validate_dot_directive(tokens: list[str], first_token: str, base_token: str) -> None:
+    """Validate that a '.' directive is strictly allowlisted and safe if '.model'."""
+    if base_token not in _ALLOWED_DOT_DIRECTIVES:
+        raise UnsafeNetlistError(
+            f"Forbidden SPICE directive or command: {first_token!r}.",
+            user_message=(
+                f"La directive SPICE « {first_token} » n'est pas autorisée "
+                "pour des raisons de sécurité."
+            ),
+        )
+    if base_token != ".model":
+        return
+
+    if len(tokens) < 3:
+        raise UnsafeNetlistError(
+            "Incomplete .model SPICE directive.",
+            user_message=(
+                "La directive SPICE « .model » doit préciser un type de modèle autorisé "
+                "pour des raisons de sécurité."
+            ),
+        )
+    rest = " ".join(tokens[2:]).lower().lstrip(" \t\r\n(")
+    match = _MODEL_TYPE_RE.match(rest)
+    model_type = match.group(0) if match is not None else ""
+    if model_type not in _ALLOWED_MODEL_TYPES:
+        detail = model_type or tokens[2]
+        raise UnsafeNetlistError(
+            f"Forbidden SPICE model type: {detail!r}.",
+            user_message=(
+                f"Le type de modèle SPICE « {detail} » n'est pas autorisé "
+                "pour des raisons de sécurité."
+            ),
+        )
 
 
-def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
+def _unfold_spice_lines(raw_lines: Iterable[str]) -> tuple[list[str], list[str]]:
     """Unfold SPICE '+' continuations logically, ignoring '*' comment lines.
 
     Returns both standard space-joined logical lines and compact-joined lines (without
     inserting spaces when '+' has no following whitespace) to catch split tokens.
     """
-    normalized = netlist.replace("\r\n", "\n").replace("\r", "\n")
     spaced_lines: list[str] = []
     compact_lines: list[str] = []
 
-    for raw_line in normalized.splitlines():
+    for raw_line in raw_lines:
         stripped = raw_line.strip().lstrip("\ufeff").strip()
         if not stripped or stripped.startswith("*"):
             continue
 
         if stripped.startswith("+"):
             after_plus = stripped[1:]
-            continuation = after_plus.strip()
+            continuation = after_plus.strip().lstrip("\ufeff").strip()
             if not continuation:
                 continue
             if spaced_lines:
@@ -179,12 +236,12 @@ def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
 
 
 def validate_netlist_safety(netlist: str) -> None:
-    """Validate that a SPICE netlist contains no null bytes or forbidden directives.
+    """Validate that a SPICE netlist conforms to a strict directive and element allowlist.
 
     Raises:
-        UnsafeNetlistError: If null bytes or forbidden commands (``.control`` or
-            ngspice prefixes >=5 chars, ``.endc``, ``.shell``, ``shell``, ``.include`` /
-            ``.inc*`` prefixes >=4 chars, or ``.lib`` / ``.lib*``) are found.
+        UnsafeNetlistError: If null bytes, non-allowlisted ``.`` directives,
+            non-allowlisted ``.model`` types, ``shell`` commands, leading ``+`` on line 0,
+            or non-allowlisted SPICE element prefixes (such as XSPICE ``A*``) are found.
     """
     if "\x00" in netlist:
         raise UnsafeNetlistError(
@@ -192,14 +249,51 @@ def validate_netlist_safety(netlist: str) -> None:
             user_message="La netlist SPICE contient un caractère nul interdit.",
         )
 
-    spaced_lines, compact_lines = _unfold_spice_lines(netlist)
+    normalized = netlist.replace("\r\n", "\n").replace("\r", "\n")
+    raw_lines = normalized.splitlines()
+    if not raw_lines:
+        return
+
+    title_line = raw_lines[0].strip().lstrip("\ufeff").strip()
+    if title_line and not title_line.startswith("*"):
+        if title_line.startswith("+"):
+            raise UnsafeNetlistError(
+                "Unexpected '+' continuation on SPICE title line.",
+                user_message=(
+                    "La ligne de titre SPICE ne peut pas commencer par « + » "
+                    "pour des raisons de sécurité."
+                ),
+            )
+        title_tokens = title_line.split()
+        first_title_token = title_tokens[0]
+        base_title_token = first_title_token.lower().split(";", 1)[0]
+        if base_title_token.startswith("."):
+            _validate_dot_directive(title_tokens, first_title_token, base_title_token)
+        elif base_title_token == "shell":
+            raise UnsafeNetlistError(
+                f"Forbidden SPICE directive or command: {first_title_token!r}.",
+                user_message=(
+                    f"La directive SPICE « {first_title_token} » n'est pas autorisée "
+                    "pour des raisons de sécurité."
+                ),
+            )
+
+    spaced_lines, compact_lines = _unfold_spice_lines(raw_lines[1:])
     for line in (*spaced_lines, *compact_lines):
-        first_token = line.split()[0]
-        if _is_forbidden_first_token(first_token.lower()):
+        tokens = line.split()
+        first_token = tokens[0]
+        base_token = first_token.lower().split(";", 1)[0]
+        if base_token.startswith("."):
+            _validate_dot_directive(tokens, first_token, base_token)
+        elif (
+            not base_token
+            or base_token == "shell"
+            or base_token[0] not in _ALLOWED_ELEMENT_PREFIXES
+        ):
             raise UnsafeNetlistError(
                 f"Forbidden SPICE directive or command: {first_token!r}.",
                 user_message=(
-                    f"La directive SPICE « {first_token} » n'est pas autorisée "
+                    f"La directive ou le composant SPICE « {first_token} » n'est pas autorisé "
                     "pour des raisons de sécurité."
                 ),
             )
@@ -353,7 +447,9 @@ def _prepare_netlist_for_execution(
     body_lines.extend(_format_save_lines(save_tokens))
     body_lines.append(".end")
 
-    return "\n".join(body_lines) + "\n", current_aliases, node_aliases
+    prepared = "\n".join(body_lines) + "\n"
+    validate_netlist_safety(prepared)
+    return prepared, current_aliases, node_aliases
 
 
 def prepare_netlist(
@@ -910,6 +1006,7 @@ def run_simulation(
             completed = subprocess.run(
                 [str(executable), "-b", _CIRCUIT_FILENAME, "-r", _RAWFILE_FILENAME],
                 cwd=tmp_path,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
