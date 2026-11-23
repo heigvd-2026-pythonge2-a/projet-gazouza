@@ -15,7 +15,7 @@ from app.netlist.writer import analysis_line, component_line
 
 # Control characters, \r and \n included, plus the Unicode line breaks. A title containing one
 # would start a new SPICE line: anyone could hide directives in a schematic file.
-LINE_BREAKS = re.compile(r"[\x00-\x1f\x7f\x85  ]")
+LINE_BREAKS = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 
 
 def header(title: str | None) -> str:
