@@ -622,6 +622,26 @@ def _build_failure_diagnostic(
     return Diagnostic(code="SIMULATION_FAILED", message=message, targets=[])
 
 
+def _find_spice_scripts_dir(executable: Path) -> Path | None:
+    """Return the ngspice scripts directory when ``spinit`` exists under the vendor root."""
+    resolved = executable.resolve()
+    for vendor_root in (resolved.parent.parent, resolved.parent):
+        scripts_dir = vendor_root / "share" / "ngspice" / "scripts"
+        if (scripts_dir / "spinit").is_file():
+            return scripts_dir
+    return None
+
+
+def _build_ngspice_env(executable: Path) -> dict[str, str]:
+    """Build subprocess environment variables for batch ngspice execution."""
+    env = {**os.environ, "SPICE_ASCIIRAWFILE": "1"}
+    if not env.get("SPICE_SCRIPTS"):
+        scripts_dir = _find_spice_scripts_dir(executable)
+        if scripts_dir is not None:
+            env["SPICE_SCRIPTS"] = str(scripts_dir)
+    return env
+
+
 def run_simulation(
     netlist_result: NetlistResult,
     analysis: Analysis,
@@ -722,7 +742,7 @@ def run_simulation(
         executable = ngspice_path
 
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    env = {**os.environ, "SPICE_ASCIIRAWFILE": "1"}
+    env = _build_ngspice_env(executable)
 
     with tempfile.TemporaryDirectory(prefix="psice_ngspice_") as tmp_dir:
         tmp_path = Path(tmp_dir)

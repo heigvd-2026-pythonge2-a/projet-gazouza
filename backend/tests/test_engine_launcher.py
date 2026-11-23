@@ -1,5 +1,7 @@
 """Unit and integration tests for backend.app.engines.launcher."""
 
+import asyncio
+import json
 import socket
 import sys
 import threading
@@ -14,9 +16,21 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 from starlette.routing import Match, NoMatchFound
+from starlette.types import Receive, Scope, Send
 
 from app.engines import launcher
+from app.engines.locator import NgspiceNotFoundError, locate_ngspice
 from app.main import app as backend_app
+from app.models.netlist import Diagnostic
+from app.models.simulation import Axis, SimulationResult, Trace
+
+
+def _has_ngspice() -> bool:
+    try:
+        locate_ngspice()
+    except NgspiceNotFoundError:
+        return False
+    return True
 
 
 def _touch(path: Path, content: str = "") -> Path:
@@ -955,3 +969,175 @@ def test_notify_error_behavior_across_frozen_and_non_frozen_modes(
         user32=SimpleNamespace(MessageBoxW=broken_message_box)
     )
     launcher._notify_error("Port occupé")
+
+
+def test_run_self_check_success_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+    fake_ngspice = tmp_path / "vendor" / "ngspice" / "bin" / "ngspice_con.exe"
+    _touch(fake_ngspice)
+
+    monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda _netlist, _analysis, ngspice_path=None: SimulationResult(
+            analysis="tran",
+            axis=Axis(name="time", unit="s", values=[0.0, 0.005]),
+            traces=[
+                Trace(
+                    name="v(out)",
+                    kind="voltage",
+                    unit="V",
+                    net="out",
+                    values=[0.0, 4.9663],
+                )
+            ],
+        ),
+    )
+
+    exit_code = launcher.main(["--self-check", "--frontend-dist", str(dist_dir)])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Self-check OK:" in out
+    assert "rc_points=2" in out
+    assert "v_out_final=4.9663V" in out
+
+    # Windowed mode with sys.stdout=None completes cleanly without crashing.
+    monkeypatch.setattr(sys, "stdout", None)
+    assert launcher.main(["--self-check", "--frontend-dist", str(dist_dir)]) == 0
+
+
+def test_run_self_check_auto_resolves_frontend_and_validates_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Missing auto-resolved frontend/dist fails cleanly.
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: None)
+    with pytest.raises(RuntimeError, match="index.html"):
+        launcher.run_self_check()
+
+    # Empty library fails cleanly.
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<html></html>")
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: dist_dir)
+    monkeypatch.setattr(launcher, "load_library", dict)
+    with pytest.raises(RuntimeError, match="bibliothèque"):
+        launcher.run_self_check()
+    monkeypatch.undo()
+
+    # Missing ngspice binary fails cleanly.
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: dist_dir)
+    monkeypatch.setattr(
+        launcher,
+        "locate_ngspice",
+        lambda: (_ for _ in ()).throw(NgspiceNotFoundError("missing")),
+    )
+    with pytest.raises(RuntimeError, match="ngspice est introuvable"):
+        launcher.run_self_check()
+
+    # Simulation error diagnostic fails cleanly.
+    fake_ngspice = tmp_path / "ngspice_con.exe"
+    _touch(fake_ngspice)
+    monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(
+            analysis="tran",
+            errors=[Diagnostic(code="SIMULATION_FAILED", message="échec test", targets=[])],
+        ),
+    )
+    with pytest.raises(RuntimeError, match="échec test"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # Empty traces/axis fails cleanly.
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(analysis="tran", axis=None, traces=[]),
+    )
+    with pytest.raises(RuntimeError, match="aucune courbe valide"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # Out-of-range final RC voltage fails cleanly.
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(
+            analysis="tran",
+            axis=Axis(name="time", unit="s", values=[0.0, 0.005]),
+            traces=[Trace(name="v(out)", kind="voltage", unit="V", net="out", values=[0.0, 1.0])],
+        ),
+    )
+    with pytest.raises(RuntimeError, match="tension finale incohérente"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # CLI rejects --self-check combined with --dev-url or --port with exit code 2.
+    assert launcher.main(["--self-check", "--port", "8000"]) == 2
+    assert "--self-check" in capsys.readouterr().err
+    assert launcher.main(["--self-check", "--dev-url", "http://127.0.0.1:5173"]) == 2
+    assert "--self-check" in capsys.readouterr().err
+
+    # CLI returns exit code 1 when self-check fails at runtime.
+    assert launcher.main(["--self-check", "--frontend-dist", str(tmp_path / "missing")]) == 1
+    assert "Erreur :" in capsys.readouterr().err
+
+
+def test_verify_launcher_app_detects_broken_routes(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<html></html>")
+    valid_app = launcher.create_launcher_app(frontend_dist=dist_dir)
+    asyncio.run(launcher._verify_launcher_app(valid_app))
+
+    async def _send_reply(send: Send, status: int, body: bytes) -> None:
+        await send({"type": "http.response.start", "status": status, "headers": []})
+        await send({"type": "http.response.body", "body": body})
+
+    class _MockApp:
+        def __init__(self, handler: Callable[[Scope, Receive, Send], object]) -> None:
+            self._handler = handler
+            self.router = valid_app.router
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            await self._handler(scope, receive, send)  # type: ignore[misc]
+
+    async def _bad_health(_scope: Scope, _receive: Receive, send: Send) -> None:
+        await _send_reply(send, 500, b"{}")
+
+    with pytest.raises(RuntimeError, match="/api/health"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_bad_health)))  # type: ignore[arg-type]
+
+    async def _bad_index(scope: Scope, _receive: Receive, send: Send) -> None:
+        if scope.get("path") == "/api/health":
+            await _send_reply(send, 200, json.dumps({"status": "ok"}).encode())
+            return
+        await _send_reply(send, 404, b"missing")
+
+    with pytest.raises(RuntimeError, match="page d'accueil"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_bad_index)))  # type: ignore[arg-type]
+
+    async def _allow_evil_host(scope: Scope, _receive: Receive, send: Send) -> None:
+        if scope.get("path") == "/api/health":
+            await _send_reply(send, 200, json.dumps({"status": "ok"}).encode())
+            return
+        await _send_reply(send, 200, b"<html></html>")
+
+    with pytest.raises(RuntimeError, match="TrustedHostMiddleware"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_allow_evil_host)))  # type: ignore[arg-type]
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_run_self_check_real_ngspice_with_temp_frontend_dist(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+
+    summary = launcher.run_self_check(frontend_dist=dist_dir)
+    assert "Self-check OK:" in summary
+    assert "v_out_final=4.96" in summary

@@ -7,6 +7,8 @@ so ``uv run uvicorn app.main:app --reload`` must run alongside ``pnpm dev``).
 """
 
 import argparse
+import asyncio
+import json
 import logging
 import os
 import socket
@@ -32,7 +34,12 @@ from starlette.routing import BaseRoute, Match, Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.engines.locator import NgspiceNotFoundError, locate_ngspice
+from app.engines.runner import run_simulation
 from app.main import app as backend_app
+from app.models.netlist import NetlistResult
+from app.models.simulation import TranAnalysis
+from app.netlist.library import load_library
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +536,134 @@ def launch(
         _open_webview_window(server.url, debug=debug)
 
 
+async def _asgi_get(app: ASGIApp, path: str, host: str) -> tuple[int, bytes]:
+    """Execute an in-process ASGI HTTP GET request without opening a socket."""
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.4"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode("ascii"),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"host", host.encode("ascii"))],
+        "client": (LOCALHOST_HOST, 0),
+        "server": (LOCALHOST_HOST, 80),
+    }
+    status_code = 0
+    body_chunks: list[bytes] = []
+    disconnected = asyncio.Event()
+
+    async def _receive() -> dict[str, Any]:  # pragma: no cover - GET requests read no body
+        await disconnected.wait()
+        return {"type": "http.disconnect"}
+
+    async def _send(message: dict[str, Any]) -> None:
+        nonlocal status_code
+        msg_type = message["type"]
+        if msg_type == "http.response.start":
+            status_code = int(message["status"])
+        elif msg_type == "http.response.body":
+            body_chunks.append(bytes(message.get("body", b"")))
+            if not message.get("more_body", False):
+                disconnected.set()
+
+    await app(scope, _receive, _send)
+    return status_code, b"".join(body_chunks)
+
+
+async def _verify_launcher_app(app: Starlette) -> None:
+    """Verify API routing, static frontend mounting, and TrustedHostMiddleware on an app."""
+    async with app.router.lifespan_context(app):
+        health_status, health_body = await _asgi_get(app, "/api/health", LOCALHOST_HOST)
+        if health_status != 200 or json.loads(health_body) != {"status": "ok"}:
+            raise RuntimeError(
+                f"La route /api/health a renvoyé une réponse inattendue ({health_status})."
+            )
+
+        index_status, index_body = await _asgi_get(app, "/", LOCALHOST_HOST)
+        if index_status != 200 or b"<html" not in index_body.lower():
+            raise RuntimeError(
+                f"La page d'accueil du frontend a renvoyé une réponse invalide ({index_status})."
+            )
+
+        evil_status, _ = await _asgi_get(app, "/api/health", "evil.example")
+        if evil_status != 400:
+            raise RuntimeError(
+                "Le middleware TrustedHostMiddleware n'a pas rejeté un hôte invalide "
+                f"({evil_status})."
+            )
+
+
+def _resolve_self_check_frontend_dist(frontend_dist: Path | None) -> Path:
+    """Resolve and validate the built frontend directory for self-check mode."""
+    if frontend_dist is not None:
+        resolved = frontend_dist.resolve() if (frontend_dist / "index.html").is_file() else None
+    else:
+        resolved = resolve_frontend_dist()
+    if resolved is None:
+        raise RuntimeError(
+            "Le dossier compilé du frontend (frontend/dist/index.html) est introuvable."
+        )
+    return resolved
+
+
+def run_self_check(*, frontend_dist: Path | None = None) -> str:
+    """Verify frontend assets, ASGI app, component library, ngspice, and offline RC simulation."""
+    resolved_dist = _resolve_self_check_frontend_dist(frontend_dist)
+
+    library = load_library()
+    if not library:
+        raise RuntimeError("La bibliothèque de composants est vide ou introuvable.")
+
+    app = create_launcher_app(frontend_dist=resolved_dist)
+    asyncio.run(_verify_launcher_app(app))
+
+    try:
+        ngspice_exe = locate_ngspice()
+    except NgspiceNotFoundError as exc:
+        raise RuntimeError("Le simulateur ngspice est introuvable dans le package.") from exc
+
+    rc_netlist = NetlistResult(
+        netlist=(
+            "* Psice self-check RC\n"
+            "V1 in 0 PULSE(0 5 0 1n 1n 10m 20m)\n"
+            "R1 in out 1k\n"
+            "C1 out 0 1u\n"
+            ".tran 10u 5m 0 10u\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "C1": "c3"},
+    )
+    result = run_simulation(
+        rc_netlist,
+        TranAnalysis(stop_time=0.005, max_step=1e-5),
+        ngspice_path=ngspice_exe,
+    )
+    if result.errors:
+        raise RuntimeError(f"La simulation RC hors ligne a échoué : {result.errors[0].message}")
+
+    v_out = next((trace for trace in result.traces if trace.name == "v(out)"), None)
+    if result.axis is None or not result.axis.values or v_out is None or not v_out.values:
+        raise RuntimeError("La simulation RC hors ligne n'a produit aucune courbe valide.")
+
+    final_v = v_out.values[-1]
+    if not (4.9 <= final_v <= 5.05):
+        raise RuntimeError(
+            "La simulation RC hors ligne a produit une tension finale incohérente "
+            f"({final_v:.4f} V)."
+        )
+
+    return (
+        f"Self-check OK: frontend={resolved_dist}, library={len(library)}, "
+        f"ngspice={ngspice_exe}, rc_points={len(result.axis.values)}, "
+        f"v_out_final={final_v:.4f}V"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="psice",
@@ -567,6 +702,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--debug",
         action="store_true",
         help="Enable pywebview developer tools and debug logging.",
+    )
+    parser.add_argument(
+        "--self-check",
+        action="store_true",
+        help=(
+            "Verify bundled frontend assets, ASGI app, component library, ngspice, "
+            "and an offline RC simulation without opening a GUI window."
+        ),
     )
     return parser
 
@@ -631,6 +774,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
+        if args.self_check:
+            if args.dev_url is not None or args.port is not None:
+                raise ValueError(
+                    "L'option --self-check ne peut pas être utilisée avec --dev-url ou --port."
+                )
+            summary = run_self_check(frontend_dist=args.frontend_dist)
+            if sys.stdout is not None:
+                print(summary)
+            return 0
+
         launch(
             dev_url=args.dev_url,
             frontend_dist=args.frontend_dist,

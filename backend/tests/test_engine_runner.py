@@ -1186,3 +1186,48 @@ def test_run_simulation_forwards_max_points_and_validates_limits(
         assert len(res_bytes.errors) == 1
         assert res_bytes.errors[0].code == "SIMULATION_FAILED"
         assert res_bytes.errors[0].targets == []
+
+
+def test_build_ngspice_env_sets_spice_scripts_when_spinit_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SPICE_SCRIPTS", raising=False)
+
+    # bin/ layout (vendor/ngspice/bin/ngspice_con.exe)
+    vendor_bin_root = tmp_path / "vendor_bin"
+    bin_exe = vendor_bin_root / "bin" / "ngspice_con.exe"
+    bin_exe.parent.mkdir(parents=True)
+    bin_exe.write_bytes(b"")
+    bin_scripts = vendor_bin_root / "share" / "ngspice" / "scripts"
+    bin_scripts.mkdir(parents=True)
+    (bin_scripts / "spinit").write_text("* spinit\n", encoding="utf-8")
+
+    env_bin = runner_module._build_ngspice_env(bin_exe)
+    assert env_bin["SPICE_ASCIIRAWFILE"] == "1"
+    assert env_bin["SPICE_SCRIPTS"] == str(bin_scripts.resolve())
+
+    # Root layout (vendor/ngspice/ngspice_con.exe)
+    vendor_flat_root = tmp_path / "vendor_flat"
+    flat_exe = vendor_flat_root / "ngspice_con.exe"
+    flat_exe.parent.mkdir(parents=True)
+    flat_exe.write_bytes(b"")
+    flat_scripts = vendor_flat_root / "share" / "ngspice" / "scripts"
+    flat_scripts.mkdir(parents=True)
+    (flat_scripts / "spinit").write_text("* spinit\n", encoding="utf-8")
+
+    env_flat = runner_module._build_ngspice_env(flat_exe)
+    assert env_flat["SPICE_SCRIPTS"] == str(flat_scripts.resolve())
+
+    # Caller's explicit SPICE_SCRIPTS environment variable is preserved.
+    custom_scripts = str(tmp_path / "custom_scripts")
+    monkeypatch.setenv("SPICE_SCRIPTS", custom_scripts)
+    env_override = runner_module._build_ngspice_env(bin_exe)
+    assert env_override["SPICE_SCRIPTS"] == custom_scripts
+
+    # Missing spinit leaves SPICE_SCRIPTS unset.
+    monkeypatch.delenv("SPICE_SCRIPTS", raising=False)
+    bare_exe = tmp_path / "bare" / "ngspice_con.exe"
+    bare_exe.parent.mkdir(parents=True)
+    bare_exe.write_bytes(b"")
+    env_bare = runner_module._build_ngspice_env(bare_exe)
+    assert "SPICE_SCRIPTS" not in env_bare
