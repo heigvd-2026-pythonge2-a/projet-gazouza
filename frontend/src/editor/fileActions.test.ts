@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
-import { fixtureDoc } from "../store/testFixtures";
+import { fixtureDoc, fixtureLibrary } from "../store/testFixtures";
 
 // fileActions remembers the current file in its module: each test loads it (and the store it
 // uses) afresh.
@@ -8,6 +8,7 @@ async function load() {
   vi.resetModules();
   const actions = await import("./fileActions");
   const store = await import("../store");
+  store.setLibrary(fixtureLibrary()); // the fresh store has an empty library
   return { ...actions, ...store, state: () => store.useEditorStore.getState() };
 }
 

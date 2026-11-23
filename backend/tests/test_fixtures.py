@@ -1,10 +1,13 @@
 """The shared fixtures must always match the API contract."""
 
+import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 
+from app.main import app
 from app.models import (
     AcAnalysis,
     Analysis,
@@ -99,3 +102,11 @@ def test_result_matches_contract(circuit: str) -> None:
     points = len(result.axis.values) if result.axis else 1
     for trace in result.traces:
         assert len(trace.values) == points, f"{trace.name} has the wrong number of points"
+
+
+def test_library_fixture_is_the_route_answer() -> None:
+    # The editor's tests use this file instead of GET /api/library: it must stay identical.
+    # To update it, write the JSON of the route to shared/fixtures/library.json (indent=2).
+    expected = TestClient(app).get("/api/library").json()
+    fixture = json.loads((FIXTURES_DIR / "library.json").read_text(encoding="utf-8"))
+    assert fixture == expected, "shared/fixtures/library.json is out of date"

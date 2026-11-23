@@ -4,7 +4,7 @@
 //   - or in the URL: http://localhost:5173/?demo=divider_op
 
 import type { SimulationResult } from "../api/client";
-import { useEditorStore, type EditorDoc, type EditorWire } from "../store";
+import { loadLibrary, useEditorStore, type EditorDoc, type EditorWire } from "../store";
 
 const files = import.meta.glob<unknown>("../../../shared/fixtures/*/{schematic,result}.json", {
   eager: true,
@@ -47,5 +47,10 @@ declare global {
 export function installDemo() {
   window.psiceDemo = loadDemo;
   const name = new URLSearchParams(window.location.search).get("demo");
-  if (name) loadDemo(name);
+  // The document needs the component library: wait for it (a failure is shown by the app).
+  if (name)
+    loadLibrary().then(
+      () => loadDemo(name),
+      () => {},
+    );
 }
