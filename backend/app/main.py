@@ -2,11 +2,13 @@
 
 from fastapi import FastAPI
 
+from app.api.library import router as library_router
 from app.engines import run_simulation
 from app.models import NetlistResult, SimulationRequest, SimulationResult
 from app.netlist.generate import generate_netlist as build_netlist
 
 app = FastAPI(title="Psice API", version="0.1.0")
+app.include_router(library_router)
 
 
 @app.get("/api/health")

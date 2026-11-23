@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+  "/api/library": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Library
+     * @description Every component type: pins and parameters (with defaults and labels), sorted by type.
+     *
+     *     The SPICE templates and models stay in the backend: they are not part of the contract.
+     */
+    get: operations["library_api_library_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -266,6 +288,31 @@ export interface components {
       junction: string;
     };
     /**
+     * LibraryComponent
+     * @description One component type, as the editor sees it.
+     */
+    LibraryComponent: {
+      /**
+       * Type
+       * @description Library id (e.g. 'resistor'), used in `Component.type`.
+       */
+      type: string;
+      /**
+       * Label
+       * @description Name shown to the user, in French.
+       */
+      label: string;
+      /**
+       * Prefix
+       * @description SPICE prefix ('R', 'C'...), first letter of `Component.name`. None for 'ground' and 'label', which have no name.
+       */
+      prefix: string | null;
+      /** Pins */
+      pins: components["schemas"]["PinDef"][];
+      /** Params */
+      params?: components["schemas"]["ParamDef"][];
+    };
+    /**
      * NetTarget
      * @description A SPICE node (e.g. 'n3'). The editor finds its wires through `NetlistResult.nets`.
      */
@@ -307,6 +354,74 @@ export interface components {
        * @enum {string}
        */
       kind: "op";
+    };
+    /**
+     * ParamDef
+     * @description A parameter the user can edit.
+     */
+    ParamDef: {
+      /** Name */
+      name: string;
+      /**
+       * Label
+       * @description Shown to the user, in French.
+       */
+      label: string;
+      /**
+       * Unit
+       * @default
+       */
+      unit: string;
+      /**
+       * Default
+       * @description Written into `params` by the editor on placement.
+       */
+      default: string;
+      /**
+       * Kind
+       * @description 'value': SPICE number ('1k'); 'text': free text (label name); 'choice': one of `options`.
+       * @default value
+       * @enum {string}
+       */
+      kind: "value" | "text" | "choice";
+      /**
+       * Options
+       * @description Allowed values, for 'choice'.
+       */
+      options?: components["schemas"]["ParamOption"][];
+      /**
+       * Waveforms
+       * @description Sources only: the waveforms that use this parameter (e.g. ['pulse', 'sin']). Empty: always shown.
+       */
+      waveforms?: string[];
+    };
+    /**
+     * ParamOption
+     * @description One allowed value of a 'choice' parameter.
+     */
+    ParamOption: {
+      /**
+       * Value
+       * @description Stored in `params` (e.g. 'pulse').
+       */
+      value: string;
+      /**
+       * Label
+       * @description Shown to the user, in French (e.g. 'Impulsion').
+       */
+      label: string;
+    };
+    /**
+     * PinDef
+     * @description A pin, with its position relative to the component at rotation 0 (grid units).
+     */
+    PinDef: {
+      /** Name */
+      name: string;
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
     };
     /**
      * PinEnd
@@ -498,6 +613,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  library_api_library_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LibraryComponent"][];
+        };
+      };
+    };
+  };
   health_api_health_get: {
     parameters: {
       query?: never;

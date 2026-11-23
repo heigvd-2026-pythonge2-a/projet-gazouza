@@ -1,5 +1,6 @@
 """API contract (Pydantic). Single source of truth for the frontend TypeScript types."""
 
+from app.models.library import LibraryComponent, ParamDef, ParamOption, PinDef
 from app.models.netlist import (
     ComponentTarget,
     Diagnostic,
@@ -49,9 +50,13 @@ __all__ = [
     "Junction",
     "JunctionEnd",
     "JunctionTarget",
+    "LibraryComponent",
     "NetTarget",
     "NetlistResult",
     "OpAnalysis",
+    "ParamDef",
+    "ParamOption",
+    "PinDef",
     "PinEnd",
     "PinTarget",
     "Point",

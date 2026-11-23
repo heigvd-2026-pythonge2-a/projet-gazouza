@@ -1,20 +1,34 @@
 """Component library: one JSON file per component type, in `app/netlist/library/`.
 
-Owner: Damien. Consumer: Noé (pins and parameters, to draw and edit components).
-Format: docs/format-schema.md, section 5.
+Owner: Damien. Format: docs/format-schema.md, section 5.
 
-Each file describes a type once (pins, parameters, SPICE line template), so adding a component
-needs no code. Loading happens once; the netlist functions then receive the library as an
-argument and stay pure.
+`ComponentType` is the full, internal description of a type: the public part served to the
+editor (`app.models.LibraryComponent`: pins, parameters) plus the SPICE templates. It checks
+every file when it is loaded, so a broken library never starts. Adding a component needs no
+code. Loading happens once; the netlist functions then receive the library as an argument and
+stay pure.
 """
 
 import json
 import re
 from functools import cache
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
+
+from app.models.library import LibraryComponent, ParamDef, ParamOption, PinDef
+
+__all__ = [
+    "LIBRARY_DIR",
+    "PLACEHOLDER",
+    "SPICE_NUMBER",
+    "ComponentType",
+    "ParamDef",
+    "ParamOption",
+    "PinDef",
+    "get_library",
+    "load_library",
+]
 
 LIBRARY_DIR = Path(__file__).parent / "library"
 
@@ -23,75 +37,13 @@ PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
 
 # A SPICE number as written in the library defaults: "5", "-1.5", "1e-3", "4.7u", "10Meg".
 # Deliberately strict (no trailing letters, unlike SPICE): a typo such as "1kk" is refused.
-# The full user-input parser (`parse_value`) comes with the netlist core.
+# User input is read by `app.netlist.values.parse_value`.
 SPICE_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(meg|[fpnumkgt])?", re.IGNORECASE)
 
 
-class PinDef(BaseModel):
-    """A pin, with its position relative to the component at rotation 0 (grid units)."""
+class ComponentType(LibraryComponent):
+    """One library file: the public part (`LibraryComponent`) plus the SPICE side."""
 
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    x: int
-    y: int
-
-
-class Option(BaseModel):
-    """One allowed value of a 'choice' parameter."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    value: str = Field(description="Stored in `params` (e.g. 'pulse').")
-    label: str = Field(description="Shown to the user, in French (e.g. 'Impulsion').")
-
-
-class ParamDef(BaseModel):
-    """A parameter the user can edit."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    label: str = Field(description="Shown to the user, in French.")
-    unit: str = ""
-    default: str = Field(description="Written into `params` by the editor on placement.")
-    kind: Literal["value", "text", "choice"] = Field(
-        default="value",
-        description="'value': SPICE number ('1k'); 'text': free text (label name); "
-        "'choice': one of `options`.",
-    )
-    options: list[Option] = Field(default_factory=list, description="Allowed values, for 'choice'.")
-    waveforms: list[str] = Field(
-        default_factory=list,
-        description="Sources only: the waveforms that use this parameter (e.g. ['pulse', 'sin']). "
-        "Empty: always shown.",
-    )
-
-    @model_validator(mode="after")
-    def check_kind(self) -> "ParamDef":
-        values = [o.value for o in self.options]
-        if self.kind == "choice" and self.default not in values:
-            raise ValueError(f"{self.name}: default {self.default!r} is not in {values}")
-        if self.kind != "choice" and self.options:
-            raise ValueError(f"{self.name}: only a 'choice' parameter has options")
-        if self.kind == "value" and not SPICE_NUMBER.fullmatch(self.default):
-            raise ValueError(f"{self.name}: default {self.default!r} is not a SPICE number")
-        return self
-
-
-class ComponentType(BaseModel):
-    """One library file."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    type: str = Field(description="Library id, equal to the file name (e.g. 'resistor').")
-    label: str = Field(description="Name shown to the user, in French.")
-    prefix: str | None = Field(
-        description="SPICE prefix ('R', 'C'...). None for 'ground' and 'label', which produce "
-        "no SPICE line."
-    )
-    pins: list[PinDef] = Field(min_length=1)
-    params: list[ParamDef] = Field(default_factory=list)
     spice: str | None = Field(description="SPICE line template. None when `prefix` is None.")
     waveforms: dict[str, str] = Field(
         default_factory=dict,
@@ -101,6 +53,15 @@ class ComponentType(BaseModel):
 
     @model_validator(mode="after")
     def check_consistency(self) -> "ComponentType":
+        for param in self.params:
+            values = [o.value for o in param.options]
+            if param.kind == "choice" and param.default not in values:
+                raise ValueError(f"{param.name}: default {param.default!r} is not in {values}")
+            if param.kind != "choice" and param.options:
+                raise ValueError(f"{param.name}: only a 'choice' parameter has options")
+            if param.kind == "value" and not SPICE_NUMBER.fullmatch(param.default):
+                raise ValueError(f"{param.name}: default {param.default!r} is not a SPICE number")
+
         pin_names = [p.name for p in self.pins]
         param_names = [p.name for p in self.params]
         if len(set(pin_names)) != len(pin_names):
