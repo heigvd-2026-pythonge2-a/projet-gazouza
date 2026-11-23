@@ -24,13 +24,19 @@ def component_line(
     *,
     ac_input: bool = False,
 ) -> str:
-    """'R1 in out 1k'. `ac_input`: this source is the input of an .ac analysis -> 'AC 1'."""
+    """'R1 in out 1k'. `ac_input`: this source is the input of an .ac analysis -> 'AC 1'.
+
+    Security: only checked values reach the line. The parameters come from `used_params`
+    (the ones `checks.py` validated, other keys are dropped), and the name and the nodes are
+    set last, so a parameter called "name" or "pin:1" cannot replace them.
+    """
     assert ctype.spice is not None and comp.name is not None
-    params = {name: value.strip() for name, value in comp.params.items()}
-    values = {"name": comp.name, **params}
-    values.update({f"pin:{pin.name}": pin_node[(comp.id, pin.name)] for pin in ctype.pins})
+    params = {p.name: comp.params[p.name].strip() for p in ctype.used_params(comp.params)}
+    values = dict(params)
     if ctype.waveforms:
         values["waveform"] = fill(ctype.waveforms[params["waveform"]], params)
+    values["name"] = comp.name
+    values.update({f"pin:{pin.name}": pin_node[(comp.id, pin.name)] for pin in ctype.pins})
     line = fill(ctype.spice, values)
     return f"{line} AC 1" if ac_input else line
 

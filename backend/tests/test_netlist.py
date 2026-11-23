@@ -309,3 +309,88 @@ def test_all_errors_are_reported_at_once() -> None:
     errors = check([SOURCE, resistor], LOOP[:1])
     assert sorted(codes(errors)) == ["BAD_PREFIX", "BAD_VALUE", "NO_GROUND",
                                      "PIN_NOT_CONNECTED", "PIN_NOT_CONNECTED"]  # fmt: skip
+
+
+# --- Security: nothing from the schematic may add its own SPICE lines (review of PR #131) ---
+
+INJECTION = '\n.model p d_process(process_file="calc.exe")\nA1 [a] [b] p'
+SAFE_NETLIST = "V1 n1 0 DC 5\nR1 n1 0 1k\n.op\n.end\n"
+
+
+@pytest.mark.parametrize("separator", ["\n", "\r", "\r\n", " ", "\x85", "\x0b", "\x00"])
+def test_title_stays_on_one_line(separator: str) -> None:
+    title = "x" + INJECTION.replace("\n", separator)
+    circuit = schematic([SOURCE, RESISTOR, GROUND], LOOP)
+    circuit.title = title
+    result = generate_netlist(circuit, OP)
+
+    header, rest = result.netlist.split("\n", 1)
+    assert header.startswith("* x ")
+    assert rest == SAFE_NETLIST
+
+
+@pytest.mark.parametrize("title", [None, "", "  ", "\n\r"])
+def test_empty_title_gives_the_default_header(title: str | None) -> None:
+    circuit = schematic([SOURCE, RESISTOR, GROUND], LOOP)
+    circuit.title = title
+    assert generate_netlist(circuit, OP).netlist.startswith("* Psice\n")
+
+
+@pytest.mark.parametrize("key", ["name", "pin:1", "pin:2", "unknown", "waveform"])
+def test_extra_params_never_reach_the_netlist(key: str) -> None:
+    # Only the checked parameters of the library are written: an extra key is ignored,
+    # and it cannot replace the name or the nodes.
+    resistor = comp("c2", "resistor", "R1", resistance="1k")
+    resistor["params"][key] = "R9 in 0 1k" + INJECTION
+    result = generate_netlist(schematic([SOURCE, resistor, GROUND], LOOP), OP)
+
+    assert result.netlist == "* Psice\n" + SAFE_NETLIST
+
+
+def test_unused_waveform_params_never_reach_the_netlist() -> None:
+    source = comp("c1", "voltage_source", "V1", waveform="dc", dc="5", v1="0" + INJECTION)
+    result = generate_netlist(schematic([source, RESISTOR, GROUND], LOOP), OP)
+    assert result.netlist == "* Psice\n" + SAFE_NETLIST
+
+
+def test_waveform_with_spaces_is_checked_like_the_others() -> None:
+    # " dc " selects the dc waveform: its "dc" parameter is required and checked
+    # (before the fix: 500 KeyError without it, unchecked injection with it).
+    missing = comp("c1", "voltage_source", "V1", waveform=" dc ")
+    assert codes(check([missing, RESISTOR, GROUND], LOOP)) == ["MISSING_PARAM"]
+
+    injected = comp("c1", "voltage_source", "V1", waveform=" dc ", dc="5" + INJECTION)
+    assert codes(check([injected, RESISTOR, GROUND], LOOP)) == ["BAD_VALUE"]
+
+
+@pytest.mark.parametrize("value", ["1e999", "1e300T", "5\n.control"])
+def test_unusable_values_are_bad_values(value: str) -> None:
+    resistor = comp("c2", "resistor", "R1", resistance=value)
+    assert codes(check([SOURCE, resistor, GROUND], LOOP)) == ["BAD_VALUE"]
+
+
+@pytest.mark.parametrize(
+    "analysis",
+    [
+        TranAnalysis(stop_time=float("inf")),
+        TranAnalysis.model_construct(stop_time=1e-3, max_step=float("nan")),  # skips gt=0
+        AcAnalysis(input_source_id="c1", start_frequency=1, stop_frequency=float("inf")),
+        DcAnalysis(source_id="c1", start=float("-inf"), stop=1, step=0.1),
+    ],
+)
+def test_infinite_analysis_values_are_bad_values(analysis: Analysis) -> None:
+    assert codes(check([SOURCE, RESISTOR, GROUND], LOOP, analysis)) == ["BAD_VALUE"]
+
+
+def test_milli_suffix_suggestion_keeps_the_unit() -> None:
+    resistor = comp("c2", "resistor", "R1", resistance="1Mohm")
+    result = generate_netlist(schematic([SOURCE, resistor, GROUND], LOOP), OP)
+    assert "« 1Megohm »" in result.warnings[0].message
+
+
+def test_duplicate_id_targets_every_kind_of_element() -> None:
+    wires = [*LOOP, wire("j1", "c2.1", "j1"), wire("c2", "j1", "c2.1")]
+    errors = check([SOURCE, RESISTOR, GROUND], wires, junctions=["j1"])
+    assert codes(errors) == ["DUPLICATE_ID", "DUPLICATE_ID"]
+    assert [t.model_dump() for t in errors[0].targets] == [{"comp": "c2"}, {"wire": "c2"}]
+    assert [t.model_dump() for t in errors[1].targets] == [{"junction": "j1"}, {"wire": "j1"}]

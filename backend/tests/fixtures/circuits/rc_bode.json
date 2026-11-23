@@ -1,0 +1,199 @@
+{
+  "title": "Filtre passe-bas RC (Bode)",
+  "description": "Gain ≈ 0 dB à 100 Hz, −3 dB à la coupure (1 kHz), puis −20 dB par décade (−20 dB à 10 kHz).",
+  "schema": {
+    "version": 1,
+    "title": "Filtre passe-bas RC (Bode)",
+    "components": [
+      {
+        "id": "comp-1",
+        "type": "voltage_source",
+        "name": "V1",
+        "x": 0,
+        "y": 4,
+        "rotation": 0,
+        "mirror": false,
+        "params": {
+          "waveform": "DC",
+          "dc": "0",
+          "ac_mag": "1",
+          "ac_phase": "0"
+        }
+      },
+      {
+        "id": "comp-2",
+        "type": "resistor",
+        "name": "R1",
+        "x": 4,
+        "y": 2,
+        "rotation": 90,
+        "mirror": false,
+        "params": {
+          "resistance": "1k"
+        }
+      },
+      {
+        "id": "comp-3",
+        "type": "capacitor",
+        "name": "C1",
+        "x": 8,
+        "y": 4,
+        "rotation": 0,
+        "mirror": false,
+        "params": {
+          "capacitance": "159.15n"
+        }
+      },
+      {
+        "id": "comp-4",
+        "type": "ground",
+        "name": "GND",
+        "x": 4,
+        "y": 8,
+        "rotation": 0,
+        "mirror": false,
+        "params": {}
+      },
+      {
+        "id": "comp-5",
+        "type": "label",
+        "name": "IN",
+        "x": 0,
+        "y": 0,
+        "rotation": 0,
+        "mirror": false,
+        "params": {
+          "net": "in"
+        }
+      },
+      {
+        "id": "comp-6",
+        "type": "label",
+        "name": "OUT",
+        "x": 10,
+        "y": 2,
+        "rotation": 0,
+        "mirror": false,
+        "params": {
+          "net": "out"
+        }
+      }
+    ],
+    "junctions": [],
+    "wires": [
+      {
+        "id": "wire-1",
+        "from": {
+          "comp": "comp-1",
+          "pin": "+"
+        },
+        "to": {
+          "comp": "comp-2",
+          "pin": "1"
+        }
+      },
+      {
+        "id": "wire-2",
+        "from": {
+          "comp": "comp-2",
+          "pin": "2"
+        },
+        "to": {
+          "comp": "comp-3",
+          "pin": "1"
+        }
+      },
+      {
+        "id": "wire-3",
+        "from": {
+          "comp": "comp-1",
+          "pin": "-"
+        },
+        "to": {
+          "comp": "comp-4",
+          "pin": "1"
+        }
+      },
+      {
+        "id": "wire-4",
+        "from": {
+          "comp": "comp-3",
+          "pin": "2"
+        },
+        "to": {
+          "comp": "comp-4",
+          "pin": "1"
+        }
+      },
+      {
+        "id": "wire-5",
+        "from": {
+          "comp": "comp-1",
+          "pin": "+"
+        },
+        "to": {
+          "comp": "comp-5",
+          "pin": "1"
+        }
+      },
+      {
+        "id": "wire-6",
+        "from": {
+          "comp": "comp-3",
+          "pin": "1"
+        },
+        "to": {
+          "comp": "comp-6",
+          "pin": "1"
+        }
+      }
+    ],
+    "analysis": {
+      "type": "ac",
+      "points": "100",
+      "start": "10",
+      "stop": "100k"
+    }
+  },
+  "expected": {
+    "netlist": "* Filtre passe-bas RC (Bode)\nV1 in 0 DC 0 AC 1 0\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 100 10 100k\n.end\n",
+    "nets": {
+      "in": [
+        "wire-1",
+        "wire-5"
+      ],
+      "out": [
+        "wire-2",
+        "wire-6"
+      ],
+      "0": [
+        "wire-3",
+        "wire-4"
+      ]
+    },
+    "components": {
+      "V1": "comp-1",
+      "R1": "comp-2",
+      "C1": "comp-3"
+    },
+    "results": {
+      "tolerance": 0.01,
+      "ac": {
+        "vdb(out)": [
+          {
+            "frequency": 100,
+            "value": -0.043
+          },
+          {
+            "frequency": 1000,
+            "value": -3.01
+          },
+          {
+            "frequency": 10000,
+            "value": -20.04
+          }
+        ]
+      }
+    }
+  }
+}

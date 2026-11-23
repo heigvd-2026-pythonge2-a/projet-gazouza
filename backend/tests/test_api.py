@@ -44,6 +44,17 @@ def test_wrong_circuit_is_not_an_http_error() -> None:
     assert [e["code"] for e in body["errors"]] == ["NO_GROUND"]
 
 
+def test_infinite_analysis_value_is_not_a_server_error() -> None:
+    # JSON numbers such as 1e999 become infinity: a user error (200), not a crash (500).
+    body = json.dumps(fixture_request("rc_tran")).replace(
+        '"stop_time": 0.005', '"stop_time": 1e999'
+    )
+    for route in ("/api/netlist", "/api/simulate"):
+        response = client.post(route, content=body, headers={"Content-Type": "application/json"})
+        assert response.status_code == 200
+        assert [e["code"] for e in response.json()["errors"]] == ["BAD_VALUE"]
+
+
 def test_netlist_rejects_malformed_json() -> None:
     response = client.post("/api/netlist", json={"schematic": {"version": 1}})
     assert response.status_code == 422

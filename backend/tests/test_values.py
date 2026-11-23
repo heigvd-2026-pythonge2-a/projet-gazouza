@@ -2,7 +2,13 @@
 
 import pytest
 
-from app.netlist.values import InvalidValueError, format_value, has_milli_suffix, parse_value
+from app.netlist.values import (
+    InvalidValueError,
+    as_mega,
+    format_value,
+    has_milli_suffix,
+    parse_value,
+)
 
 
 @pytest.mark.parametrize(
@@ -36,7 +42,9 @@ def test_parse_value(text: str, expected: float) -> None:
     assert parse_value(text) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("text", ["", "abc", "1kk", "k1", "1 k", "1.2.3", "1µ", "--1", "1e"])
+@pytest.mark.parametrize(
+    "text", ["", "abc", "1kk", "k1", "1 k", "1.2.3", "1µ", "--1", "1e", "1e999", "1e300T", "5\n.op"]
+)
 def test_parse_value_rejects(text: str) -> None:
     with pytest.raises(InvalidValueError):
         parse_value(text)
@@ -76,3 +84,18 @@ def test_format_value(value: float, expected: str) -> None:
 @pytest.mark.parametrize("value", [1e-12, 3.3e-9, 4.7e-6, 0.02, 1.5, 47e3, 2.2e6, 1e9])
 def test_format_then_parse_gives_the_same_value(value: float) -> None:
     assert parse_value(format_value(value)) == pytest.approx(value)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("1M", "1Meg"), ("2.2M", "2.2Meg"), ("1Mohm", "1Megohm"), (" 3M ", "3Meg"), ("5", "5"),
+     ("abc", "abc")],
+)  # fmt: skip
+def test_as_mega(text: str, expected: str) -> None:
+    assert as_mega(text) == expected
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_format_value_rejects_non_finite(value: float) -> None:
+    with pytest.raises(InvalidValueError):
+        format_value(value)

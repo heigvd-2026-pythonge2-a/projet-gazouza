@@ -5,11 +5,22 @@
 3. write one line per component + the analysis     -> writer.py
 """
 
+import re
+
 from app.models import AcAnalysis, Analysis, NetlistResult, Schematic
 from app.netlist.checks import check_nodes, check_structure
 from app.netlist.connectivity import build_nodes
 from app.netlist.library import ComponentType, get_library
 from app.netlist.writer import analysis_line, component_line
+
+# Control characters, \r and \n included, plus the Unicode line breaks. A title containing one
+# would start a new SPICE line: anyone could hide directives in a schematic file.
+LINE_BREAKS = re.compile(r"[\x00-\x1f\x7f\x85  ]")
+
+
+def header(title: str | None) -> str:
+    """The first line of the netlist ('* Circuit RC'), always on a single line."""
+    return "* " + (LINE_BREAKS.sub(" ", title or "").strip() or "Psice")
 
 
 def generate_netlist(
@@ -36,7 +47,7 @@ def generate_netlist(
     names = {c.id: c.name for c in schematic.components if library[c.type].spice is not None}
     ac_input = analysis.input_source_id if isinstance(analysis, AcAnalysis) else None
 
-    lines = [f"* {schematic.title or 'Psice'}"]
+    lines = [header(schematic.title)]
     includes = dict.fromkeys(i for c in schematic.components for i in library[c.type].includes)
     lines += [f".include {path}" for path in includes]
     lines += [

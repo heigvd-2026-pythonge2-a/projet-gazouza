@@ -47,6 +47,9 @@ def parse_value(text: str) -> float:
     value = float(match["number"])
     if match["suffix"]:
         value *= SUFFIXES[match["suffix"].lower()]
+    # "1e999" or "1e300T" overflow to infinity: not a usable value.
+    if not math.isfinite(value):
+        raise InvalidValueError(f"{text!r} is too large")
     return value
 
 
@@ -56,8 +59,19 @@ def has_milli_suffix(text: str) -> bool:
     return match is not None and match["suffix"] == "M"
 
 
+def as_mega(text: str) -> str:
+    """'1M' -> '1Meg', '2.2Mohm' -> '2.2Megohm': the value the student probably meant."""
+    text = text.strip()
+    match = VALUE.fullmatch(text)
+    if match is None or match["suffix"] is None:
+        return text
+    return text[: match.start("suffix")] + "Meg" + text[match.end("suffix") :]
+
+
 def format_value(value: float) -> str:
     """0.005 -> '5m', 1e-05 -> '10u', 100000.0 -> '100k', 10.0 -> '10'."""
+    if not math.isfinite(value):
+        raise InvalidValueError(f"{value} cannot be written in a netlist")
     if value == 0:
         return "0"
     exponent = math.floor(math.log10(abs(value)) / 3) * 3

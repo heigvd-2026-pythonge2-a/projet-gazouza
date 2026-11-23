@@ -113,6 +113,7 @@ def test_valid_entry() -> None:
         broken(pins=[]),  # no pin
         broken(pins=[{"name": "1", "x": 0, "y": 0}, {"name": "1", "x": 0, "y": 2}]),  # same pin
         broken(params=RESISTOR["params"] * 2),  # same parameter twice
+        broken(params=[*RESISTOR["params"], {"name": "name", "label": "N", "default": "1"}]),
         broken(symbol=[]),  # unknown key (forbidden; to adapt when Noé's `symbol` arrives)
     ],
 )

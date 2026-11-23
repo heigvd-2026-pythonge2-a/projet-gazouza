@@ -4,6 +4,7 @@ All problems are collected before answering (not only the first one), with a Fre
 for the student and `targets` for the editor to highlight.
 """
 
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -27,7 +28,7 @@ from app.models import (
 )
 from app.netlist.connectivity import Nodes, touches
 from app.netlist.library import ComponentType
-from app.netlist.values import InvalidValueError, has_milli_suffix, parse_value
+from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, parse_value
 
 LABEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 AUTOMATIC_NAME = re.compile(r"n\d+", re.IGNORECASE)
@@ -71,12 +72,6 @@ def capitalize(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def needed_params(comp: Component, ctype: ComponentType) -> list:
-    """The parameters this component uses: for a source, only those of its waveform."""
-    waveform = comp.params.get("waveform")
-    return [p for p in ctype.params if not p.waveforms or waveform in p.waveforms]
-
-
 def check_structure(
     schematic: Schematic, analysis: Analysis, library: dict[str, ComponentType]
 ) -> Report:
@@ -92,9 +87,13 @@ def check_structure(
         + [w.id for w in schematic.wires]
     )
     for duplicate in (i for i, n in ids.items() if n > 1):
-        targets: list[Target] = [ComponentTarget(comp=duplicate)] * (duplicate in components)
-        targets += [JunctionTarget(junction=duplicate)] * (duplicate in junctions)
-        targets += [WireTarget(wire=w.id) for w in schematic.wires if w.id == duplicate][:1]
+        targets: list[Target] = []
+        if duplicate in components:
+            targets.append(ComponentTarget(comp=duplicate))
+        if duplicate in junctions:
+            targets.append(JunctionTarget(junction=duplicate))
+        if any(w.id == duplicate for w in schematic.wires):
+            targets.append(WireTarget(wire=duplicate))
         report.error(
             "DUPLICATE_ID", f"Deux éléments ont le même identifiant {duplicate}.", *targets
         )
@@ -138,7 +137,7 @@ def _check_name(report: Report, comp: Component, ctype: ComponentType) -> None:
 def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None:
     target = ComponentTarget(comp=comp.id)
     who = capitalize(describe(comp))
-    for param in needed_params(comp, ctype):
+    for param in ctype.used_params(comp.params):
         value = comp.params.get(param.name, "").strip()
         if not value:
             report.error("MISSING_PARAM", f"{who} : « {param.label} » n'est pas renseigné.", target)
@@ -169,7 +168,7 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
                 report.warning(
                     "MILLI_SUFFIX",
                     f"{who} : « {value} » se lit « milli » en SPICE. Pour « méga », écris "
-                    f"« {value[: value.upper().rindex('M')]}Meg ».",
+                    f"« {as_mega(value)} ».",
                     target,
                 )
 
@@ -250,6 +249,11 @@ def _check_analysis(report: Report, analysis: Analysis, components: dict[str, Co
         report.error(
             "DC_SOURCE_NOT_FOUND", "La source balayée n'existe pas ou n'est pas une source."
         )
+
+    # JSON accepts 1e999, Infinity or NaN: such a number cannot be written in a netlist.
+    numbers = [v for v in analysis.model_dump().values() if isinstance(v, float)]
+    if not all(math.isfinite(v) for v in numbers):
+        report.error("BAD_VALUE", "L'analyse contient une valeur infinie ou invalide.")
 
 
 def check_nodes(
