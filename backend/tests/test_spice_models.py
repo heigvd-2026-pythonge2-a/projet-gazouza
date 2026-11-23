@@ -1,0 +1,171 @@
+"""SPICE models (.model / .subckt) written directly in the netlist, never with .include (#133)."""
+
+import pytest
+from pydantic import ValidationError
+
+from app.engines import NgspiceNotFoundError, locate_ngspice, run_simulation
+from app.models import OpAnalysis, Schematic
+from app.netlist.generate import generate_netlist
+from app.netlist.library import ComponentType, get_library
+
+D1N4148 = ".model D1N4148 D(Is=2.52n Rs=0.568 N=1.752 Cjo=4p M=0.4 tt=20n)"
+DLED = ".model DLED D(Is=1e-22 Rs=2 N=1.5)"
+
+# A test diode: the real diode files come with #106.
+DIODE = {
+    "type": "diode",
+    "label": "Diode",
+    "prefix": "D",
+    "pins": [{"name": "A", "x": 0, "y": -2}, {"name": "K", "x": 0, "y": 2}],
+    "params": [
+        {
+            "name": "model",
+            "label": "Modèle",
+            "default": "D1N4148",
+            "kind": "choice",
+            "options": [
+                {"value": "D1N4148", "label": "1N4148"},
+                {"value": "DLED", "label": "LED rouge"},
+            ],
+        }
+    ],
+    "spice": "{name} {pin:A} {pin:K} {model}",
+    "models": {"D1N4148": D1N4148, "DLED": DLED},
+}
+
+
+def library_with_diode() -> dict[str, ComponentType]:
+    return {**get_library(), "diode": ComponentType.model_validate(DIODE)}
+
+
+def part(comp_id: str, comp_type: str, name: str | None = None, **params: str) -> dict:
+    return {"id": comp_id, "type": comp_type, "name": name, "position": {"x": 0, "y": 0},
+            "params": params}  # fmt: skip
+
+
+def wire(wire_id: str, a: str, b: str) -> dict:
+    (ca, pa), (cb, pb) = a.split("."), b.split(".")
+    return {"id": wire_id, "from": {"comp": ca, "pin": pa}, "to": {"comp": cb, "pin": pb}}
+
+
+def diode_circuit(*diodes: dict) -> Schematic:
+    """5 V -> 1 kOhm -> diode(s) to ground, all diodes in parallel."""
+    components = [
+        part("v", "voltage_source", "V1", waveform="dc", dc="5"),
+        part("r", "resistor", "R1", resistance="1k"),
+        part("g", "ground"),
+        *diodes,
+    ]
+    wires = [wire("w1", "v.+", "r.1"), wire("w2", "v.-", "g.1")]
+    for i, diode in enumerate(diodes):
+        wires += [
+            wire(f"wa{i}", "r.2", f"{diode['id']}.A"),
+            wire(f"wk{i}", f"{diode['id']}.K", "g.1"),
+        ]
+    return Schematic.model_validate({"components": components, "wires": wires})
+
+
+# --- Netlist -----------------------------------------------------------------------------
+
+
+def test_model_is_written_after_the_components() -> None:
+    circuit = diode_circuit(part("d1", "diode", "D1", model="D1N4148"))
+    result = generate_netlist(circuit, OpAnalysis(), library_with_diode())
+
+    assert result.errors == []
+    assert result.netlist == (
+        "* Psice\nV1 n1 0 DC 5\nR1 n1 n2 1k\nD1 n2 0 D1N4148\n" + D1N4148 + "\n.op\n.end\n"
+    )
+    assert ".include" not in result.netlist
+
+
+def test_each_model_is_written_once_and_only_if_used() -> None:
+    circuit = diode_circuit(
+        part("d1", "diode", "D1", model="D1N4148"),
+        part("d2", "diode", "D2", model="D1N4148"),
+        part("d3", "diode", "D3", model="DLED"),
+    )
+    netlist = generate_netlist(circuit, OpAnalysis(), library_with_diode()).netlist
+
+    assert netlist.count(".model D1N4148") == 1
+    assert netlist.count(".model DLED") == 1
+
+
+def test_unused_model_is_not_written() -> None:
+    circuit = diode_circuit(part("d1", "diode", "D1", model="DLED"))
+    netlist = generate_netlist(circuit, OpAnalysis(), library_with_diode()).netlist
+    assert "D1N4148" not in netlist
+
+
+def test_model_choice_is_checked() -> None:
+    # The model name comes from a 'choice': anything else is refused, so the schematic cannot
+    # pick a text that is not in the library.
+    circuit = diode_circuit(part("d1", "diode", "D1", model="D1N4148\n.control"))
+    result = generate_netlist(circuit, OpAnalysis(), library_with_diode())
+    assert [e.code for e in result.errors] == ["BAD_VALUE"]
+
+
+def test_netlist_passes_the_runner_safety_check() -> None:
+    from app.engines import validate_netlist_safety
+
+    circuit = diode_circuit(part("d1", "diode", "D1", model="D1N4148"))
+    validate_netlist_safety(generate_netlist(circuit, OpAnalysis(), library_with_diode()).netlist)
+
+
+# --- Library validation --------------------------------------------------------------------
+
+
+def with_models(**models: str) -> dict:
+    return {**DIODE, "models": models}
+
+
+def test_subckt_block_is_accepted() -> None:
+    block = ".subckt OPAMP inp inn out\nE1 out 0 inp inn 1e5\n.ends OPAMP"
+    ComponentType.model_validate(with_models(D1N4148=D1N4148, OPAMP=block))
+
+
+@pytest.mark.parametrize(
+    "models",
+    [
+        {"D1N4148": ".include models/1n4148.lib"},  # no file inclusion
+        {"D1N4148": ".model OTHER D(Is=1n)"},  # name does not match the key
+        {"D1N4148": "D1 a k D1N4148"},  # not a model
+        {"D1N4148": D1N4148 + "\n.control\nshell calc\n.endc"},  # extra directives
+        {"D1N4148": D1N4148 + "\nR9 a b 1k"},  # a .model is a single line
+        {"D1N4148": D1N4148 + "\r.op"},  # control character
+        {"OPAMP": ".subckt OPAMP a b\nR1 a b 1k"},  # missing .ends
+        {"OPAMP": ".subckt OPAMP a b\n.lib x\n.ends"},  # forbidden directive inside
+        {"1bad": ".model 1bad D"},  # invalid name
+    ],
+)
+def test_broken_model_is_rejected(models: dict) -> None:
+    with pytest.raises(ValidationError):
+        ComponentType.model_validate(with_models(**models))
+
+
+def test_model_continuation_lines_are_accepted() -> None:
+    ComponentType.model_validate(with_models(D1N4148=".model D1N4148 D(Is=2.52n\n+ Rs=0.568)"))
+
+
+# --- The whole chain with the real ngspice -------------------------------------------------
+
+
+def has_ngspice() -> bool:
+    try:
+        locate_ngspice()
+    except NgspiceNotFoundError:
+        return False
+    return True
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+def test_forward_biased_diode_with_real_ngspice() -> None:
+    # 5 V through 1 kOhm: a silicon diode drops about 0.6-0.75 V.
+    circuit = diode_circuit(part("d1", "diode", "D1", model="D1N4148"))
+    netlist = generate_netlist(circuit, OpAnalysis(), library_with_diode())
+    result = run_simulation(netlist, OpAnalysis())
+
+    assert result.errors == []
+    anode = next(t for t in result.traces if t.name == "v(n2)").values[0]
+    assert 0.55 < anode < 0.8

@@ -177,8 +177,14 @@ Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie �
   proposé par Noé** (c'est l'éditeur qui le dessine).
 - `spice` : le modèle de ligne. `{name}` = nom du composant, `{pin:X}` = nœud de la broche X,
   `{param}` = valeur d'un paramètre.
-- `includes` (facultatif) : fichiers de modèles à ajouter avec `.include`, par exemple
-  `["models/1n4148.lib"]` pour une diode.
+- `models` (facultatif, interne au backend) : le **texte** des modèles SPICE, par nom : une ligne
+  `.model` (suites en `+` permises) ou un bloc `.subckt` … `.ends`. Par exemple
+  `{ "D1N4148": ".model D1N4148 D(Is=2.52n Rs=0.568 N=1.752)" }`. Jamais de `.include` : le
+  runner l'interdit (aucune lecture de fichier), décidé dans la PR #131 (issue #133). Le
+  chargeur refuse tout autre directive (`.include`, `.lib`, `.control`…).
+
+La réponse de `GET /api/library` ne contient que `type`, `label`, `prefix`, `pins` et `params`
+(`LibraryComponent`) : `spice`, `waveforms` et `models` restent dans le backend.
 
 ### Noms des broches
 
@@ -276,8 +282,8 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
 4. **Écrire l'en-tête** : `* ` suivi du `title` du schéma (ou `* Psice` s'il n'y en a pas). Les
    fixtures de `main` commencent par `* divider_op` / `* rc_tran` : à la migration, on leur donne
    un `title` et on met à jour leur `netlist.cir` en conséquence.
-5. **Écrire les `.include`** nécessaires, sans doublons.
-6. **Écrire une ligne par composant** (sauf masses et étiquettes), en remplissant le modèle `spice`.
+5. **Écrire une ligne par composant** (sauf masses et étiquettes), en remplissant le modèle `spice`.
+6. **Écrire les modèles** (`models`) dont le nom apparaît sur ces lignes, une seule fois chacun.
 7. **Écrire la ligne d'analyse**, puis `.end`.
 
 ## 8. Erreurs et avertissements

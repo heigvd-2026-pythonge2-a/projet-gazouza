@@ -23,6 +23,17 @@ def header(title: str | None) -> str:
     return "* " + (LINE_BREAKS.sub(" ", title or "").strip() or "Psice")
 
 
+def used_models(line: str, ctype: ComponentType) -> dict[str, str]:
+    """The models of `ctype` named on its SPICE line ('D1 a k D1N4148' -> D1N4148).
+
+    The text comes from the library only, never from the schematic.
+    """
+    tokens = {token.lower() for token in line.split()[1:]}
+    return {
+        name.lower(): text.strip() for name, text in ctype.models.items() if name.lower() in tokens
+    }
+
+
 def generate_netlist(
     schematic: Schematic,
     analysis: Analysis,
@@ -48,13 +59,15 @@ def generate_netlist(
     ac_input = analysis.input_source_id if isinstance(analysis, AcAnalysis) else None
 
     lines = [header(schematic.title)]
-    includes = dict.fromkeys(i for c in schematic.components for i in library[c.type].includes)
-    lines += [f".include {path}" for path in includes]
-    lines += [
-        component_line(comp, library[comp.type], nodes.pin_node, ac_input=comp.id == ac_input)
-        for comp in schematic.components
-        if comp.id in names
-    ]
+    models: dict[str, str] = {}  # model name (lower case) -> text, each written once
+    for comp in schematic.components:
+        if comp.id not in names:
+            continue
+        ctype = library[comp.type]
+        line = component_line(comp, ctype, nodes.pin_node, ac_input=comp.id == ac_input)
+        lines.append(line)
+        models.update(used_models(line, ctype))
+    lines += models.values()
     lines += [analysis_line(analysis, names), ".end"]
 
     return NetlistResult(

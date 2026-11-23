@@ -41,6 +41,34 @@ PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
 SPICE_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(meg|[fpnumkgt])?", re.IGNORECASE)
 
 
+MODEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+# Directives allowed inside a model text. Everything else (.include, .lib, .control...) is
+# refused: the library must not be able to do more than describe a model.
+MODEL_DIRECTIVES = {".model", ".subckt", ".ends", ".param"}
+
+
+def check_model(component_type: str, name: str, text: str) -> None:
+    """A model is one '.model' line (with '+' continuations) or one '.subckt' block."""
+    where = f"{component_type}: model {name!r}"
+    if not MODEL_NAME.fullmatch(name):
+        raise ValueError(f"{where}: invalid name")
+    if any(ord(c) < 32 and c != "\n" for c in text):
+        raise ValueError(f"{where}: control characters are not allowed")
+    lines = [line.strip() for line in text.strip().split("\n")]
+    first = lines[0].split()
+    kind = first[0].lower()
+    if kind not in (".model", ".subckt") or len(first) < 2 or first[1].lower() != name.lower():
+        raise ValueError(f"{where}: must start with '.model {name}' or '.subckt {name}'")
+    if kind == ".model" and not all(line.startswith("+") for line in lines[1:]):
+        raise ValueError(f"{where}: a .model is one line (continuations start with '+')")
+    if kind == ".subckt" and lines[-1].split()[0].lower() != ".ends":
+        raise ValueError(f"{where}: a .subckt block must end with '.ends'")
+    for line in lines:
+        token = line.split()[0].lower() if line else ""
+        if token.startswith(".") and token not in MODEL_DIRECTIVES:
+            raise ValueError(f"{where}: directive {token!r} is not allowed")
+
+
 class ComponentType(LibraryComponent):
     """One library file: the public part (`LibraryComponent`) plus the SPICE side."""
 
@@ -49,10 +77,18 @@ class ComponentType(LibraryComponent):
         default_factory=dict,
         description="Sources only: template of each waveform, selected by the 'waveform' param.",
     )
-    includes: list[str] = Field(default_factory=list, description="Model files to `.include`.")
+    models: dict[str, str] = Field(
+        default_factory=dict,
+        description="SPICE models by name: a '.model' line or a '.subckt' ... '.ends' block. "
+        "Written once in the netlist when a line of this type uses the name. Never `.include`: "
+        "the runner forbids it (no file read), decided in PR #131.",
+    )
 
     @model_validator(mode="after")
     def check_consistency(self) -> "ComponentType":
+        for name, text in self.models.items():
+            check_model(self.type, name, text)
+
         for param in self.params:
             values = [o.value for o in param.options]
             if param.kind == "choice" and param.default not in values:
