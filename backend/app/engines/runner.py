@@ -95,14 +95,16 @@ def _collect_save_tokens(
     for spice_name in components:
         comp_lower = spice_name.strip().lower()
         # Voltage sources and inductors are already saved by `all` as `i(v*)` / `i(l*)`.
-        if not comp_lower or comp_lower.startswith(("v", "l")):
-            continue
-        if comp_lower.startswith("d"):
+        # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
+        # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
+        if comp_lower.startswith(("r", "c")):
+            token = f"@{comp_lower}[i]"
+        elif comp_lower.startswith("d"):
             token = f"@{comp_lower}[id]"
         elif comp_lower.startswith("i"):
             token = f"@{comp_lower}[c]"
         else:
-            token = f"@{comp_lower}[i]"
+            continue
         if token not in seen:
             needed.append(token)
             seen.add(token)

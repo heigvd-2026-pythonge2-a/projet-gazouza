@@ -297,6 +297,40 @@ def test_prepare_netlist_save_tokens_for_diodes_and_current_sources() -> None:
     )
     assert re_prepared == prepared
 
+    # Multi-terminal devices (Q*, M*, X*) must NOT request @comp[i] (ngspice emits 0.0).
+    mixed_netlist = NetlistResult(
+        netlist=(
+            "* mixed devices\n"
+            "V1 in 0 DC 5\n"
+            "R1 in out 1k\n"
+            "C1 out 0 1u\n"
+            "D1 out 0 DMOD\n"
+            "I1 0 out DC 1m\n"
+            "Q1 out in 0 QMOD\n"
+            "M1 out in 0 0 MMOD\n"
+            "X1 in 0 out OA\n"
+            ".model DMOD D\n"
+            ".model QMOD NPN\n"
+            ".model MMOD NMOS\n"
+            ".op\n"
+            ".end\n"
+        ),
+        components={
+            "V1": "c1",
+            "R1": "c2",
+            "C1": "c3",
+            "D1": "c4",
+            "I1": "c5",
+            "Q1": "c6",
+            "M1": "c7",
+            "X1": "c8",
+        },
+    )
+    prepared_mixed = prepare_netlist(mixed_netlist)
+    assert ".save all @r1[i] @c1[i] @d1[id] @i1[c]" in prepared_mixed.splitlines()
+    for ignored_prefix in ("@q1[i]", "@m1[i]", "@x1[i]"):
+        assert ignored_prefix not in prepared_mixed
+
 
 def test_run_simulation_dc_missing_source_returns_diagnostic_without_ngspice(
     monkeypatch: pytest.MonkeyPatch,

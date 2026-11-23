@@ -763,10 +763,16 @@ Values:
 
 
 def test_extract_current_match_supports_diode_and_current_source_vectors() -> None:
+    assert _extract_current_match("i(@r1[i])") == ("r1", 3)
+    assert _extract_current_match("@c1[i]") == ("c1", 4)
     assert _extract_current_match("i(@d1[id])") == ("d1", 3)
     assert _extract_current_match("@d1[id]") == ("d1", 4)
     assert _extract_current_match("i(@i1[c])") == ("i1", 3)
     assert _extract_current_match("@i1[c]") == ("i1", 4)
+    assert _extract_current_match("i(@q1[i])") is None
+    assert _extract_current_match("i(@m1[i])") is None
+    assert _extract_current_match("i(@x1[i])") is None
+    assert _extract_current_match("@x1[i]") is None
     assert _extract_current_match("i(@r1[id])") is None
     assert _extract_current_match("i(@q1[c])") is None
     assert _extract_current_match("i(@d1[vd])") is None

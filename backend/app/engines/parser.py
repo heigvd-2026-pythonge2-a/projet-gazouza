@@ -297,7 +297,7 @@ def _extract_at_current_component(token: str) -> str | None:
         return None
     if token.endswith("[i]"):
         comp = token[1:-3].strip()
-        return comp or None
+        return comp if comp.startswith(("r", "c", "v", "l")) else None
     if token.endswith("[id]"):
         comp = token[1:-4].strip()
         return comp if comp.startswith("d") else None
