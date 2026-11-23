@@ -21,15 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Installation de pnpm
+        uses: pnpm/action-setup@v6
         with:
-          node-version: "22.12.x"
+          package_json_file: website/package.json
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Configuration de Node.js 24
+        uses: actions/setup-node@v7
         with:
-          run_install: false
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: website
