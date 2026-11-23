@@ -1,0 +1,23 @@
+{
+  "type": "npn",
+  "label": "Transistor NPN",
+  "prefix": "Q",
+  "pins": [
+    { "name": "C", "x": 1, "y": -2 },
+    { "name": "B", "x": -2, "y": 0 },
+    { "name": "E", "x": 1, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Modèle",
+      "default": "Q_NPN_GP",
+      "kind": "choice",
+      "options": [{ "value": "Q_NPN_GP", "label": "Usage général (type 2N3904)" }]
+    }
+  ],
+  "spice": "{name} {pin:C} {pin:B} {pin:E} {model}",
+  "models": {
+    "Q_NPN_GP": ".model Q_NPN_GP NPN(Is=6.7f Bf=200 Vaf=100 Br=4 Rb=10 Rc=1 Re=0.2 Cje=4.5p Cjc=3.6p Tf=0.3n Tr=240n)"
+  }
+}
