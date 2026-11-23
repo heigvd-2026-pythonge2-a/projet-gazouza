@@ -351,6 +351,92 @@
     ]
   },
   {
+    "type": "opamp",
+    "label": "Ampli-op idéal",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_IDEAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_IDEAL",
+            "label": "Idéal (gain 10⁶, sans limite)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "opamp_real",
+    "label": "Ampli-op réel",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "name": "V+",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "V-",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_GENERIC",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_GENERIC",
+            "label": "Générique (type 741 : gain 10⁵, 1 MHz)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
     "type": "resistor",
     "label": "Résistance",
     "prefix": "R",
