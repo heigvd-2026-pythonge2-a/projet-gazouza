@@ -94,29 +94,29 @@ Projet de groupe de 2ᵉ année — HEIG-VD.
 projet-gazouza/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          routes FastAPI
-│   │   ├── models/       modèles Pydantic (contrat d'API)
-│   │   ├── netlist/      génération de netlist SPICE
-│   │   ├── importers/    import .asc LTspice
-│   │   └── engines/      intégration ngspice
-│   ├── vendor/ngspice/   binaires ngspice Windows
-│   ├── launcher.py       démarre le serveur et ouvre la fenêtre
+│   │   ├── api/             routes FastAPI
+│   │   ├── models/          modèles Pydantic (contrat d'API)
+│   │   ├── netlist/         génération de netlist SPICE
+│   │   ├── importers/       import .asc LTspice
+│   │   └── engines/         intégration ngspice
+│   │       └── launcher.py  démarre le serveur et ouvre la fenêtre
+│   ├── vendor/ngspice/      binaires ngspice Windows
 │   ├── tests/
 │   ├── pyproject.toml
 │   └── uv.lock
 ├── frontend/
 │   ├── src/
-│   │   ├── editor/       éditeur de schéma
-│   │   ├── plot/         courbes et sondes
-│   │   ├── store/        état de l'application, annuler/rétablir
-│   │   └── api/          client vers le backend
+│   │   ├── editor/          éditeur de schéma
+│   │   ├── plot/            courbes et sondes
+│   │   ├── store/           état de l'application, annuler/rétablir
+│   │   └── api/             client vers le backend
 │   ├── package.json
 │   └── pnpm-lock.yaml
 ├── shared/
-│   ├── openapi.json      contrat d'API exporté (généré)
-│   └── fixtures/         circuits de référence partagés front/back
-├── AGENTS.md             instructions pour les assistants IA (+ CLAUDE.md)
-├── build.ps1             build complet → application Windows
+│   ├── openapi.json         contrat d'API exporté (généré)
+│   └── fixtures/            circuits de référence partagés front/back
+├── AGENTS.md                instructions pour les assistants IA (+ CLAUDE.md)
+├── build.ps1                build complet → application Windows
 └── README.md
 ```
 
@@ -146,6 +146,25 @@ pnpm dev
 ```
 
 Puis ouvrir http://localhost:5173.
+
+Pour ouvrir l'application dans la fenêtre bureau (`pywebview`) avec le frontend compilé (`frontend/dist`) — le launcher démarre alors lui-même le serveur backend local :
+
+```powershell
+cd frontend
+pnpm build
+
+cd ../backend
+uv run python -m app.engines.launcher
+```
+
+Pour utiliser la fenêtre bureau avec le serveur de développement Vite (rechargement à chaud), démarrer d'abord les deux serveurs ci-dessus (`uv run uvicorn app.main:app --reload` sur le port `8000` et `pnpm dev` sur le port `5173`), puis lancer dans un troisième terminal :
+
+```powershell
+cd backend
+uv run python -m app.engines.launcher --dev-url http://127.0.0.1:5173
+```
+
+> Avec `--dev-url http://127.0.0.1:5173`, le launcher ne démarre pas de serveur backend : `uv run uvicorn app.main:app --reload` (port `8000`) et `pnpm dev` (port `5173`) doivent tourner en parallèle.
 
 ### Vérifications avant commit
 
