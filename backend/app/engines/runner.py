@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from collections import deque
+from collections.abc import Iterable
 from pathlib import Path
 
 from app.engines.locator import NgspiceNotFoundError, locate_ngspice
@@ -20,6 +21,7 @@ from app.models.netlist import (
     Target,
 )
 from app.models.simulation import (
+    AcAnalysis,
     Analysis,
     DcAnalysis,
     OpAnalysis,
@@ -34,12 +36,30 @@ MAX_RAWFILE_BYTES: int = 50 * 1024 * 1024
 _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
 _SAVE_ITEMS_PER_LINE = 10
-_FORBIDDEN_DIRECTIVES: frozenset[str] = frozenset(
-    {".control", ".endc", ".include", ".lib", ".shell", "shell"}
+_AC_SENSED_PREFIXES: tuple[str, ...] = ("r", "c", "d", "i")
+_ALLOWED_DOT_DIRECTIVES: frozenset[str] = frozenset(
+    {
+        ".model",
+        ".subckt",
+        ".ends",
+        ".param",
+        ".ic",
+        ".nodeset",
+        ".op",
+        ".tran",
+        ".ac",
+        ".dc",
+        ".end",
+        ".save",
+    }
 )
-_FORBIDDEN_PREFIXES: tuple[str, ...] = (".inc", ".lib")
-_CONTROL_DIRECTIVE = ".control"
-_MIN_CONTROL_PREFIX_LEN = 5
+_ALLOWED_MODEL_TYPES: frozenset[str] = frozenset(
+    {"r", "c", "l", "d", "npn", "pnp", "nmos", "pmos", "njf", "pjf", "sw", "csw"}
+)
+_ALLOWED_ELEMENT_PREFIXES: frozenset[str] = frozenset(
+    {"r", "c", "l", "v", "i", "d", "q", "m", "j", "e", "f", "g", "h", "s", "w", "x"}
+)
+_MODEL_TYPE_RE = re.compile(r"^[a-z0-9_]+")
 
 
 class UnsafeNetlistError(ValueError):
@@ -80,9 +100,23 @@ def _error_result(
     )
 
 
+def _validate_save_component_name(spice_name: str) -> None:
+    """Reject SPICE component names containing whitespace, control chars, or ';'."""
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 or ch == ";" for ch in spice_name):
+        raise UnsafeNetlistError(
+            f"Unsafe SPICE component name for .save: {spice_name!r}.",
+            user_message=(
+                "Un nom de composant SPICE contient des caractères interdits "
+                "pour des raisons de sécurité."
+            ),
+        )
+
+
 def _collect_save_tokens(
     components: dict[str, str],
     existing_tokens: set[str],
+    *,
+    is_ac: bool = False,
 ) -> list[str]:
     """Build missing .save tokens for node voltages and component branch currents."""
     needed: list[str] = []
@@ -92,8 +126,14 @@ def _collect_save_tokens(
         needed.append("all")
         seen.add("all")
 
+    if is_ac:
+        # In .ac, ngspice ignores/warns on @comp[i]; only V*/L* branch currents are
+        # computed natively, and other 2-terminal components use 0V sense sources.
+        return needed
+
     for spice_name in components:
-        comp_lower = spice_name.strip().lower()
+        _validate_save_component_name(spice_name)
+        comp_lower = spice_name.lower()
         # Voltage sources and inductors are already saved by `all` as `i(v*)` / `i(l*)`.
         # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
         # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
@@ -125,32 +165,58 @@ def _format_save_lines(tokens: list[str]) -> list[str]:
     return lines
 
 
-def _is_forbidden_first_token(token: str) -> bool:
-    """Return True if a lowercased first token is a forbidden SPICE/ngspice command."""
-    base_token = token.split(";", 1)[0]
-    if base_token in _FORBIDDEN_DIRECTIVES or base_token.startswith(_FORBIDDEN_PREFIXES):
-        return True
-    return len(base_token) >= _MIN_CONTROL_PREFIX_LEN and _CONTROL_DIRECTIVE.startswith(base_token)
+def _validate_dot_directive(tokens: list[str], first_token: str, base_token: str) -> None:
+    """Validate that a '.' directive is strictly allowlisted and safe if '.model'."""
+    if base_token not in _ALLOWED_DOT_DIRECTIVES:
+        raise UnsafeNetlistError(
+            f"Forbidden SPICE directive or command: {first_token!r}.",
+            user_message=(
+                f"La directive SPICE « {first_token} » n'est pas autorisée "
+                "pour des raisons de sécurité."
+            ),
+        )
+    if base_token != ".model":
+        return
+
+    if len(tokens) < 3:
+        raise UnsafeNetlistError(
+            "Incomplete .model SPICE directive.",
+            user_message=(
+                "La directive SPICE « .model » doit préciser un type de modèle autorisé "
+                "pour des raisons de sécurité."
+            ),
+        )
+    rest = " ".join(tokens[2:]).lower().lstrip(" \t\r\n(")
+    match = _MODEL_TYPE_RE.match(rest)
+    model_type = match.group(0) if match is not None else ""
+    if model_type not in _ALLOWED_MODEL_TYPES:
+        detail = model_type or tokens[2]
+        raise UnsafeNetlistError(
+            f"Forbidden SPICE model type: {detail!r}.",
+            user_message=(
+                f"Le type de modèle SPICE « {detail} » n'est pas autorisé "
+                "pour des raisons de sécurité."
+            ),
+        )
 
 
-def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
+def _unfold_spice_lines(raw_lines: Iterable[str]) -> tuple[list[str], list[str]]:
     """Unfold SPICE '+' continuations logically, ignoring '*' comment lines.
 
     Returns both standard space-joined logical lines and compact-joined lines (without
     inserting spaces when '+' has no following whitespace) to catch split tokens.
     """
-    normalized = netlist.replace("\r\n", "\n").replace("\r", "\n")
     spaced_lines: list[str] = []
     compact_lines: list[str] = []
 
-    for raw_line in normalized.splitlines():
+    for raw_line in raw_lines:
         stripped = raw_line.strip().lstrip("\ufeff").strip()
         if not stripped or stripped.startswith("*"):
             continue
 
         if stripped.startswith("+"):
             after_plus = stripped[1:]
-            continuation = after_plus.strip()
+            continuation = after_plus.strip().lstrip("\ufeff").strip()
             if not continuation:
                 continue
             if spaced_lines:
@@ -170,12 +236,12 @@ def _unfold_spice_lines(netlist: str) -> tuple[list[str], list[str]]:
 
 
 def validate_netlist_safety(netlist: str) -> None:
-    """Validate that a SPICE netlist contains no null bytes or forbidden directives.
+    """Validate that a SPICE netlist conforms to a strict directive and element allowlist.
 
     Raises:
-        UnsafeNetlistError: If null bytes or forbidden commands (``.control`` or
-            ngspice prefixes >=5 chars, ``.endc``, ``.shell``, ``shell``, ``.include`` /
-            ``.inc*`` prefixes >=4 chars, or ``.lib`` / ``.lib*``) are found.
+        UnsafeNetlistError: If null bytes, non-allowlisted ``.`` directives,
+            non-allowlisted ``.model`` types, ``shell`` commands, leading ``+`` on line 0,
+            or non-allowlisted SPICE element prefixes (such as XSPICE ``A*``) are found.
     """
     if "\x00" in netlist:
         raise UnsafeNetlistError(
@@ -183,26 +249,104 @@ def validate_netlist_safety(netlist: str) -> None:
             user_message="La netlist SPICE contient un caractère nul interdit.",
         )
 
-    spaced_lines, compact_lines = _unfold_spice_lines(netlist)
+    normalized = netlist.replace("\r\n", "\n").replace("\r", "\n")
+    raw_lines = normalized.splitlines()
+    if not raw_lines:
+        return
+
+    title_line = raw_lines[0].strip().lstrip("\ufeff").strip()
+    if title_line and not title_line.startswith("*"):
+        if title_line.startswith("+"):
+            raise UnsafeNetlistError(
+                "Unexpected '+' continuation on SPICE title line.",
+                user_message=(
+                    "La ligne de titre SPICE ne peut pas commencer par « + » "
+                    "pour des raisons de sécurité."
+                ),
+            )
+        title_tokens = title_line.split()
+        first_title_token = title_tokens[0]
+        base_title_token = first_title_token.lower().split(";", 1)[0]
+        if base_title_token.startswith("."):
+            _validate_dot_directive(title_tokens, first_title_token, base_title_token)
+        elif base_title_token == "shell":
+            raise UnsafeNetlistError(
+                f"Forbidden SPICE directive or command: {first_title_token!r}.",
+                user_message=(
+                    f"La directive SPICE « {first_title_token} » n'est pas autorisée "
+                    "pour des raisons de sécurité."
+                ),
+            )
+
+    spaced_lines, compact_lines = _unfold_spice_lines(raw_lines[1:])
     for line in (*spaced_lines, *compact_lines):
-        first_token = line.split()[0]
-        if _is_forbidden_first_token(first_token.lower()):
+        tokens = line.split()
+        first_token = tokens[0]
+        base_token = first_token.lower().split(";", 1)[0]
+        if base_token.startswith("."):
+            _validate_dot_directive(tokens, first_token, base_token)
+        elif (
+            not base_token
+            or base_token == "shell"
+            or base_token[0] not in _ALLOWED_ELEMENT_PREFIXES
+        ):
             raise UnsafeNetlistError(
                 f"Forbidden SPICE directive or command: {first_token!r}.",
                 user_message=(
-                    f"La directive SPICE « {first_token} » n'est pas autorisée "
+                    f"La directive ou le composant SPICE « {first_token} » n'est pas autorisé "
                     "pour des raisons de sécurité."
                 ),
             )
 
 
-def prepare_netlist(netlist_result: NetlistResult) -> str:
-    """Prepare a netlist string for ngspice batch execution.
+def _allocate_unique_name(base: str, used_lower: set[str]) -> str:
+    """Return a case-insensitively unique SPICE identifier and register it."""
+    candidate = base
+    suffix = 1
+    while candidate.lower() in used_lower:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    used_lower.add(candidate.lower())
+    return candidate
 
-    Validates safety, preserves the SPICE title line and existing analysis directives,
-    injects any missing ``.save`` tokens for node voltages and component branch currents
-    before ``.end``, and terminates cleanly with ``.end``.
-    """
+
+def _collect_existing_identifiers(
+    raw_lines: list[str],
+    netlist_result: NetlistResult,
+) -> tuple[set[str], set[str]]:
+    """Collect existing lowercased node and component identifiers to avoid collisions."""
+    used_nodes_lower = {net.strip().lower() for net in netlist_result.nets if net.strip()}
+    used_components_lower = {
+        name.strip().lower() for name in netlist_result.components if name.strip()
+    }
+    in_subckt = False
+    for raw_line in raw_lines[1:]:
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith(("*", "+")):
+            continue
+        tokens = stripped.split()
+        first_lower = tokens[0].lower()
+        if first_lower == ".end":
+            break
+        if first_lower == ".subckt":
+            in_subckt = True
+            continue
+        if first_lower == ".ends":
+            in_subckt = False
+            continue
+        if first_lower.startswith(".") or in_subckt:
+            continue
+        used_components_lower.add(first_lower)
+        for tok in tokens[1:]:
+            used_nodes_lower.add(tok.lower())
+    return used_nodes_lower, used_components_lower
+
+
+def _prepare_netlist_for_execution(
+    netlist_result: NetlistResult,
+    analysis: Analysis | None = None,
+) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Prepare a netlist and return (prepared_text, current_aliases, node_aliases)."""
     if not netlist_result.netlist.strip():
         raise ValueError("Cannot prepare an empty netlist.")
 
@@ -211,10 +355,22 @@ def prepare_netlist(netlist_result: NetlistResult) -> str:
     normalized = netlist_result.netlist.replace("\r\n", "\n").replace("\r", "\n")
     raw_lines = normalized.splitlines()
 
+    is_ac = isinstance(analysis, AcAnalysis)
+    used_nodes_lower: set[str] = set()
+    used_components_lower: set[str] = set()
+    if is_ac:
+        used_nodes_lower, used_components_lower = _collect_existing_identifiers(
+            raw_lines, netlist_result
+        )
+
     # Preserve line 0 intact because SPICE treats the first line as the circuit title.
     body_lines: list[str] = [raw_lines[0]]
     existing_save_tokens: set[str] = set()
     in_existing_save = False
+    in_subckt = False
+    current_aliases: dict[str, str] = {}
+    node_aliases: dict[str, str] = {}
+    instrumented_lower: set[str] = set()
 
     for line in raw_lines[1:]:
         stripped = line.strip()
@@ -234,27 +390,81 @@ def prepare_netlist(netlist_result: NetlistResult) -> str:
             continue
 
         in_existing_save = False
-        first_token = stripped.split()[0].lower()
+        tokens = stripped.split()
+        first_token = tokens[0].lower()
 
         if first_token == ".end":
             break
 
-        if first_token == ".save":
-            in_existing_save = True
-            existing_save_tokens.update(tok.lower() for tok in stripped.split()[1:])
+        if first_token == ".subckt":
+            in_subckt = True
             body_lines.append(line)
             continue
+
+        if first_token == ".ends":
+            in_subckt = False
+            body_lines.append(line)
+            continue
+
+        if first_token == ".save":
+            in_existing_save = True
+            existing_save_tokens.update(tok.lower() for tok in tokens[1:])
+            body_lines.append(line)
+            continue
+
+        if is_ac and not in_subckt and not first_token.startswith((".", "+")) and len(tokens) >= 3:
+            resolved = _find_matching_component(tokens[0], netlist_result.components)
+            if resolved is not None:
+                spice_name, _ = resolved
+                comp_lower = spice_name.strip().lower()
+                if comp_lower.startswith(_AC_SENSED_PREFIXES) and (
+                    comp_lower not in instrumented_lower
+                ):
+                    instrumented_lower.add(comp_lower)
+                    safe_suffix = re.sub(r"[^a-z0-9_]", "_", comp_lower)
+                    sense_node = _allocate_unique_name(
+                        f"__psice_sense_{safe_suffix}", used_nodes_lower
+                    )
+                    sense_source = _allocate_unique_name(
+                        f"V__psice_sense_{safe_suffix}", used_components_lower
+                    )
+                    current_aliases[sense_source.lower()] = spice_name
+                    node_aliases[sense_node.lower()] = tokens[1]
+                    body_lines.append(f"{sense_source} {tokens[1]} {sense_node} DC 0")
+                    body_lines.append(f"{tokens[0]} {sense_node} {' '.join(tokens[2:])}")
+                    continue
 
         body_lines.append(line)
 
     while len(body_lines) > 1 and not body_lines[-1].strip():
         body_lines.pop()
 
-    save_tokens = _collect_save_tokens(netlist_result.components, existing_save_tokens)
+    save_tokens = _collect_save_tokens(
+        netlist_result.components,
+        existing_save_tokens,
+        is_ac=is_ac,
+    )
     body_lines.extend(_format_save_lines(save_tokens))
     body_lines.append(".end")
 
-    return "\n".join(body_lines) + "\n"
+    prepared = "\n".join(body_lines) + "\n"
+    validate_netlist_safety(prepared)
+    return prepared, current_aliases, node_aliases
+
+
+def prepare_netlist(
+    netlist_result: NetlistResult,
+    analysis: Analysis | None = None,
+) -> str:
+    """Prepare a netlist string for ngspice batch execution.
+
+    Validates safety, preserves the SPICE title line and existing analysis directives,
+    inserts 0V sense voltage sources for 2-terminal non-V/L elements in AC analysis,
+    injects any missing ``.save`` tokens for node voltages and component branch currents
+    before ``.end``, and terminates cleanly with ``.end``.
+    """
+    prepared, _, _ = _prepare_netlist_for_execution(netlist_result, analysis=analysis)
+    return prepared
 
 
 def _find_matching_component(
@@ -471,6 +681,8 @@ def _match_singular_matrix(
     combined: str,
     lowered: str,
     netlist_result: NetlistResult,
+    *,
+    node_aliases: dict[str, str] | None = None,
 ) -> Diagnostic | None:
     """Detect floating-node / singular-matrix diagnostics from ngspice output."""
     if not any(
@@ -480,7 +692,10 @@ def _match_singular_matrix(
 
     node_match = _CHECK_NODE_RE.search(combined)
     raw_node = node_match.group(1).rstrip(".,;:") if node_match is not None else ""
-    resolved_net = _find_matching_net(raw_node, netlist_result.nets) if raw_node else None
+    display_node = (
+        node_aliases.get(raw_node.lower(), raw_node) if (raw_node and node_aliases) else raw_node
+    )
+    resolved_net = _find_matching_net(display_node, netlist_result.nets) if display_node else None
     if resolved_net is not None:
         return Diagnostic(
             code="SINGULAR_MATRIX",
@@ -490,11 +705,11 @@ def _match_singular_matrix(
             ),
             targets=[NetTarget(net=resolved_net)],
         )
-    if raw_node:
+    if display_node:
         return Diagnostic(
             code="SINGULAR_MATRIX",
             message=(
-                f"Matrice singulière : le nœud « {raw_node} » est flottant "
+                f"Matrice singulière : le nœud « {display_node} » est flottant "
                 "ou sans chemin DC vers la masse."
             ),
             targets=[],
@@ -581,24 +796,32 @@ def _match_structural_ngspice_diagnostic(
     stdout: str,
     stderr: str,
     netlist_result: NetlistResult,
+    *,
+    node_aliases: dict[str, str] | None = None,
 ) -> Diagnostic | None:
     """Detect structural singularity or voltage-source loops even if transient OP masked them."""
     combined = "\n".join(part for part in (stderr, stdout) if part)
     lowered = combined.lower()
-    for matcher in (_match_voltage_loop, _match_singular_matrix):
-        diagnostic = matcher(combined, lowered, netlist_result)
-        if diagnostic is not None:
-            return diagnostic
-    return None
+    loop_diag = _match_voltage_loop(combined, lowered, netlist_result)
+    if loop_diag is not None:
+        return loop_diag
+    return _match_singular_matrix(combined, lowered, netlist_result, node_aliases=node_aliases)
 
 
 def _match_ngspice_diagnostic(
     stdout: str,
     stderr: str,
     netlist_result: NetlistResult,
+    *,
+    node_aliases: dict[str, str] | None = None,
 ) -> Diagnostic | None:
     """Translate known ngspice stderr/stdout errors into a French Diagnostic."""
-    structural = _match_structural_ngspice_diagnostic(stdout, stderr, netlist_result)
+    structural = _match_structural_ngspice_diagnostic(
+        stdout,
+        stderr,
+        netlist_result,
+        node_aliases=node_aliases,
+    )
     if structural is not None:
         return structural
 
@@ -616,9 +839,16 @@ def _build_failure_diagnostic(
     stderr: str,
     returncode: int,
     netlist_result: NetlistResult,
+    *,
+    node_aliases: dict[str, str] | None = None,
 ) -> Diagnostic:
     """Return a known ngspice Diagnostic or a generic French failure message."""
-    matched = _match_ngspice_diagnostic(stdout, stderr, netlist_result)
+    matched = _match_ngspice_diagnostic(
+        stdout,
+        stderr,
+        netlist_result,
+        node_aliases=node_aliases,
+    )
     if matched is not None:
         return matched
     summary = _extract_error_summary(stderr, stdout)
@@ -683,7 +913,7 @@ def run_simulation(
             warnings,
         )
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis | AcAnalysis):
         return _error_result(
             analysis,
             "SIMULATION_FAILED",
@@ -726,7 +956,10 @@ def run_simulation(
         )
 
     try:
-        prepared_netlist = prepare_netlist(netlist_result)
+        prepared_netlist, current_aliases, node_aliases = _prepare_netlist_for_execution(
+            netlist_result,
+            analysis=analysis,
+        )
     except UnsafeNetlistError as exc:
         return _error_result(
             analysis,
@@ -773,6 +1006,7 @@ def run_simulation(
             completed = subprocess.run(
                 [str(executable), "-b", _CIRCUIT_FILENAME, "-r", _RAWFILE_FILENAME],
                 cwd=tmp_path,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -805,6 +1039,7 @@ def run_simulation(
                 completed.stderr,
                 completed.returncode,
                 netlist_result,
+                node_aliases=node_aliases or None,
             )
             return SimulationResult(
                 analysis=analysis.kind,
@@ -816,6 +1051,7 @@ def run_simulation(
             completed.stdout,
             completed.stderr,
             netlist_result,
+            node_aliases=node_aliases or None,
         )
         if structural_diagnostic is not None:
             return SimulationResult(
@@ -840,6 +1076,7 @@ def run_simulation(
                 completed.stdout,
                 completed.stderr,
                 netlist_result,
+                node_aliases=node_aliases or None,
             )
             if diagnostic is not None:
                 return SimulationResult(
@@ -880,12 +1117,19 @@ def run_simulation(
                 warnings,
             )
 
-    parsed = parse_ngspice_output(raw_text, netlist_result, analysis, max_points=max_points)
+    parsed = parse_ngspice_output(
+        raw_text,
+        netlist_result,
+        analysis,
+        max_points=max_points,
+        current_aliases=current_aliases or None,
+    )
     if parsed.errors:
         diagnostic = _match_ngspice_diagnostic(
             completed.stdout,
             completed.stderr,
             netlist_result,
+            node_aliases=node_aliases or None,
         )
         if diagnostic is not None:
             return SimulationResult(

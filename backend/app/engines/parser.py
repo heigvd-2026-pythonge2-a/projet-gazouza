@@ -1,10 +1,12 @@
 """Pure SPICE3 ASCII rawfile parser and SimulationResult trace mapper."""
 
 import math
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from app.models.netlist import Diagnostic, DiagnosticCode, NetlistResult
 from app.models.simulation import (
+    AcAnalysis,
     Analysis,
     Axis,
     DcAnalysis,
@@ -57,6 +59,7 @@ class RawPlot:
     variables: tuple[RawVariable, ...]
     num_points: int
     columns: dict[str, list[float]]
+    imag_columns: dict[str, list[float]] = field(default_factory=dict)
 
 
 def _is_ascii_uint(token: str) -> bool:
@@ -87,6 +90,23 @@ def _parse_float(token: str) -> float:
             user_message=f"Valeur non finie produite par ngspice : {token!r}.",
         )
     return 0.0 if value == 0.0 else value
+
+
+def _parse_complex_token(token: str) -> tuple[float, float]:
+    """Parse a SPICE3 ASCII complex token of the form 'real,imag'."""
+    parts = token.split(",")
+    if (
+        len(parts) != 2
+        or not parts[0]
+        or not parts[1]
+        or parts[0] != parts[0].strip()
+        or parts[1] != parts[1].strip()
+    ):
+        raise RawParseError(
+            f"Invalid complex numeric value in rawfile: {token!r}.",
+            user_message=f"Valeur complexe invalide dans la sortie ngspice : {token!r}.",
+        )
+    return _parse_float(parts[0]), _parse_float(parts[1])
 
 
 def _append_variable_line(variables: list[RawVariable], stripped_line: str) -> None:
@@ -177,13 +197,6 @@ def _parse_header_and_variables(
             metadata[norm_key] = norm_val
         elif norm_key == "flags":
             flags = tuple(norm_val.lower().split())
-            if "complex" in flags:
-                raise RawParseError(
-                    "Complex rawfile values are not supported for this analysis.",
-                    user_message=(
-                        "Les valeurs complexes ne sont pas prises en charge pour cette analyse."
-                    ),
-                )
         elif norm_key == "no. variables":
             num_vars = _parse_non_negative_int(norm_val, "No. Variables")
             if num_vars <= 0:
@@ -218,9 +231,12 @@ def _parse_header_and_variables(
 def parse_raw_ascii(raw_text: str, max_points: int = MAX_RESULT_POINTS) -> RawPlot:
     """Parse a SPICE3 ASCII rawfile string into a structured RawPlot.
 
+    Supports both ``Flags: real`` scalar values and ``Flags: complex`` (``real,imag``)
+    values.
+
     Raises:
-        RawParseError: If the rawfile is empty, binary, complex, exceeds
-            ``max_points``, or is malformed.
+        RawParseError: If the rawfile is empty, binary, exceeds ``max_points``, or is
+            malformed.
     """
     _validate_max_points(max_points)
 
@@ -254,7 +270,9 @@ def parse_raw_ascii(raw_text: str, max_points: int = MAX_RESULT_POINTS) -> RawPl
             user_message="Les données numériques produites par ngspice sont incomplètes.",
         )
 
+    is_complex = "complex" in flags
     series: list[list[float]] = [[] for _ in range(num_vars)]
+    imag_series: list[list[float]] = [[] for _ in range(num_vars)] if is_complex else []
     stride = 1 + num_vars
     for point_idx in range(num_points):
         base = point_idx * stride
@@ -265,11 +283,21 @@ def parse_raw_ascii(raw_text: str, max_points: int = MAX_RESULT_POINTS) -> RawPl
                 user_message="Les points de mesure ngspice sont corrompus ou désordonnés.",
             )
         for var_idx in range(num_vars):
-            series[var_idx].append(_parse_float(tokens[base + 1 + var_idx]))
+            val_token = tokens[base + 1 + var_idx]
+            if is_complex:
+                real_val, imag_val = _parse_complex_token(val_token)
+                series[var_idx].append(real_val)
+                imag_series[var_idx].append(imag_val)
+            else:
+                series[var_idx].append(_parse_float(val_token))
 
     columns: dict[str, list[float]] = {}
-    for var, col in zip(variables, series, strict=True):
-        columns.setdefault(var.name, col)
+    imag_columns: dict[str, list[float]] = {}
+    for var_idx, var in enumerate(variables):
+        if var.name not in columns:
+            columns[var.name] = series[var_idx]
+            if is_complex:
+                imag_columns[var.name] = imag_series[var_idx]
 
     return RawPlot(
         title=metadata["title"],
@@ -279,6 +307,7 @@ def parse_raw_ascii(raw_text: str, max_points: int = MAX_RESULT_POINTS) -> RawPl
         variables=variables,
         num_points=num_points,
         columns=columns,
+        imag_columns=imag_columns,
     )
 
 
@@ -334,24 +363,40 @@ def _extract_current_match(var_name: str) -> tuple[str, int] | None:
     return None
 
 
-def _build_traces(plot: RawPlot, netlist_result: NetlistResult) -> list[Trace]:
+def _build_traces(
+    plot: RawPlot,
+    netlist_result: NetlistResult,
+    *,
+    include_imag: bool = False,
+    current_aliases: Mapping[str, str] | None = None,
+) -> list[Trace]:
     """Map rawfile columns to contract Trace objects in deterministic order."""
-    voltage_by_lower: dict[str, list[float]] = {}
-    current_by_lower: dict[str, tuple[int, list[float]]] = {}
+    alias_to_spice_lower: dict[str, str] = {}
+    if current_aliases:
+        for sense_name, spice_name in current_aliases.items():
+            sense_key = sense_name.strip().lower()
+            target_key = spice_name.strip().lower()
+            if sense_key and target_key:
+                alias_to_spice_lower[sense_key] = target_key
+
+    voltage_by_lower: dict[str, tuple[list[float], list[float] | None]] = {}
+    current_by_lower: dict[str, tuple[int, list[float], list[float] | None]] = {}
 
     for var in plot.variables:
         col = plot.columns[var.name]
+        imag_col = plot.imag_columns.get(var.name) if include_imag else None
         net_lower = _extract_voltage_net(var.name)
         if net_lower is not None:
-            voltage_by_lower.setdefault(net_lower, col)
+            voltage_by_lower.setdefault(net_lower, (col, imag_col))
             continue
 
         current_match = _extract_current_match(var.name)
         if current_match is not None:
             comp_lower, priority = current_match
-            existing = current_by_lower.get(comp_lower)
+            resolved_lower = alias_to_spice_lower.get(comp_lower, comp_lower)
+            existing = current_by_lower.get(resolved_lower)
             if existing is None or priority < existing[0]:
-                current_by_lower[comp_lower] = (priority, col)
+                current_by_lower[resolved_lower] = (priority, col, imag_col)
 
     traces: list[Trace] = []
 
@@ -359,12 +404,16 @@ def _build_traces(plot: RawPlot, netlist_result: NetlistResult) -> list[Trace]:
         if net == "0":
             continue
         exact_key = f"v({net})"
-        values = (
-            plot.columns[exact_key]
-            if exact_key in plot.columns
-            else voltage_by_lower.get(net.lower())
-        )
-        if values is not None:
+        if exact_key in plot.columns:
+            real_values: list[float] | None = plot.columns[exact_key]
+            imag_values: list[float] | None = (
+                plot.imag_columns.get(exact_key) if include_imag else None
+            )
+        else:
+            pair = voltage_by_lower.get(net.lower())
+            real_values, imag_values = pair if pair is not None else (None, None)
+
+        if real_values is not None:
             traces.append(
                 Trace(
                     name=exact_key,
@@ -372,14 +421,15 @@ def _build_traces(plot: RawPlot, netlist_result: NetlistResult) -> list[Trace]:
                     unit="V",
                     net=net,
                     component_id=None,
-                    values=list(values),
-                    imag=None,
+                    values=list(real_values),
+                    imag=list(imag_values) if include_imag and imag_values is not None else None,
                 )
             )
 
     for spice_name, component_id in netlist_result.components.items():
         matched = current_by_lower.get(spice_name.lower())
         if matched is not None:
+            _, real_values, imag_values = matched
             traces.append(
                 Trace(
                     name=f"i({spice_name})",
@@ -387,8 +437,8 @@ def _build_traces(plot: RawPlot, netlist_result: NetlistResult) -> list[Trace]:
                     unit="A",
                     net=None,
                     component_id=component_id,
-                    values=list(matched[1]),
-                    imag=None,
+                    values=list(real_values),
+                    imag=list(imag_values) if include_imag and imag_values is not None else None,
                 )
             )
 
@@ -444,26 +494,28 @@ def map_plot_to_simulation_result(
     plot: RawPlot,
     netlist_result: NetlistResult,
     analysis: Analysis,
+    current_aliases: Mapping[str, str] | None = None,
 ) -> SimulationResult:
     """Convert a parsed RawPlot into a SimulationResult matching the API contract."""
     warnings = list(netlist_result.warnings)
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis | AcAnalysis):
         return _error_result(
             analysis,
             f"Le type d'analyse « {analysis.kind} » n'est pas encore pris en charge.",
             warnings,
         )
 
-    if "complex" in plot.flags:
+    if plot.num_points == 0:
+        return _error_result(analysis, "La simulation ngspice n'a produit aucun point.", warnings)
+
+    is_complex = "complex" in plot.flags
+    if not isinstance(analysis, AcAnalysis) and is_complex:
         return _error_result(
             analysis,
             "Les valeurs complexes ne sont pas prises en charge pour cette analyse.",
             warnings,
         )
-
-    if plot.num_points == 0:
-        return _error_result(analysis, "La simulation ngspice n'a produit aucun point.", warnings)
 
     columns_by_lower = {var.name.lower(): plot.columns[var.name] for var in plot.variables}
     plotname_lower = plot.plotname.lower()
@@ -477,8 +529,12 @@ def map_plot_to_simulation_result(
                 f"{plot.num_points}.",
                 warnings,
             )
-        if "time" in columns_by_lower or any(
-            marker in plotname_lower for marker in ("transient", "ac analysis", "dc transfer")
+        if (
+            "time" in columns_by_lower
+            or "frequency" in columns_by_lower
+            or any(
+                marker in plotname_lower for marker in ("transient", "ac analysis", "dc transfer")
+            )
         ):
             return _error_result(
                 analysis,
@@ -502,9 +558,14 @@ def map_plot_to_simulation_result(
                 warnings,
             )
         axis = Axis(name="time", unit="s", values=list(time_values))
-    else:
-        if "time" in columns_by_lower or any(
-            marker in plotname_lower for marker in ("operating point", "transient", "ac analysis")
+    elif isinstance(analysis, DcAnalysis):
+        if (
+            "time" in columns_by_lower
+            or "frequency" in columns_by_lower
+            or any(
+                marker in plotname_lower
+                for marker in ("operating point", "transient", "ac analysis")
+            )
         ):
             return _error_result(
                 analysis,
@@ -528,8 +589,53 @@ def map_plot_to_simulation_result(
             )
         axis_unit = "A" if spice_name.strip().upper().startswith("I") else "V"
         axis = Axis(name=spice_name, unit=axis_unit, values=list(sweep_values))
+    else:
+        if not is_complex:
+            return _error_result(
+                analysis,
+                "La sortie ngspice d'une analyse .ac doit contenir des valeurs complexes.",
+                warnings,
+            )
+        if any(
+            marker in plotname_lower for marker in ("operating point", "transient", "dc transfer")
+        ):
+            return _error_result(
+                analysis,
+                "La sortie ngspice ne correspond pas à une analyse .ac.",
+                warnings,
+            )
+        freq_values = columns_by_lower.get("frequency")
+        if freq_values is None:
+            return _error_result(
+                analysis,
+                "L'axe fréquentiel ('frequency') est absent des résultats ngspice.",
+                warnings,
+            )
+        axis = Axis(name="frequency", unit="Hz", values=list(freq_values))
 
-    traces = _build_traces(plot, netlist_result)
+    is_ac = isinstance(analysis, AcAnalysis)
+    traces = _build_traces(
+        plot,
+        netlist_result,
+        include_imag=is_ac,
+        current_aliases=current_aliases,
+    )
+    if is_ac:
+        for trace in traces:
+            if (
+                trace.imag is None
+                or len(trace.values) != plot.num_points
+                or len(trace.imag) != len(trace.values)
+            ):
+                return _error_result(
+                    analysis,
+                    (
+                        "Les composantes réelles et imaginaires sont incohérentes pour "
+                        f"« {trace.name} »."
+                    ),
+                    warnings,
+                )
+
     has_expected_targets = any(net != "0" for net in netlist_result.nets) or bool(
         netlist_result.components
     )
@@ -554,6 +660,7 @@ def parse_ngspice_output(
     netlist_result: NetlistResult,
     analysis: Analysis,
     max_points: int = MAX_RESULT_POINTS,
+    current_aliases: Mapping[str, str] | None = None,
 ) -> SimulationResult:
     """Parse raw SPICE3 ASCII output and map variables to a SimulationResult.
 
@@ -568,7 +675,7 @@ def parse_ngspice_output(
             warnings=list(netlist_result.warnings),
         )
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis | AcAnalysis):
         return _error_result(
             analysis,
             f"Le type d'analyse « {analysis.kind} » n'est pas encore pris en charge.",
@@ -580,4 +687,9 @@ def parse_ngspice_output(
     except RawParseError as exc:
         return _error_result(analysis, exc.user_message, list(netlist_result.warnings))
 
-    return map_plot_to_simulation_result(plot, netlist_result, analysis)
+    return map_plot_to_simulation_result(
+        plot,
+        netlist_result,
+        analysis,
+        current_aliases=current_aliases,
+    )
