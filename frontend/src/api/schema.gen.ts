@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+  "/api/library": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Library
+     * @description Every component type: pins, parameters (with defaults and labels) and SPICE template.
+     *
+     *     Sorted by type. The library is read once; it is the same for every request.
+     */
+    get: operations["library_api_library_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -151,6 +173,48 @@ export interface components {
     ComponentTarget: {
       /** Comp */
       comp: string;
+    };
+    /**
+     * ComponentType
+     * @description One library file.
+     */
+    ComponentType: {
+      /**
+       * Type
+       * @description Library id, equal to the file name (e.g. 'resistor').
+       */
+      type: string;
+      /**
+       * Label
+       * @description Name shown to the user, in French.
+       */
+      label: string;
+      /**
+       * Prefix
+       * @description SPICE prefix ('R', 'C'...). None for 'ground' and 'label', which produce no SPICE line.
+       */
+      prefix: string | null;
+      /** Pins */
+      pins: components["schemas"]["PinDef"][];
+      /** Params */
+      params?: components["schemas"]["ParamDef"][];
+      /**
+       * Spice
+       * @description SPICE line template. None when `prefix` is None.
+       */
+      spice: string | null;
+      /**
+       * Waveforms
+       * @description Sources only: template of each waveform, selected by the 'waveform' param.
+       */
+      waveforms?: {
+        [key: string]: string;
+      };
+      /**
+       * Includes
+       * @description Model files to `.include`.
+       */
+      includes?: string[];
     };
     /** DcAnalysis */
     DcAnalysis: {
@@ -307,6 +371,74 @@ export interface components {
        * @enum {string}
        */
       kind: "op";
+    };
+    /**
+     * ParamDef
+     * @description A parameter the user can edit.
+     */
+    ParamDef: {
+      /** Name */
+      name: string;
+      /**
+       * Label
+       * @description Shown to the user, in French.
+       */
+      label: string;
+      /**
+       * Unit
+       * @default
+       */
+      unit: string;
+      /**
+       * Default
+       * @description Written into `params` by the editor on placement.
+       */
+      default: string;
+      /**
+       * Kind
+       * @description 'value': SPICE number ('1k'); 'text': free text (label name); 'choice': one of `options`.
+       * @default value
+       * @enum {string}
+       */
+      kind: "value" | "text" | "choice";
+      /**
+       * Options
+       * @description Allowed values, for 'choice'.
+       */
+      options?: components["schemas"]["ParamOption"][];
+      /**
+       * Waveforms
+       * @description Sources only: the waveforms that use this parameter (e.g. ['pulse', 'sin']). Empty: always shown.
+       */
+      waveforms?: string[];
+    };
+    /**
+     * ParamOption
+     * @description One allowed value of a 'choice' parameter.
+     */
+    ParamOption: {
+      /**
+       * Value
+       * @description Stored in `params` (e.g. 'pulse').
+       */
+      value: string;
+      /**
+       * Label
+       * @description Shown to the user, in French (e.g. 'Impulsion').
+       */
+      label: string;
+    };
+    /**
+     * PinDef
+     * @description A pin, with its position relative to the component at rotation 0 (grid units).
+     */
+    PinDef: {
+      /** Name */
+      name: string;
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
     };
     /**
      * PinEnd
@@ -498,6 +630,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  library_api_library_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ComponentType"][];
+        };
+      };
+    };
+  };
   health_api_health_get: {
     parameters: {
       query?: never;

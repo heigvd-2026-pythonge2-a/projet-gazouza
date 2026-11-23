@@ -5,6 +5,29 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/library": {
+      "get": {
+        "summary": "Library",
+        "description": "Every component type: pins, parameters (with defaults and labels) and SPICE template.\n\nSorted by type. The library is read once; it is the same for every request.",
+        "operationId": "library_api_library_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ComponentType"
+                  },
+                  "type": "array",
+                  "title": "Response Library Api Library Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -251,6 +274,86 @@
           "comp"
         ],
         "title": "ComponentTarget"
+      },
+      "ComponentType": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Library id, equal to the file name (e.g. 'resistor')."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Name shown to the user, in French."
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix",
+            "description": "SPICE prefix ('R', 'C'...). None for 'ground' and 'label', which produce no SPICE line."
+          },
+          "pins": {
+            "items": {
+              "$ref": "#/components/schemas/PinDef"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Pins"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamDef"
+            },
+            "type": "array",
+            "title": "Params"
+          },
+          "spice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spice",
+            "description": "SPICE line template. None when `prefix` is None."
+          },
+          "waveforms": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Waveforms",
+            "description": "Sources only: template of each waveform, selected by the 'waveform' param."
+          },
+          "includes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Includes",
+            "description": "Model files to `.include`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "label",
+          "prefix",
+          "pins",
+          "spice"
+        ],
+        "title": "ComponentType",
+        "description": "One library file."
       },
       "DcAnalysis": {
         "properties": {
@@ -511,6 +614,112 @@
         },
         "type": "object",
         "title": "OpAnalysis"
+      },
+      "ParamDef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Shown to the user, in French."
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "default": ""
+          },
+          "default": {
+            "type": "string",
+            "title": "Default",
+            "description": "Written into `params` by the editor on placement."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "value",
+              "text",
+              "choice"
+            ],
+            "title": "Kind",
+            "description": "'value': SPICE number ('1k'); 'text': free text (label name); 'choice': one of `options`.",
+            "default": "value"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/ParamOption"
+            },
+            "type": "array",
+            "title": "Options",
+            "description": "Allowed values, for 'choice'."
+          },
+          "waveforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Waveforms",
+            "description": "Sources only: the waveforms that use this parameter (e.g. ['pulse', 'sin']). Empty: always shown."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "default"
+        ],
+        "title": "ParamDef",
+        "description": "A parameter the user can edit."
+      },
+      "ParamOption": {
+        "properties": {
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "Stored in `params` (e.g. 'pulse')."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Shown to the user, in French (e.g. 'Impulsion')."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ParamOption",
+        "description": "One allowed value of a 'choice' parameter."
+      },
+      "PinDef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "x": {
+            "type": "integer",
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "title": "Y"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "x",
+          "y"
+        ],
+        "title": "PinDef",
+        "description": "A pin, with its position relative to the component at rotation 0 (grid units)."
       },
       "PinEnd": {
         "properties": {

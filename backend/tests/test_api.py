@@ -3,11 +3,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 import app.main as main_module
 from app.engines import NgspiceNotFoundError, locate_ngspice
 from app.main import app
-from app.models import Analysis, NetlistResult, SimulationResult
+from app.models import Analysis, ComponentType, NetlistResult, SimulationResult
 
 client = TestClient(app)
 
@@ -128,3 +129,28 @@ def test_simulate_with_real_ngspice_gives_the_rc_charge() -> None:
     v_out = next(t for t in result.traces if t.name == "v(out)").values
     at_tau = min(range(len(times)), key=lambda i: abs(times[i] - 1e-3))
     assert v_out[at_tau] == pytest.approx(3.16, abs=0.02)
+
+
+def test_library_route() -> None:
+    response = client.get("/api/library")
+    assert response.status_code == 200
+    library = TypeAdapter(list[ComponentType]).validate_python(response.json())
+
+    types = [c.type for c in library]
+    assert types == sorted(types)
+    assert set(types) >= {"resistor", "capacitor", "voltage_source", "ground", "label"}
+
+    resistor = next(c for c in library if c.type == "resistor")
+    assert resistor.prefix == "R"
+    assert [(p.name, p.x, p.y) for p in resistor.pins] == [("1", 0, -2), ("2", 0, 2)]
+    assert resistor.params[0].default == "1k"
+
+    source = next(c for c in library if c.type == "voltage_source")
+    waveform = next(p for p in source.params if p.name == "waveform")
+    assert [(o.value, o.label) for o in waveform.options][1] == ("pulse", "Impulsion")
+
+
+def test_library_is_in_the_contract() -> None:
+    # The editor gets its TypeScript types from openapi.json: the schema must be there.
+    schemas = client.get("/openapi.json").json()["components"]["schemas"]
+    assert {"ComponentType", "ParamDef", "ParamOption", "PinDef"} <= set(schemas)
