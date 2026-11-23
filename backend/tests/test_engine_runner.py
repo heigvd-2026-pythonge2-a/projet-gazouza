@@ -1,10 +1,11 @@
 """Unit and ngspice integration tests for backend.app.engines.runner."""
 
 import json
+import math
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic import TypeAdapter
@@ -145,18 +146,8 @@ def test_blank_netlist_without_errors_returns_simulation_failed(
     assert result.traces == []
 
 
-@pytest.mark.parametrize(
-    "analysis",
-    [
-        AcAnalysis(
-            input_source_id="c1",
-            start_frequency=10.0,
-            stop_frequency=1e5,
-            points_per_decade=20,
-        ),
-    ],
-)
-def test_unsupported_analysis_returns_french_diagnostic(analysis: Analysis) -> None:
+def test_unsupported_analysis_returns_french_diagnostic() -> None:
+    analysis = cast(Analysis, SimpleNamespace(kind="op"))
     result = run_simulation(_divider_netlist(), analysis)
 
     assert result.analysis == analysis.kind
@@ -1116,6 +1107,220 @@ def test_ngspice_dc_diode_characteristic_and_current_source_sweep() -> None:
 
 @pytest.mark.ngspice
 @pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_golden_lowpass_ac() -> None:
+    fixture_dir = FIXTURES_DIR / "lowpass_ac"
+    netlist_result = NetlistResult.model_validate_json(
+        (fixture_dir / "netlist.json").read_text(encoding="utf-8")
+    )
+    analysis = TypeAdapter(Analysis).validate_json(
+        (fixture_dir / "analysis.json").read_text(encoding="utf-8")
+    )
+    expected = SimulationResult.model_validate_json(
+        (fixture_dir / "result.json").read_text(encoding="utf-8")
+    )
+
+    result = run_simulation(netlist_result, analysis)
+
+    assert result.errors == []
+    assert result == expected
+    assert result.analysis == "ac"
+    assert result.axis is not None
+    assert result.axis.name == "frequency"
+    assert result.axis.unit == "Hz"
+    assert len(result.axis.values) == 81
+
+    traces_by_name = {trace.name: trace for trace in result.traces}
+    assert list(traces_by_name) == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(C1)"]
+    for trace in result.traces:
+        assert trace.imag is not None
+        assert len(trace.values) == len(result.axis.values)
+        assert len(trace.imag) == len(result.axis.values)
+
+    # Check -3 dB cutoff (-3.0103 dB, -45 deg phase) at f = 1 kHz (R=1k, C=159.15n -> fc=1 kHz).
+    idx_1khz = min(
+        range(len(result.axis.values)),
+        key=lambda i: abs(result.axis.values[i] - 1000.0),
+    )
+    assert result.axis.values[idx_1khz] == pytest.approx(1000.0)
+    v_out = traces_by_name["v(out)"]
+    assert v_out.imag is not None
+    v_out_re = v_out.values[idx_1khz]
+    v_out_im = v_out.imag[idx_1khz]
+    gain_db = 20.0 * math.log10(math.hypot(v_out_re, v_out_im))
+    phase_deg = math.degrees(math.atan2(v_out_im, v_out_re))
+    assert gain_db == pytest.approx(-3.0103, abs=0.01)
+    assert phase_deg == pytest.approx(-45.0, abs=0.05)
+
+    # Verify branch current sensing matches KCL (i(R1) == i(C1) == -i(V1)) across all frequencies.
+    i_v1 = traces_by_name["i(V1)"]
+    i_r1 = traces_by_name["i(R1)"]
+    i_c1 = traces_by_name["i(C1)"]
+    assert i_v1.imag is not None
+    assert i_r1.imag is not None
+    assert i_c1.imag is not None
+    assert i_r1.values == pytest.approx(i_c1.values, abs=1e-12)
+    assert i_r1.imag == pytest.approx(i_c1.imag, abs=1e-12)
+    assert i_v1.values == pytest.approx([-val for val in i_r1.values], abs=1e-12)
+    assert i_v1.imag == pytest.approx([-val for val in i_r1.imag], abs=1e-12)
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_ac_supports_inductor_diode_and_current_source() -> None:
+    ac_netlist = NetlistResult(
+        netlist=(
+            "* ac_rl_d_i\n"
+            "V1 in 0 DC 5 AC 1\n"
+            "L1 in n1 1m\n"
+            "R1 n1 n2 1k\n"
+            "D1 n2 0 DMOD\n"
+            "I1 0 n2 DC 1m AC 0.5m\n"
+            ".model DMOD D\n"
+            ".ac dec 5 10 1k\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "n1": ["w2"], "n2": ["w3"], "0": ["w4"]},
+        components={"V1": "c1", "L1": "c2", "R1": "c3", "D1": "c4", "I1": "c5"},
+    )
+    ac_analysis = AcAnalysis(
+        input_source_id="c1",
+        start_frequency=10.0,
+        stop_frequency=1000.0,
+        points_per_decade=5,
+    )
+
+    result = run_simulation(ac_netlist, ac_analysis)
+
+    assert result.errors == []
+    assert result.axis is not None
+    assert result.axis.name == "frequency"
+    traces = {trace.name: trace for trace in result.traces}
+    assert list(traces) == ["v(in)", "v(n1)", "v(n2)", "i(V1)", "i(L1)", "i(R1)", "i(D1)", "i(I1)"]
+    # Native inductor current equals sensed resistor current in series.
+    assert traces["i(L1)"].values == pytest.approx(traces["i(R1)"].values, abs=1e-12)
+    assert traces["i(L1)"].imag == pytest.approx(traces["i(R1)"].imag, abs=1e-12)
+    # Current source AC excitation is 0.5 mA + 0j.
+    assert traces["i(I1)"].values == pytest.approx([5e-4] * len(result.axis.values), abs=1e-12)
+    assert traces["i(I1)"].imag == pytest.approx([0.0] * len(result.axis.values), abs=1e-12)
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_ac_current_sign_matches_op_convention() -> None:
+    """Verify AC 0V sense sources keep node1->node2 sign convention as .op (no 180 deg flip)."""
+    ac_1hz = AcAnalysis(
+        input_source_id="c1",
+        start_frequency=1.0,
+        stop_frequency=1.0,
+        points_per_decade=1,
+    )
+
+    # 1. Pure resistor: .op (@r1[i], i(V1)) vs .ac 1 Hz (i(V__psice_sense_r1), i(V1)).
+    res_op_netlist = NetlistResult(
+        netlist="* r sign op\nV1 in 0 DC 5\nR1 in 0 1k\n.op\n.end\n",
+        nets={"in": ["w1"], "0": ["w2", "w3"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    res_ac_netlist = NetlistResult(
+        netlist="* r sign ac\nV1 in 0 DC 5 AC 1\nR1 in 0 1k\n.ac dec 1 1 1\n.end\n",
+        nets={"in": ["w1"], "0": ["w2", "w3"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    res_op = run_simulation(res_op_netlist, OpAnalysis())
+    res_ac = run_simulation(res_ac_netlist, ac_1hz)
+    assert res_op.errors == []
+    assert res_ac.errors == []
+    r_op_traces = {t.name: t for t in res_op.traces}
+    r_ac_traces = {t.name: t for t in res_ac.traces}
+    assert r_op_traces["i(R1)"].values[0] == pytest.approx(5e-3)
+    assert r_op_traces["i(V1)"].values[0] == pytest.approx(-5e-3)
+    assert r_ac_traces["i(R1)"].values[0] == pytest.approx(1e-3)
+    assert r_ac_traces["i(R1)"].imag == pytest.approx([0.0], abs=1e-12)
+    assert r_ac_traces["i(V1)"].values[0] == pytest.approx(-1e-3)
+
+    # 2. Forward-biased diode in series with R1: @d1[id] and @r1[i] match .ac signs.
+    diode_op_netlist = NetlistResult(
+        netlist=(
+            "* rd sign op\n"
+            "V1 in 0 DC 5\n"
+            "R1 in out 1k\n"
+            "D1 out 0 D1N4148\n"
+            ".model D1N4148 D(IS=2.52n RS=0.568 N=1.752)\n"
+            ".op\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3", "w4"]},
+        components={"V1": "c1", "R1": "c2", "D1": "c3"},
+    )
+    diode_ac_netlist = NetlistResult(
+        netlist=(
+            "* rd sign ac\n"
+            "V1 in 0 DC 5 AC 1\n"
+            "R1 in out 1k\n"
+            "D1 out 0 D1N4148\n"
+            ".model D1N4148 D(IS=2.52n RS=0.568 N=1.752)\n"
+            ".ac dec 1 1 1\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3", "w4"]},
+        components={"V1": "c1", "R1": "c2", "D1": "c3"},
+    )
+    d_op = run_simulation(diode_op_netlist, OpAnalysis())
+    d_ac = run_simulation(diode_ac_netlist, ac_1hz)
+    assert d_op.errors == []
+    assert d_ac.errors == []
+    d_op_traces = {t.name: t for t in d_op.traces}
+    d_ac_traces = {t.name: t for t in d_ac.traces}
+    assert d_op_traces["i(R1)"].values[0] > 0.004
+    assert d_op_traces["i(D1)"].values[0] > 0.004
+    assert d_op_traces["i(V1)"].values[0] < -0.004
+    assert d_ac_traces["i(R1)"].values[0] > 0.0
+    assert d_ac_traces["i(D1)"].values[0] == pytest.approx(d_ac_traces["i(R1)"].values[0])
+    assert d_ac_traces["i(V1)"].values[0] == pytest.approx(-d_ac_traces["i(R1)"].values[0])
+    assert d_ac_traces["i(D1)"].imag == pytest.approx([0.0], abs=1e-9)
+
+    # 3. Current source I1 (out -> 0): @i1[c] > 0 and @r1[i] < 0 match .ac signs.
+    isrc_op_netlist = NetlistResult(
+        netlist="* i sign op\nI1 out 0 DC 2m\nR1 out 0 1k\n.op\n.end\n",
+        nets={"out": ["w1"], "0": ["w2", "w3"]},
+        components={"I1": "c1", "R1": "c2"},
+    )
+    isrc_ac_netlist = NetlistResult(
+        netlist="* i sign ac\nI1 out 0 DC 2m AC 1m\nR1 out 0 1k\n.ac dec 1 1 1\n.end\n",
+        nets={"out": ["w1"], "0": ["w2", "w3"]},
+        components={"I1": "c1", "R1": "c2"},
+    )
+    i_op = run_simulation(isrc_op_netlist, OpAnalysis())
+    i_ac = run_simulation(isrc_ac_netlist, ac_1hz)
+    assert i_op.errors == []
+    assert i_ac.errors == []
+    i_op_traces = {t.name: t for t in i_op.traces}
+    i_ac_traces = {t.name: t for t in i_ac.traces}
+    assert i_op_traces["i(I1)"].values[0] == pytest.approx(2e-3)
+    assert i_op_traces["i(R1)"].values[0] == pytest.approx(-2e-3)
+    assert i_ac_traces["i(I1)"].values[0] == pytest.approx(1e-3)
+    assert i_ac_traces["i(I1)"].imag == pytest.approx([0.0], abs=1e-12)
+    assert i_ac_traces["i(R1)"].values[0] == pytest.approx(-1e-3)
+
+    # 4. Capacitor C1 at 1 Hz (V1 AC 1): current leads voltage by +90 deg (imag = +2*pi*f*C > 0).
+    cap_ac_netlist = NetlistResult(
+        netlist="* c phase ac\nV1 in 0 DC 0 AC 1\nC1 in 0 1u\n.ac dec 1 1 1\n.end\n",
+        nets={"in": ["w1"], "0": ["w2", "w3"]},
+        components={"V1": "c1", "C1": "c2"},
+    )
+    c_ac = run_simulation(cap_ac_netlist, ac_1hz)
+    assert c_ac.errors == []
+    c_ac_traces = {t.name: t for t in c_ac.traces}
+    assert c_ac_traces["i(C1)"].imag is not None
+    assert c_ac_traces["i(V1)"].imag is not None
+    assert c_ac_traces["i(C1)"].values[0] == pytest.approx(0.0, abs=1e-12)
+    assert c_ac_traces["i(C1)"].imag[0] == pytest.approx(2.0 * math.pi * 1.0 * 1e-6, rel=1e-6)
+    assert c_ac_traces["i(C1)"].imag[0] > 0.0
+    assert c_ac_traces["i(V1)"].imag[0] == pytest.approx(-c_ac_traces["i(C1)"].imag[0], rel=1e-6)
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
 def test_ngspice_real_failure_cases_return_v2_diagnostics() -> None:
     v_loop = NetlistResult(
         netlist=(
@@ -1502,3 +1707,166 @@ def test_build_ngspice_env_sets_spice_scripts_when_spinit_exists(
     bare_exe.write_bytes(b"")
     env_bare = runner_module._build_ngspice_env(bare_exe)
     assert "SPICE_SCRIPTS" not in env_bare
+
+
+def test_prepare_netlist_ac_instruments_non_vl_components_and_avoids_collisions() -> None:
+    ac_analysis = AcAnalysis(
+        input_source_id="c1",
+        start_frequency=10.0,
+        stop_frequency=1e5,
+        points_per_decade=20,
+    )
+    netlist = NetlistResult(
+        netlist=(
+            "* ac_prepare_test\n"
+            "* comment before subckt\n"
+            "\n"
+            ".subckt BUF a b\n"
+            "R1 a b 10\n"
+            ".ends BUF\n"
+            "V1 in 0 DC 0 AC 1\n"
+            "V__psice_sense_r1 __psice_sense_r1 0 DC 0\n"
+            "L1 in n1 1m\n"
+            "R1 n1 n2\n"
+            "+ 1k\n"
+            "C1 n2 0 100n\n"
+            "D1 n2 0 DMOD\n"
+            "I1 0 n2 DC 1m AC 0\n"
+            "X1 n2 out BUF\n"
+            ".model DMOD D\n"
+            ".ac dec 20 10 100k\n"
+            ".end\n"
+        ),
+        nets={
+            "in": ["w1"],
+            "n1": ["w2"],
+            "n2": ["w3"],
+            "out": ["w4"],
+            "__psice_sense_r1": ["w5"],
+            "0": ["w6"],
+        },
+        components={
+            "V1": "c1",
+            "V__psice_sense_r1": "c9",
+            "L1": "c2",
+            "R1": "c3",
+            "C1": "c4",
+            "D1": "c5",
+            "I1": "c6",
+            "X1": "c7",
+        },
+    )
+
+    prepared_str = prepare_netlist(netlist, ac_analysis)
+    prepared_exec, current_aliases, node_aliases = runner_module._prepare_netlist_for_execution(
+        netlist, ac_analysis
+    )
+    assert prepared_str == prepared_exec
+
+    lines = prepared_exec.splitlines()
+    # Inside .subckt, R1 is untouched.
+    assert lines[3:6] == [".subckt BUF a b", "R1 a b 10", ".ends BUF"]
+    # V1 and L1 are not instrumented; R1 avoids collision with pre-existing __psice_sense_r1.
+    assert "V__psice_sense_r1_1 n1 __psice_sense_r1_1 DC 0" in lines
+    assert "R1 __psice_sense_r1_1 n2" in lines
+    assert "+ 1k" in lines
+    assert "V__psice_sense_c1 n2 __psice_sense_c1 DC 0" in lines
+    assert "C1 __psice_sense_c1 0 100n" in lines
+    assert "V__psice_sense_d1 n2 __psice_sense_d1 DC 0" in lines
+    assert "D1 __psice_sense_d1 0 DMOD" in lines
+    assert "V__psice_sense_i1 0 __psice_sense_i1 DC 0" in lines
+    assert "I1 __psice_sense_i1 n2 DC 1m AC 0" in lines
+    assert "X1 n2 out BUF" in lines
+    # .save in AC must only request `all` and NEVER @r1[i] / @c1[i] / @d1[i] / @i1[i].
+    assert ".save all" in lines
+    assert not any("@" in line for line in lines if line.startswith((".save", "+")))
+    assert current_aliases == {
+        "v__psice_sense_r1_1": "R1",
+        "v__psice_sense_c1": "C1",
+        "v__psice_sense_d1": "D1",
+        "v__psice_sense_i1": "I1",
+    }
+    assert node_aliases == {
+        "__psice_sense_r1_1": "n1",
+        "__psice_sense_c1": "n2",
+        "__psice_sense_d1": "n2",
+        "__psice_sense_i1": "0",
+    }
+
+
+def test_run_simulation_ac_mocked_maps_aliases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_exe = tmp_path / "ngspice_con.exe"
+    fake_exe.write_bytes(b"")
+
+    ac_netlist = NetlistResult(
+        netlist=(
+            "* rc_ac\nV1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 159.15n\n.ac dec 20 10 100k\n.end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "C1": "c3"},
+    )
+    ac_analysis = AcAnalysis(
+        input_source_id="c1",
+        start_frequency=10.0,
+        stop_frequency=100_000.0,
+        points_per_decade=20,
+    )
+    mock_ac_raw = (
+        "Title: * rc_ac\n"
+        "Plotname: AC Analysis\n"
+        "Flags: complex\n"
+        "No. Variables: 8\n"
+        "No. Points: 1\n"
+        "Variables:\n"
+        "\t0\tfrequency\tfrequency\n"
+        "\t1\tv(in)\tvoltage\n"
+        "\t2\tv(__psice_sense_r1)\tvoltage\n"
+        "\t3\tv(out)\tvoltage\n"
+        "\t4\tv(__psice_sense_c1)\tvoltage\n"
+        "\t5\ti(v1)\tcurrent\n"
+        "\t6\ti(v__psice_sense_r1)\tcurrent\n"
+        "\t7\ti(v__psice_sense_c1)\tcurrent\n"
+        "Values:\n"
+        "0\t1000.0,0.0\n"
+        "\t1.0,0.0\n"
+        "\t1.0,0.0\n"
+        "\t0.5,-0.5\n"
+        "\t0.5,-0.5\n"
+        "\t-0.0005,-0.0005\n"
+        "\t0.0005,0.0005\n"
+        "\t0.0005,0.0005\n"
+    )
+
+    recorded_circuits: list[str] = []
+
+    def _fake_run(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
+        cwd = Path(kwargs["cwd"])
+        recorded_circuits.append((cwd / "circuit.cir").read_text(encoding="utf-8"))
+        (cwd / "output.raw").write_text(mock_ac_raw, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner_module.subprocess, "run", _fake_run)
+
+    res = run_simulation(ac_netlist, ac_analysis, ngspice_path=fake_exe)
+    assert res.errors == []
+    assert ".save all\n" in recorded_circuits[0]
+    assert "@r1[i]" not in recorded_circuits[0]
+    assert [t.name for t in res.traces] == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(C1)"]
+    assert res.traces[3].values == [0.0005]
+    assert res.traces[3].imag == [0.0005]
+
+    # Singular matrix reporting an internal sense node maps back to the original net.
+    def _singular_sense_node(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(
+            returncode=0,
+            stdout="",
+            stderr="Warning: singular matrix:  check node __psice_sense_c1\n",
+        )
+
+    monkeypatch.setattr(runner_module.subprocess, "run", _singular_sense_node)
+    res_singular = run_simulation(ac_netlist, ac_analysis, ngspice_path=fake_exe)
+    assert len(res_singular.errors) == 1
+    assert res_singular.errors[0].code == "SINGULAR_MATRIX"
+    assert res_singular.errors[0].targets == [NetTarget(net="out")]

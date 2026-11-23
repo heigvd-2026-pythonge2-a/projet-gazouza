@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from pydantic import TypeAdapter
@@ -12,6 +14,7 @@ from app.engines.parser import (
     RawPlot,
     RawVariable,
     _extract_current_match,
+    _parse_complex_token,
     map_plot_to_simulation_result,
     parse_ngspice_output,
     parse_raw_ascii,
@@ -20,6 +23,7 @@ from app.models.netlist import ComponentTarget, Diagnostic, NetlistResult, WireT
 from app.models.simulation import (
     AcAnalysis,
     Analysis,
+    Axis,
     DcAnalysis,
     OpAnalysis,
     SimulationResult,
@@ -379,27 +383,22 @@ def test_netlist_errors_short_circuit_without_parsing() -> None:
 
 
 def test_unsupported_analysis_returns_diagnostic_error() -> None:
-    ac = AcAnalysis(
-        input_source_id="c1",
-        start_frequency=10.0,
-        stop_frequency=1e5,
-        points_per_decade=20,
-    )
+    unsupported = cast(Analysis, SimpleNamespace(kind="op"))
 
-    res_ac = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), ac)
+    res = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), unsupported)
 
-    assert res_ac.analysis == "ac"
-    assert len(res_ac.errors) == 1
-    assert res_ac.errors[0].code == "SIMULATION_FAILED"
-    assert "ac" in res_ac.errors[0].message
-    assert res_ac.errors[0].targets == []
+    assert res.analysis == "op"
+    assert len(res.errors) == 1
+    assert res.errors[0].code == "SIMULATION_FAILED"
+    assert "op" in res.errors[0].message
+    assert res.errors[0].targets == []
 
     plot = parse_raw_ascii(DIVIDER_OP_RAW)
-    direct_ac = map_plot_to_simulation_result(plot, _divider_netlist(), ac)
-    assert direct_ac.analysis == "ac"
-    assert len(direct_ac.errors) == 1
-    assert direct_ac.errors[0].code == "SIMULATION_FAILED"
-    assert direct_ac.errors[0].targets == []
+    direct = map_plot_to_simulation_result(plot, _divider_netlist(), unsupported)
+    assert direct.analysis == "op"
+    assert len(direct.errors) == 1
+    assert direct.errors[0].code == "SIMULATION_FAILED"
+    assert direct.errors[0].targets == []
 
 
 @pytest.mark.parametrize(
@@ -410,8 +409,20 @@ def test_unsupported_analysis_returns_diagnostic_error() -> None:
         "ngspice failed without colon\n",
         "Error: singular matrix on node out\n",
         "Title: * bin\nNo. Variables: 1\nNo. Points: 1\nVariables:\n\t0\tv(in)\tvoltage\nBinary:\n",
-        "Title: * cplx\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
-        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t1,0\n",
+        "Title: * cplx_missing_comma\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t1.0\n",
+        "Title: * cplx_trailing_comma\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t1.0,\n",
+        "Title: * cplx_leading_comma\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t,1.0\n",
+        "Title: * cplx_extra_comma\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t1.0,2.0,3.0\n",
+        "Title: * cplx_bad_imag\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t1.0,xyz\n",
+        "Title: * cplx_nan_real\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\tnan,0.0\n",
+        "Title: * cplx_inf_imag\nFlags: complex\nNo. Variables: 1\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(in)\tvoltage\nValues:\n0\t0.0,inf\n",
         "Title: * const\nPlotname: constants\nFlags: real\nNo. Variables: 1\nNo. Points: 1\n"
         "Variables:\n\t0\tboltz\tconstant\nValues:\n0\t1.38e-23\n",
         "Title: * no_vars\nNo. Points: 1\nValues:\n",
@@ -924,3 +935,226 @@ Values:
         assert len(res.errors) == 1, label
         assert res.errors[0].code == "SIMULATION_FAILED", label
         assert res.errors[0].targets == [], label
+
+
+LOWPASS_AC_RAW = """\
+Title: * lowpass_ac
+Date: Mon Nov 23 09:24:44  2026
+Command: ngspice-47, Build Aug 11 2026   13:55:25
+Plotname: AC Analysis
+Flags: complex
+No. Variables: 7
+No. Points: 2
+Variables:
+\t0\tfrequency\tfrequency\tgrid=3
+\t1\tv(in)\tvoltage
+\t2\tv(out)\tvoltage
+\t3\tv(__psice_sense_r1)\tvoltage
+\t4\ti(v1)\tcurrent
+\t5\ti(v__psice_sense_r1)\tcurrent
+\t6\ti(v__psice_sense_c1)\tcurrent
+Values:
+0\t\t1.000000000000000e+01,0.000000000000000e+00
+\t1.000000000000000e+00,-0.000000000000000e+00
+\t9.999000162093340e-01,-9.998689609522979e-03
+\t1.000000000000000e+00,0.000000000000000e+00
+\t-9.998379066605140e-08,-9.998689609522979e-06
+\t9.998379066605140e-08,9.998689609522979e-06
+\t9.998379066597871e-08,9.998689609522979e-06
+1\t\t1.000000000000000e+03,0.000000000000000e+00
+\t1.000000000000000e+00,0.000000000000000e+00
+\t5.000155294223414e-01,-4.999999997588371e-01
+\t1.000000000000000e+00,0.000000000000000e+00
+\t-4.999844705776586e-04,-4.999999997588371e-04
+\t4.999844705776586e-04,4.999999997588371e-04
+\t4.999844705776586e-04,4.999999997588371e-04
+"""
+
+
+def _lowpass_netlist() -> NetlistResult:
+    return NetlistResult(
+        netlist=(
+            "* Filtre passe-bas RC\n"
+            "V1 in 0 DC 0 AC 1\n"
+            "R1 in out 1k\n"
+            "C1 out 0 159.15n\n"
+            ".ac dec 20 10 100k\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"]},
+        components={"V1": "c1", "R1": "c2", "C1": "c3"},
+    )
+
+
+def _lowpass_ac_analysis() -> AcAnalysis:
+    return AcAnalysis(
+        input_source_id="c1",
+        start_frequency=10.0,
+        stop_frequency=100_000.0,
+        points_per_decade=20,
+    )
+
+
+def test_parse_complex_token_valid_and_malformed() -> None:
+    assert _parse_complex_token("1.5,-2.5") == (1.5, -2.5)
+    real_zero, imag_zero = _parse_complex_token("-0.0,-0.0")
+    assert str(real_zero) == "0.0"
+    assert str(imag_zero) == "0.0"
+
+    for bad_token in ("1.0", "1.0,", ",1.0", "1.0,2.0,3.0", "1.0, 2.0", "nan,0.0", "0.0,inf"):
+        with pytest.raises(RawParseError):
+            _parse_complex_token(bad_token)
+
+
+def test_parse_ac_complex_rawfile_and_current_aliases() -> None:
+    plot = parse_raw_ascii(LOWPASS_AC_RAW)
+    assert plot.flags == ("complex",)
+    assert plot.num_points == 2
+    assert plot.columns["frequency"] == [10.0, 1000.0]
+    assert plot.imag_columns["frequency"] == [0.0, 0.0]
+    assert str(plot.imag_columns["v(in)"][0]) == "0.0"
+
+    aliases = {"v__psice_sense_r1": "R1", "v__psice_sense_c1": "C1"}
+    result = parse_ngspice_output(
+        LOWPASS_AC_RAW,
+        _lowpass_netlist(),
+        _lowpass_ac_analysis(),
+        current_aliases=aliases,
+    )
+
+    assert result.errors == []
+    assert result.warnings == []
+    assert result.analysis == "ac"
+    assert result.axis == Axis(name="frequency", unit="Hz", values=[10.0, 1000.0])
+    assert [t.name for t in result.traces] == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(C1)"]
+    for trace in result.traces:
+        assert trace.imag is not None
+        assert len(trace.values) == 2
+        assert len(trace.imag) == 2
+
+    assert str(result.traces[0].imag[0]) == "0.0"
+    assert result.traces[1].values == pytest.approx([0.9999000162, 0.5000155294])
+    assert result.traces[1].imag == pytest.approx([-0.0099986896, -0.5])
+    assert result.traces[3].component_id == "c2"
+    assert result.traces[3].values == pytest.approx([9.998379e-8, 4.9998447e-4])
+    assert result.traces[4].component_id == "c3"
+    assert result.traces[4].imag == pytest.approx([9.9986896e-6, 5.0e-4])
+
+
+def test_complex_rawfile_rejected_on_op_and_tran_and_real_rejected_on_ac() -> None:
+    op_res = parse_ngspice_output(LOWPASS_AC_RAW, _lowpass_netlist(), OpAnalysis())
+    tran_res = parse_ngspice_output(
+        LOWPASS_AC_RAW, _lowpass_netlist(), TranAnalysis(stop_time=1e-3)
+    )
+    ac_real_res = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), _lowpass_ac_analysis())
+
+    for label, res in (("op_cplx", op_res), ("tran_cplx", tran_res), ("ac_real", ac_real_res)):
+        assert len(res.errors) == 1, label
+        assert res.errors[0].code == "SIMULATION_FAILED", label
+        assert "complex" in res.errors[0].message.lower(), label
+        assert res.errors[0].targets == [], label
+
+
+def test_ac_analysis_rejects_mismatched_plotnames_missing_freq_and_bad_imag() -> None:
+    ac = _lowpass_ac_analysis()
+    warning = Diagnostic(code="MILLI_SUFFIX", message="Avertissement")
+    netlist = _lowpass_netlist().model_copy(update={"warnings": [warning]})
+
+    op_plotname_raw = LOWPASS_AC_RAW.replace("Plotname: AC Analysis", "Plotname: Operating Point")
+    tran_plotname_raw = LOWPASS_AC_RAW.replace(
+        "Plotname: AC Analysis", "Plotname: Transient Analysis"
+    )
+    dc_plotname_raw = LOWPASS_AC_RAW.replace(
+        "Plotname: AC Analysis", "Plotname: DC transfer characteristic"
+    )
+    no_freq_raw = """\
+Title: * no_freq
+Plotname: AC Analysis
+Flags: complex
+No. Variables: 1
+No. Points: 1
+Variables:
+\t0\tv(in)\tvoltage
+Values:
+0\t1.0,0.0
+"""
+    no_matching_raw = """\
+Title: * unrelated_ac
+Plotname: AC Analysis
+Flags: complex
+No. Variables: 2
+No. Points: 1
+Variables:
+\t0\tfrequency\tfrequency
+\t1\tv(unrelated)\tvoltage
+Values:
+0\t10.0,0.0
+\t1.0,0.0
+"""
+
+    for label, raw in (
+        ("op_plot", op_plotname_raw),
+        ("tran_plot", tran_plotname_raw),
+        ("dc_plot", dc_plotname_raw),
+        ("no_freq", no_freq_raw),
+        ("no_match", no_matching_raw),
+    ):
+        res = parse_ngspice_output(raw, netlist, ac)
+        assert len(res.errors) == 1, label
+        assert res.errors[0].code == "SIMULATION_FAILED", label
+        assert res.warnings == [warning], label
+
+    # OpAnalysis also rejects a plot containing a 'frequency' axis column.
+    op_with_freq = RawPlot(
+        title="t",
+        date="d",
+        plotname="Custom",
+        flags=("real",),
+        variables=(
+            RawVariable(0, "frequency", "frequency"),
+            RawVariable(1, "v(in)", "voltage"),
+        ),
+        num_points=1,
+        columns={"frequency": [10.0], "v(in)": [1.0]},
+    )
+    res_op_freq = map_plot_to_simulation_result(op_with_freq, netlist, OpAnalysis())
+    assert len(res_op_freq.errors) == 1
+    assert res_op_freq.errors[0].code == "SIMULATION_FAILED"
+
+    # Manually constructed RawPlot missing imag_columns for AcAnalysis returns error.
+    incomplete_imag_plot = RawPlot(
+        title="t",
+        date="d",
+        plotname="AC Analysis",
+        flags=("complex",),
+        variables=(
+            RawVariable(0, "frequency", "frequency"),
+            RawVariable(1, "v(in)", "voltage"),
+        ),
+        num_points=2,
+        columns={"frequency": [10.0, 100.0], "v(in)": [1.0, 1.0]},
+        imag_columns={},
+    )
+    res_missing_imag = map_plot_to_simulation_result(incomplete_imag_plot, netlist, ac)
+    assert len(res_missing_imag.errors) == 1
+    assert res_missing_imag.errors[0].code == "SIMULATION_FAILED"
+    assert "v(in)" in res_missing_imag.errors[0].message
+
+    # Empty alias entries are ignored cleanly and RawPlot without imag_columns works for Op.
+    op_plot_compat = RawPlot(
+        title="t",
+        date="d",
+        plotname="Operating Point",
+        flags=("real",),
+        variables=(RawVariable(0, "v(in)", "voltage"),),
+        num_points=1,
+        columns={"v(in)": [5.0]},
+    )
+    ok_compat = map_plot_to_simulation_result(
+        op_plot_compat,
+        NetlistResult(netlist="", nets={"in": ["w1"]}, components={}),
+        OpAnalysis(),
+        current_aliases={"": "R1"},
+    )
+    assert ok_compat.errors == []
+    assert ok_compat.traces[0].imag is None
