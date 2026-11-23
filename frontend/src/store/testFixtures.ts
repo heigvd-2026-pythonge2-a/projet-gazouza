@@ -1,6 +1,8 @@
-// Test helper: the circuits of shared/fixtures/ as editor documents, with their results.
+// Test helper: the circuits of shared/fixtures/ as editor documents, with their results, and the
+// component library as GET /api/library serves it.
 
-import type { SimulationResult } from "../api/client";
+import type { LibraryComponent, SimulationResult } from "../api/client";
+import library from "../../../shared/fixtures/library.json";
 import type { EditorDoc, EditorWire } from "./document";
 
 const files = import.meta.glob<unknown>("../../../shared/fixtures/*/{schematic,result}.json", {
@@ -30,3 +32,7 @@ export function fixtureDoc(name: string): EditorDoc {
 
 export const fixtureResult = (name: string): SimulationResult =>
   file(name, "result") as SimulationResult;
+
+/** The answer of GET /api/library (shared/fixtures/library.json). */
+export const fixtureLibrary = (): LibraryComponent[] =>
+  structuredClone(library) as LibraryComponent[];

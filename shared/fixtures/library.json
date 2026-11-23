@@ -1,0 +1,693 @@
+[
+  {
+    "type": "capacitor",
+    "label": "Condensateur",
+    "prefix": "C",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "capacitance",
+        "label": "Capacité",
+        "unit": "F",
+        "default": "1u",
+        "kind": "value",
+        "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "current_source",
+    "label": "Source de courant",
+    "prefix": "I",
+    "pins": [
+      {
+        "name": "+",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "-",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "waveform",
+        "label": "Forme d'onde",
+        "unit": "",
+        "default": "dc",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "dc",
+            "label": "Continue"
+          },
+          {
+            "value": "pulse",
+            "label": "Impulsion"
+          },
+          {
+            "value": "sin",
+            "label": "Sinusoïde"
+          }
+        ],
+        "waveforms": []
+      },
+      {
+        "name": "dc",
+        "label": "Courant continu",
+        "unit": "A",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "dc"
+        ]
+      },
+      {
+        "name": "i1",
+        "label": "Courant bas",
+        "unit": "A",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "i2",
+        "label": "Courant haut",
+        "unit": "A",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse",
+          "sin"
+        ]
+      },
+      {
+        "name": "rise",
+        "label": "Temps de montée",
+        "unit": "s",
+        "default": "1n",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "fall",
+        "label": "Temps de descente",
+        "unit": "s",
+        "default": "1n",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "width",
+        "label": "Durée haute",
+        "unit": "s",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "period",
+        "label": "Période",
+        "unit": "s",
+        "default": "2m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "offset",
+        "label": "Décalage",
+        "unit": "A",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "amplitude",
+        "label": "Amplitude",
+        "unit": "A",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "frequency",
+        "label": "Fréquence",
+        "unit": "Hz",
+        "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "damping",
+        "label": "Amortissement",
+        "unit": "1/s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "phase",
+        "label": "Phase",
+        "unit": "°",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "diode",
+    "label": "Diode",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "D_SIGNAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_SIGNAL",
+            "label": "Signal (type 1N4148)"
+          },
+          {
+            "value": "D_RECT",
+            "label": "Redressement (type 1N4007)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "ground",
+    "label": "Masse",
+    "prefix": null,
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": 0
+      }
+    ],
+    "params": []
+  },
+  {
+    "type": "inductor",
+    "label": "Bobine",
+    "prefix": "L",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "inductance",
+        "label": "Inductance",
+        "unit": "H",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "label",
+    "label": "Étiquette de nœud",
+    "prefix": null,
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": 0
+      }
+    ],
+    "params": [
+      {
+        "name": "net",
+        "label": "Nom du nœud",
+        "unit": "",
+        "default": "out",
+        "kind": "text",
+        "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "led",
+    "label": "LED",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Couleur",
+        "unit": "",
+        "default": "D_LED_RED",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_LED_RED",
+            "label": "Rouge"
+          },
+          {
+            "value": "D_LED_GREEN",
+            "label": "Verte"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "opamp",
+    "label": "Ampli-op idéal",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_IDEAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_IDEAL",
+            "label": "Idéal (gain 10⁶, sans limite)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "opamp_real",
+    "label": "Ampli-op réel",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "name": "V+",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "V-",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_GENERIC",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_GENERIC",
+            "label": "Générique (type 741 : gain 10⁵, 1 MHz)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "resistor",
+    "label": "Résistance",
+    "prefix": "R",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "resistance",
+        "label": "Résistance",
+        "unit": "Ω",
+        "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "voltage_source",
+    "label": "Source de tension",
+    "prefix": "V",
+    "pins": [
+      {
+        "name": "+",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "-",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "waveform",
+        "label": "Forme d'onde",
+        "unit": "",
+        "default": "dc",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "dc",
+            "label": "Continue"
+          },
+          {
+            "value": "pulse",
+            "label": "Impulsion"
+          },
+          {
+            "value": "sin",
+            "label": "Sinusoïde"
+          }
+        ],
+        "waveforms": []
+      },
+      {
+        "name": "dc",
+        "label": "Tension continue",
+        "unit": "V",
+        "default": "5",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "dc"
+        ]
+      },
+      {
+        "name": "v1",
+        "label": "Tension basse",
+        "unit": "V",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "v2",
+        "label": "Tension haute",
+        "unit": "V",
+        "default": "5",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse",
+          "sin"
+        ]
+      },
+      {
+        "name": "rise",
+        "label": "Temps de montée",
+        "unit": "s",
+        "default": "1n",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "fall",
+        "label": "Temps de descente",
+        "unit": "s",
+        "default": "1n",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "width",
+        "label": "Durée haute",
+        "unit": "s",
+        "default": "1m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "period",
+        "label": "Période",
+        "unit": "s",
+        "default": "2m",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "pulse"
+        ]
+      },
+      {
+        "name": "offset",
+        "label": "Décalage",
+        "unit": "V",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "amplitude",
+        "label": "Amplitude",
+        "unit": "V",
+        "default": "1",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "frequency",
+        "label": "Fréquence",
+        "unit": "Hz",
+        "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "damping",
+        "label": "Amortissement",
+        "unit": "1/s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "phase",
+        "label": "Phase",
+        "unit": "°",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "zener",
+    "label": "Diode Zener",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Tension Zener",
+        "unit": "",
+        "default": "D_Z5V1",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_Z3V3",
+            "label": "3,3 V"
+          },
+          {
+            "value": "D_Z5V1",
+            "label": "5,1 V"
+          },
+          {
+            "value": "D_Z12",
+            "label": "12 V"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  }
+]

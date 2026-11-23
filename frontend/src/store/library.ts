@@ -1,9 +1,15 @@
-// PROVISIONAL component library, used until the backend serves `GET /api/library`.
-// The shape mirrors the backend library files (docs/format-schema.md, section 5, and
-// backend/app/netlist/library/*.json), plus a `symbol` (drawing in grid units, at rotation 0)
-// whose format the editor will propose. Swapping to the API should be a data swap only.
+// Component library. The backend serves the pins and parameters (`GET /api/library`, contract
+// `LibraryComponent`); the editor adds what only it needs: the palette group and the symbol
+// drawing. `loadLibrary()` merges both once at startup; until then `getDef` knows no type.
 
+import { getLibrary, type LibraryComponent } from "../api/client";
 import type { GridPoint } from "./document";
+
+// Contract types, completed: the API may leave out empty lists, the editor always has them.
+type ApiParamDef = NonNullable<LibraryComponent["params"]>[number];
+export type PinDef = LibraryComponent["pins"][number];
+export type ParamOption = NonNullable<ApiParamDef["options"]>[number];
+export type ParamDef = Required<ApiParamDef>;
 
 export type SymbolShape =
   | { kind: "line"; points: number[] }
@@ -11,32 +17,6 @@ export type SymbolShape =
   | { kind: "circle"; x: number; y: number; radius: number }
   /** Arc from `start` to `start + sweep` degrees, clockwise (y axis points down). */
   | { kind: "arc"; x: number; y: number; radius: number; start: number; sweep: number };
-
-export interface PinDef {
-  name: string;
-  x: number;
-  y: number;
-}
-
-/** One allowed value of a "choice" parameter. */
-export interface ParamOption {
-  /** Stored in `params` (e.g. "pulse"). */
-  value: string;
-  /** Shown to the user, in French (e.g. "Impulsion"). */
-  label: string;
-}
-
-export interface ParamDef {
-  name: string;
-  label: string;
-  unit: string;
-  default: string;
-  /** "value": SPICE number ("1k"); "text": free text (label name); "choice": one of `options`. */
-  kind: "value" | "text" | "choice";
-  options: ParamOption[];
-  /** Sources only: the waveforms that use this parameter. Empty: always shown. */
-  waveforms: string[];
-}
 
 /** Group of the palette a component is shown in. Frontend only: not part of the API contract. */
 export type Category = "passive" | "source" | "connection";
@@ -48,74 +28,20 @@ export const CATEGORIES: readonly { id: Category; label: string }[] = [
   { id: "connection", label: "Connexions" },
 ];
 
-export interface ComponentDef {
+/** What the editor adds to a library component: where it goes in the palette, how it looks. */
+interface EditorPart {
+  category: Category;
+  /** Drawing in grid units, at rotation 0. */
+  symbol: SymbolShape[];
+}
+
+export interface ComponentDef extends EditorPart {
   type: string;
   label: string;
-  category: Category;
   /** SPICE prefix. `null` for ground and label, which have no SPICE line and no `name`. */
   prefix: string | null;
   pins: PinDef[];
   params: ParamDef[];
-  symbol: SymbolShape[];
-}
-
-const twoPins = (a: string, b: string): PinDef[] => [
-  { name: a, x: 0, y: -2 },
-  { name: b, x: 0, y: 2 },
-];
-
-const value = (
-  name: string,
-  label: string,
-  unit: string,
-  defaultValue: string,
-  waveforms: string[] = [],
-): ParamDef => ({
-  name,
-  label,
-  unit,
-  default: defaultValue,
-  kind: "value",
-  options: [],
-  waveforms,
-});
-
-const WAVEFORM: ParamDef = {
-  name: "waveform",
-  label: "Forme d'onde",
-  unit: "",
-  default: "dc",
-  kind: "choice",
-  options: [
-    { value: "dc", label: "Continue" },
-    { value: "pulse", label: "Impulsion" },
-    { value: "sin", label: "Sinusoïde" },
-  ],
-  waveforms: [],
-};
-
-/** Parameters of a voltage ("V", v1/v2) or current ("A", i1/i2) source, as in the backend. */
-function sourceParams(unit: "V" | "A"): ParamDef[] {
-  const voltage = unit === "V";
-  const low = voltage ? "v1" : "i1";
-  const high = voltage ? "v2" : "i2";
-  const what = voltage ? "Tension" : "Courant";
-  return [
-    WAVEFORM,
-    value("dc", `${what} continu${voltage ? "e" : ""}`, unit, voltage ? "5" : "1m", ["dc"]),
-    value(low, `${what} bas${voltage ? "se" : ""}`, unit, "0", ["pulse"]),
-    value(high, `${what} haut${voltage ? "e" : ""}`, unit, voltage ? "5" : "1m", ["pulse"]),
-    value("delay", "Retard", "s", "0", ["pulse", "sin"]),
-    value("rise", "Temps de montée", "s", "1n", ["pulse"]),
-    value("fall", "Temps de descente", "s", "1n", ["pulse"]),
-    value("width", "Durée haute", "s", "1m", ["pulse"]),
-    value("period", "Période", "s", "2m", ["pulse"]),
-    value("offset", "Décalage", unit, "0", ["sin"]),
-    value("amplitude", "Amplitude", unit, voltage ? "1" : "1m", ["sin"]),
-    value("frequency", "Fréquence", "Hz", "1k", ["sin"]),
-    value("damping", "Amortissement", "1/s", "0", ["sin"]),
-    value("phase", "Phase", "°", "0", ["sin"]),
-  ];
 }
 
 const leads = (gap: number): SymbolShape[] => [
@@ -123,24 +49,17 @@ const leads = (gap: number): SymbolShape[] => [
   { kind: "line", points: [0, gap, 0, 2] },
 ];
 
-// Symbols follow IEC 60617 (rectangle resistor, humped inductor, circle sources).
-const DEFS: ComponentDef[] = [
+// Symbols follow IEC 60617 (rectangle resistor, humped inductor, circle sources). The order of
+// this table is the order of the palette (and of its digit shortcuts), whatever the API order.
+const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "resistor",
-    label: "Résistance",
     category: "passive",
-    prefix: "R",
-    pins: twoPins("1", "2"),
-    params: [value("resistance", "Résistance", "Ω", "1k")],
     symbol: [...leads(1), { kind: "rect", x: -0.4, y: -1, width: 0.8, height: 2 }],
   },
   {
     type: "capacitor",
-    label: "Condensateur",
     category: "passive",
-    prefix: "C",
-    pins: twoPins("1", "2"),
-    params: [value("capacitance", "Capacité", "F", "1u")],
     symbol: [
       ...leads(0.25),
       { kind: "line", points: [-0.8, -0.25, 0.8, -0.25] },
@@ -149,11 +68,7 @@ const DEFS: ComponentDef[] = [
   },
   {
     type: "inductor",
-    label: "Bobine",
     category: "passive",
-    prefix: "L",
-    pins: twoPins("1", "2"),
-    params: [value("inductance", "Inductance", "H", "1m")],
     symbol: [
       ...leads(1.2),
       ...[-0.9, -0.3, 0.3, 0.9].map((y): SymbolShape => ({
@@ -168,11 +83,7 @@ const DEFS: ComponentDef[] = [
   },
   {
     type: "voltage_source",
-    label: "Source de tension",
     category: "source",
-    prefix: "V",
-    pins: twoPins("+", "-"),
-    params: sourceParams("V"),
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -184,11 +95,7 @@ const DEFS: ComponentDef[] = [
   },
   {
     type: "current_source",
-    label: "Source de courant",
     category: "source",
-    prefix: "I",
-    pins: twoPins("+", "-"),
-    params: sourceParams("A"),
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -200,11 +107,7 @@ const DEFS: ComponentDef[] = [
   },
   {
     type: "ground",
-    label: "Masse",
     category: "connection",
-    prefix: null,
-    pins: [{ name: "1", x: 0, y: 0 }],
-    params: [],
     symbol: [
       { kind: "line", points: [0, 0, 0, 0.5] },
       { kind: "line", points: [-0.8, 0.5, 0.8, 0.5] },
@@ -214,37 +117,68 @@ const DEFS: ComponentDef[] = [
   },
   {
     type: "label",
-    label: "Étiquette de nœud",
     category: "connection",
-    prefix: null,
-    pins: [{ name: "1", x: 0, y: 0 }],
-    params: [
-      {
-        name: "net",
-        label: "Nom du nœud",
-        unit: "",
-        default: "out",
-        kind: "text",
-        options: [],
-        waveforms: [],
-      },
-    ],
     symbol: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
   },
 ];
 
-export const LIBRARY: ReadonlyMap<string, ComponentDef> = new Map(DEFS.map((d) => [d.type, d]));
+let library: ReadonlyMap<string, ComponentDef> = new Map();
+
+/** Fill the library from the API answer. Types the editor cannot draw yet are left out. */
+export function setLibrary(components: readonly LibraryComponent[]): void {
+  const byType = new Map(components.map((c) => [c.type, c]));
+  for (const c of components) {
+    if (!EDITOR_PARTS.some((p) => p.type === c.type)) {
+      console.warn(`Bibliothèque : le type « ${c.type} » n'a pas encore de symbole, ignoré.`);
+    }
+  }
+  const defs = new Map<string, ComponentDef>();
+  for (const { type, category, symbol } of EDITOR_PARTS) {
+    const c = byType.get(type);
+    if (!c) continue;
+    defs.set(type, {
+      type,
+      label: c.label,
+      prefix: c.prefix,
+      pins: c.pins,
+      params: (c.params ?? []).map((p) => ({
+        ...p,
+        options: p.options ?? [],
+        waveforms: p.waveforms ?? [],
+      })),
+      category,
+      symbol,
+    });
+  }
+  library = defs;
+}
+
+/** True once the library has been received from the backend. */
+export const isLibraryLoaded = (): boolean => library.size > 0;
+
+let loading: Promise<void> | null = null;
+
+/** Fetch the library from the backend once; later calls share the same request. */
+export function loadLibrary(fetchLibrary = getLibrary): Promise<void> {
+  if (isLibraryLoaded()) return Promise.resolve();
+  loading ??= fetchLibrary()
+    .then(setLibrary)
+    .finally(() => {
+      loading = null; // a failed request can be retried
+    });
+  return loading;
+}
 
 /** Library components grouped as in the palette: categories in order, empty ones left out. */
 export function paletteGroups(): { id: Category; label: string; defs: ComponentDef[] }[] {
   return CATEGORIES.map((c) => ({
     ...c,
-    defs: [...LIBRARY.values()].filter((d) => d.category === c.id),
+    defs: [...library.values()].filter((d) => d.category === c.id),
   })).filter((g) => g.defs.length > 0);
 }
 
 export function getDef(type: string): ComponentDef {
-  const def = LIBRARY.get(type);
+  const def = library.get(type);
   if (!def) throw new Error(`Unknown component type: ${type}`);
   return def;
 }
