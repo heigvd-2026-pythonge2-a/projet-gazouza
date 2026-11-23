@@ -213,6 +213,43 @@
     ]
   },
   {
+    "type": "diode",
+    "label": "Diode",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "D_SIGNAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_SIGNAL",
+            "label": "Signal (type 1N4148)"
+          },
+          {
+            "value": "D_RECT",
+            "label": "Redressement (type 1N4007)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
     "type": "ground",
     "label": "Masse",
     "prefix": null,
@@ -272,6 +309,43 @@
         "default": "out",
         "kind": "text",
         "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "led",
+    "label": "LED",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Couleur",
+        "unit": "",
+        "default": "D_LED_RED",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_LED_RED",
+            "label": "Rouge"
+          },
+          {
+            "value": "D_LED_GREEN",
+            "label": "Verte"
+          }
+        ],
         "waveforms": []
       }
     ]
@@ -486,6 +560,47 @@
         "waveforms": [
           "sin"
         ]
+      }
+    ]
+  },
+  {
+    "type": "zener",
+    "label": "Diode Zener",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Tension Zener",
+        "unit": "",
+        "default": "D_Z5V1",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_Z3V3",
+            "label": "3,3 V"
+          },
+          {
+            "value": "D_Z5V1",
+            "label": "5,1 V"
+          },
+          {
+            "value": "D_Z12",
+            "label": "12 V"
+          }
+        ],
+        "waveforms": []
       }
     ]
   }
