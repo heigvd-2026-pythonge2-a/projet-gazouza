@@ -18,6 +18,7 @@ et mentionne son propriétaire (voir AGENTS.md). -->
 - [ ] Netlist, importeurs, API (`area: backend`)
 - [ ] Moteur ngspice, launcher, build (`area: engine`)
 - [ ] Fixtures partagées (`area: fixtures`)
+- [ ] Site web, documentation (`area: docs`)
 - [ ] client.ts, App.tsx, CI, configs racine (`area: shared`)
 - [ ] Contrat d'API `backend/app/models/` (`area: contract`, PR dédiée)
 

@@ -25,8 +25,6 @@ et ngspice comme moteur de simulation.
 
 Projet de groupe de 2ᵉ année — HEIG-VD.
 
-> ⚠️ Projet en cours de démarrage : ce README décrit les objectifs et l'architecture prévue.
-
 ---
 
 ## Objectifs
@@ -119,6 +117,7 @@ projet-gazouza/
 ├── shared/
 │   ├── openapi.json         contrat d'API exporté (généré)
 │   └── fixtures/            circuits de référence partagés front/back
+├── website/                 site web et documentation (Astro Starlight)
 ├── AGENTS.md                instructions pour les assistants IA (+ CLAUDE.md)
 ├── build.ps1                build complet → application Windows
 └── README.md
@@ -133,7 +132,7 @@ projet-gazouza/
 - Windows 10 ou 11
 - Python 3.12+ & **uv** (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
 - Node.js 22.12+ & **pnpm** (`corepack enable` : la version est fixée dans `frontend/package.json`)
-- ngspice placé dans `backend/vendor/ngspice/` *(procédure à compléter)*
+- ngspice (binaires Windows inclus dans `backend/vendor/ngspice/`)
 
 ### Lancer en mode développement
 
@@ -145,6 +144,11 @@ uv run uvicorn app.main:app --reload
 
 # Terminal 2 — frontend
 cd frontend
+pnpm install
+pnpm dev
+
+# Optionnel : site web / documentation (Astro Starlight)
+cd website
 pnpm install
 pnpm dev
 ```
