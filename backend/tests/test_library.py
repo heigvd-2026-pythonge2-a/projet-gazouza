@@ -23,6 +23,8 @@ def test_library_has_the_basic_components() -> None:
         "diode",
         "zener",
         "led",
+        "opamp",
+        "opamp_real",
         "ground",
         "label",
     }
@@ -40,6 +42,8 @@ def test_library_has_the_basic_components() -> None:
         ("diode", "D", ["A", "K"]),
         ("zener", "D", ["A", "K"]),
         ("led", "D", ["A", "K"]),
+        ("opamp", "X", ["+", "-", "out"]),
+        ("opamp_real", "X", ["+", "-", "out", "V+", "V-"]),
         ("ground", None, ["1"]),
         ("label", None, ["1"]),
     ],
@@ -193,7 +197,7 @@ def test_load_library_from_a_directory(tmp_path: Path) -> None:
     assert list(load_library(tmp_path)) == ["resistor"]
 
 
-@pytest.mark.parametrize("component_type", ["diode", "zener", "led"])
+@pytest.mark.parametrize("component_type", ["diode", "zener", "led", "opamp", "opamp_real"])
 def test_every_model_choice_has_its_model(component_type: str) -> None:
     # The inspector offers each option: each one must have its .model in the library.
     entry = LIBRARY[component_type]
