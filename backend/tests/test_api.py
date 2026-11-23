@@ -102,7 +102,7 @@ def has_ngspice() -> bool:
 
 @pytest.mark.ngspice
 @pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
-@pytest.mark.parametrize("circuit", ["divider_op", "rc_tran"])
+@pytest.mark.parametrize("circuit", ["divider_op", "rc_tran", "half_wave_rectifier"])
 def test_simulate_with_real_ngspice_matches_the_fixture(circuit: str) -> None:
     # The whole chain: schematic -> netlist (Damien) -> ngspice (Antoine) -> results.
     response = client.post("/api/simulate", json=fixture_request(circuit))

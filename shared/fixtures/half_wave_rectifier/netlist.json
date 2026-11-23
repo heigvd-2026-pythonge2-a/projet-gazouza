@@ -1,0 +1,24 @@
+{
+  "netlist": "* Redresseur simple alternance\nV1 in 0 SIN(0 5 50 0 0 0)\nD1 in out D_RECT\nR1 out 0 1k\n.model D_RECT D(Is=10n N=1.9 Rs=0.04 Cjo=15p M=0.33 Vj=0.5 TT=3u BV=1000 IBV=5u)\n.tran 100u 40m 0 100u\n.end\n",
+  "nets": {
+    "in": [
+      "w1",
+      "w5"
+    ],
+    "out": [
+      "w2",
+      "w6"
+    ],
+    "0": [
+      "w3",
+      "w4"
+    ]
+  },
+  "components": {
+    "V1": "c1",
+    "D1": "c2",
+    "R1": "c3"
+  },
+  "errors": [],
+  "warnings": []
+}

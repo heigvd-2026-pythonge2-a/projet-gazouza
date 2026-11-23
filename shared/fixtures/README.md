@@ -24,13 +24,14 @@ Si vous changez un modèle Pydantic, la CI vous forcera à mettre les fixtures �
 | `rc_tran` | Échelon 0 → 5 V sur un RC (1 kΩ, 1 µF, τ = 1 ms), sur 5 ms | `.tran` | Source `pulse`, `max_step` |
 | `lowpass_ac` | Passe-bas RC (1 kΩ, 159,15 nF, fc = 1 kHz) | `.ac` | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
 | `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |
+| `half_wave_rectifier` | Sinus 5 V / 50 Hz, diode de redressement `D_RECT`, charge 1 kΩ, sur 40 ms | `.tran` | Diode et son `.model` écrit dans la netlist ; sortie à 0 V sur les alternances négatives |
 
 Les mêmes circuits sont expliqués pas à pas dans
 [`docs/exemples-netlist.md`](../../docs/exemples-netlist.md).
 
 ## À savoir
 
-- Les fichiers `result.json` de `divider_op` et `rc_tran` contiennent les vraies sorties
+- Les fichiers `result.json` de `divider_op`, `rc_tran` et `half_wave_rectifier` contiennent les vraies sorties
   produites par `ngspice-47` ; ceux de `lowpass_ac` et `loaded_divider_dc` restent
   **calculés analytiquement** en attendant la prise en charge de `.ac` et `.dc`.
 - Les positions des composants et les coudes des fils sont indicatifs : ils dépendront des

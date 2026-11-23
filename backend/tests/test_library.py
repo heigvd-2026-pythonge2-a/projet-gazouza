@@ -20,6 +20,9 @@ def test_library_has_the_basic_components() -> None:
         "inductor",
         "voltage_source",
         "current_source",
+        "diode",
+        "zener",
+        "led",
         "ground",
         "label",
     }
@@ -34,6 +37,9 @@ def test_library_has_the_basic_components() -> None:
         ("inductor", "L", ["1", "2"]),
         ("voltage_source", "V", ["+", "-"]),
         ("current_source", "I", ["+", "-"]),
+        ("diode", "D", ["A", "K"]),
+        ("zener", "D", ["A", "K"]),
+        ("led", "D", ["A", "K"]),
         ("ground", None, ["1"]),
         ("label", None, ["1"]),
     ],
@@ -185,3 +191,12 @@ def test_file_name_must_match_type(tmp_path: Path) -> None:
 def test_load_library_from_a_directory(tmp_path: Path) -> None:
     (tmp_path / "resistor.json").write_text(json.dumps(RESISTOR), encoding="utf-8")
     assert list(load_library(tmp_path)) == ["resistor"]
+
+
+@pytest.mark.parametrize("component_type", ["diode", "zener", "led"])
+def test_every_model_choice_has_its_model(component_type: str) -> None:
+    # The inspector offers each option: each one must have its .model in the library.
+    entry = LIBRARY[component_type]
+    choice = next(p for p in entry.params if p.name == "model")
+    assert {o.value for o in choice.options} == set(entry.models)
+    assert entry.models[choice.default]

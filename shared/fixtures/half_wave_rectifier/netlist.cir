@@ -1,0 +1,7 @@
+* Redresseur simple alternance
+V1 in 0 SIN(0 5 50 0 0 0)
+D1 in out D_RECT
+R1 out 0 1k
+.model D_RECT D(Is=10n N=1.9 Rs=0.04 Cjo=15p M=0.33 Vj=0.5 TT=3u BV=1000 IBV=5u)
+.tran 100u 40m 0 100u
+.end
