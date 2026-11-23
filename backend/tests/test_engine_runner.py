@@ -37,6 +37,7 @@ from app.models.simulation import (
     SimulationResult,
     TranAnalysis,
 )
+from app.netlist.library import load_library
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "shared" / "fixtures"
 
@@ -465,6 +466,7 @@ def test_successful_run_executes_in_isolated_tempdir_with_create_no_window(
         cwd = Path(kwargs["cwd"])
         recorded["cmd"] = cmd
         recorded["cwd"] = cwd
+        recorded["stdin"] = kwargs["stdin"]
         recorded["env"] = kwargs["env"]
         recorded["timeout"] = kwargs["timeout"]
         recorded["creationflags"] = kwargs["creationflags"]
@@ -496,6 +498,7 @@ def test_successful_run_executes_in_isolated_tempdir_with_create_no_window(
     assert result.warnings == netlist_result.warnings
     assert [t.name for t in result.traces] == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(R2)"]
     assert recorded["cmd"] == [str(fake_exe), "-b", "circuit.cir", "-r", "output.raw"]
+    assert recorded["stdin"] is subprocess.DEVNULL
     assert recorded["timeout"] == DEFAULT_TIMEOUT_SECONDS
     assert recorded["env"]["SPICE_ASCIIRAWFILE"] == "1"
     assert recorded["creationflags"] == 0x08000000
@@ -1381,12 +1384,21 @@ def test_ngspice_real_failure_cases_return_v2_diagnostics() -> None:
         "* bad prefix 5\nV1 in 0 DC 5\n.cont\n.end\n",
         "* bad prefix 6\nV1 in 0 DC 5\n.contr\n.end\n",
         "* bad prefix 7\nV1 in 0 DC 5\n.contro\n.end\n",
+        "* bad control suffix alpha\nV1 in 0 DC 5\n.controlx\nrun\n.end\n",
+        "* bad control suffix digit\nV1 in 0 DC 5\n.control1\n.end\n",
+        "* bad control suffix colon\nV1 in 0 DC 5\n.control:\n.end\n",
+        "* bad control suffix comma\nV1 in 0 DC 5\n.control,\n.end\n",
         "* bad endc\nV1 in 0 DC 5\n.endc\n.end\n",
+        "* bad endc suffix\nV1 in 0 DC 5\n.endcx\n.end\n",
+        "* bad endc colon\nV1 in 0 DC 5\n.endc:\n.end\n",
         "* bad dot shell\nV1 in 0 DC 5\n.shell echo hi\n.end\n",
+        "* bad dot shell suffix\nV1 in 0 DC 5\n.shellx echo hi\n.end\n",
         "* bad shell\nV1 in 0 DC 5\nshell echo hi\n.end\n",
         "* bad SHELL\nV1 in 0 DC 5\n\tSHELL calc\n.end\n",
         "* split prefix across continuation\nV1 in 0 DC 5\n.cont\n+ rol\n.end\n",
         "* split compact across continuation\nV1 in 0 DC 5\n.con\n+trol\n.end\n",
+        "* split compact controlx across continuation\nV1 in 0 DC 5\n.con\n+trolx\n.end\n",
+        "* split compact endcx across continuation\nV1 in 0 DC 5\n.end\n+cx\n.end\n",
         "* split across comment and continuation\nV1 in 0 DC 5\n.con\n* innocent\n+trol\n.end\n",
         "* continuation starting with .control\n* title\n+ .control\n.end\n",
         "* continuation inside control\nV1 in 0 DC 5\n.control\n+ echo hi\n.end\n",
@@ -1415,9 +1427,62 @@ def test_ngspice_real_failure_cases_return_v2_diagnostics() -> None:
         "* lib with UNC path\nV1 in 0 DC 5\n.lib \\\\server\\share\\x.lib SEC\n.end\n",
         "* bom before include\n\ufeff.include evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
         ".include evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
+        ".inc evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
+        "\ufeff.include evil.cir\nV1 in 0 DC 5\n.op\n.end\n",
         ".lib evil.lib SEC\nV1 in 0 DC 5\n.op\n.end\n",
+        "shell echo hi\nV1 in 0 DC 5\n.op\n.end\n",
+        "+ .control\nV1 in 0 DC 5\n.op\n.end\n",
+        "Title\n+ .control\n.end\n",
+        "Title\n+ .control",
+        "* leading semicolon in body\n; .control\nV1 in 0 DC 5\n.end\n",
         "* null byte in element\nV1 in 0 DC 5\x00\n.op\n.end\n",
         "* null byte in comment\x00\nV1 in 0 DC 5\n.op\n.end\n",
+        '* xspice filesource\nV1 in 0 DC 5\n.model m filesource (file="C:\\secret.txt")\n.end\n',
+        (
+            "* xspice filesource attached paren\n"
+            'V1 in 0 DC 5\n.model m filesource(file="\\\\srv\\s\\a")\n.end\n'
+        ),
+        '* xspice filesource quoted\nV1 in 0 DC 5\n.model m "filesource"(file="x")\n.end\n',
+        '* quoted allowed model type\nV1 in 0 DC 5\n.model m "d"(Is=1e-14)\n.end\n',
+        (
+            "* xspice filesource parenthesized\n"
+            'V1 in 0 DC 5\n.model m ( filesource(file="x") )\n.end\n'
+        ),
+        '* xspice filesource modelx prefix\nV1 in 0 DC 5\n.modelx m filesource(file="x")\n.end\n',
+        '* xspice filesource continuation\nV1 in 0 DC 5\n.model m\n+ filesource (file="x")\n.end\n',
+        '* xspice filesource split token\nV1 in 0 DC 5\n.model m file\n+source (file="x")\n.end\n',
+        '* xspice d_source\nV1 in 0 DC 5\n.model src D_SOURCE(input_file="C:\\vec.txt")\n.end\n',
+        (
+            "* xspice d_state\n"
+            'V1 in 0 DC 5\n.model st d_state (state_file="\\\\srv\\s\\state")\n.end\n'
+        ),
+        '* xspice d_process\nV1 in 0 DC 5\n.model p d_process(process_file="evil.exe")\n.end\n',
+        (
+            "* xspice d_process split continuation\n"
+            'V1 in 0 DC 5\n.model m d_\n+process(process_file="evil.exe")\n.end\n'
+        ),
+        (
+            "* xspice d_process compact continuation\n"
+            'V1 in 0 DC 5\n.model m d\n+_process(process_file="evil.exe")\n.end\n'
+        ),
+        '* xspice d_cosim\nV1 in 0 DC 5\n.model c d_cosim(simulation="evil.dll")\n.end\n',
+        '* xspice table2d\nV1 in 0 DC 5\n.model t2 table2d(file="C:\\secret.txt")\n.end\n',
+        '* xspice table3d\nV1 in 0 DC 5\n.model t3 table3d(file="C:\\secret.txt")\n.end\n',
+        "* incomplete model\nV1 in 0 DC 5\n.model incomplete\n.end\n",
+        "* custom non-allowlisted model\nV1 in 0 DC 5\n.model custom ($raw)\n.end\n",
+        "* xspice A-element\nV1 in 0 DC 5\nA1 [a] [b] p\n.end\n",
+        "* xspice A-element split continuation\nV1 in 0 DC 5\nA\n+1 [a] [b] p\n.end\n",
+        "* non-allowlisted behavioral B-source\nV1 in 0 DC 5\nB1 out 0 V=v(in)\n.end\n",
+        "* directive prefix extension .paramx\nV1 in 0 DC 5\n.paramx x=1\n.end\n",
+        "* directive prefix extension .endsx\n.subckt s a b\nR1 a b 1k\n.endsx s\n.end\n",
+        "* directive prefix extension .savex\nV1 in 0 DC 5\n.savex all\n.end\n",
+        "* disallowed .csparam\nV1 in 0 DC 5\n.csparam x=1\n.end\n",
+        "* disallowed .print\nV1 in 0 DC 5\n.print op v(in)\n.end\n",
+        "* disallowed .verilog\nV1 in 0 DC 5\n.verilog\n.end\n",
+        "* disallowed .hdl\nV1 in 0 DC 5\n.hdl evil.va\n.end\n",
+        "* disallowed .write\nV1 in 0 DC 5\n.write out.raw\n.end\n",
+        "* disallowed .wrdata\nV1 in 0 DC 5\n.wrdata out.txt v(in)\n.end\n",
+        "* disallowed .cmodel\nV1 in 0 DC 5\n.cmodel foo.cm\n.end\n",
     ],
 )
 def test_unsafe_netlist_directives_and_null_bytes_rejected(
@@ -1492,11 +1557,15 @@ def test_safe_comments_and_identifiers_allowed() -> None:
         "Include1 in 0 1k\n"
         "Lib1 in 0 1k\n"
         "Shell1 in 0 ctrl 0 SWMOD\n"
+        ".model D1N4148 D(IS=2.52n) ; comment filesource\n"
+        ".model filesource D(IS=1e-14)\n"
+        ".model SWMOD SW(Vt=2.5)\n"
         ".ic v(in)=5\n"
         ".op\n"
         ".end\n"
     )
     validate_netlist_safety("")
+    validate_netlist_safety("t\nV1 in 0 DC 5\nR1 in 0 1k\n.op\n.end\n")
     validate_netlist_safety(safe_netlist)
 
     prepared = prepare_netlist(
@@ -1508,6 +1577,294 @@ def test_safe_comments_and_identifiers_allowed() -> None:
     assert "* .control comment in title" in prepared
     assert "* .include evil.cir" in prepared
     assert ".ic v(in)=5" in prepared
+
+
+@pytest.mark.parametrize(
+    "bad_component_name",
+    [
+        "R1[i]\n.control\nshell calc\n.endc",
+        "V1\n.control\nshell calc\n.endc",
+        "R1;echo hi",
+        "R1 bad",
+        "R1\tbad",
+        "R1\x01",
+        "R1\x7f",
+    ],
+)
+def test_prepare_netlist_rejects_unsafe_component_keys_and_post_validates(
+    bad_component_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail_call(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("ngspice must not be located or invoked for unsafe component names")
+
+    monkeypatch.setattr(runner_module, "locate_ngspice", _fail_call)
+    monkeypatch.setattr(runner_module.subprocess, "run", _fail_call)
+
+    netlist_result = NetlistResult(
+        netlist="* safe body\nV1 in 0 DC 5\nR1 in 0 1k\n.op\n.end\n",
+        components={bad_component_name: "c1"},
+    )
+    with pytest.raises(UnsafeNetlistError) as exc_info:
+        prepare_netlist(netlist_result)
+    assert exc_info.value.user_message
+
+    result = run_simulation(netlist_result, OpAnalysis())
+    assert result.traces == []
+    assert len(result.errors) == 1
+    assert result.errors[0].code == "SIMULATION_FAILED"
+    assert result.errors[0].message == exc_info.value.user_message
+
+
+def test_prepare_netlist_revalidates_final_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        runner_module,
+        "_collect_save_tokens",
+        lambda _components, _existing, *, is_ac=False: ["all\n.control\nshell calc\n.endc"],
+    )
+    with pytest.raises(UnsafeNetlistError):
+        prepare_netlist(_divider_netlist())
+
+
+def test_prepare_netlist_ac_revalidates_sense_sources_pass_and_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ac_analysis = AcAnalysis(
+        input_source_id="c1",
+        start_frequency=10.0,
+        stop_frequency=100_000.0,
+        points_per_decade=20,
+    )
+    ac_netlist = NetlistResult(
+        netlist=(
+            "* rc_ac_safety\nV1 in 0 DC 0 AC 1\nR1 in out 1k\nC1 out 0 100n\n"
+            ".ac dec 20 10 100k\n.end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "C1": "c3"},
+    )
+    prepared = prepare_netlist(ac_netlist, ac_analysis)
+    assert "V__psice_sense_r1 in __psice_sense_r1 DC 0" in prepared
+    assert "V__psice_sense_c1 out __psice_sense_c1 DC 0" in prepared
+    validate_netlist_safety(prepared)
+
+    monkeypatch.setattr(
+        runner_module,
+        "_collect_save_tokens",
+        lambda _components, _existing, *, is_ac=False: ["all\n.control\nshell calc\n.endc"],
+    )
+    with pytest.raises(UnsafeNetlistError):
+        prepare_netlist(ac_netlist, ac_analysis)
+
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        runner_module,
+        "_allocate_unique_name",
+        lambda base, _used: "A_bad_sense" if base.startswith("V__psice_sense_") else base,
+    )
+    with pytest.raises(UnsafeNetlistError):
+        prepare_netlist(ac_netlist, ac_analysis)
+
+
+def test_library_and_semiconductor_subckt_models_pass_safety_allowlist() -> None:
+    library = load_library()
+    assert library
+    for ctype in library.values():
+        if ctype.prefix is not None:
+            probe = f"* {ctype.type}\n{ctype.prefix}1 a b 1\n.op\n.end\n"
+            validate_netlist_safety(probe)
+        models = getattr(ctype, "models", {})
+        for model_text in models.values():
+            validate_netlist_safety(f"* {ctype.type}\n{model_text}\n.end\n")
+
+    # Explicit coverage for library models from feat/diodes, feat/opamps, and feat/transistors,
+    # including PMOS and controlled sources F/H with POLY(1) and .param inside .subckt.
+    full_library_netlist = (
+        "* library models and subckts\n"
+        "V1 vcc 0 DC 15\n"
+        "V2 vee 0 DC -15\n"
+        "V3 vin 0 DC 1 AC 1\n"
+        "D1 vin d_out D_SIGNAL\n"
+        "D2 vin d_rect D_RECT\n"
+        "D3 vin d_led_r D_LED_RED\n"
+        "D4 vin d_led_g D_LED_GREEN\n"
+        "D5 0 d_z3v3 D_Z3V3\n"
+        "D6 0 d_z5v1 D_Z5V1\n"
+        "D7 0 d_z12 D_Z12\n"
+        "Q1 q_c vin 0 Q_NPN_GP\n"
+        "Q2 q_c2 vin vcc Q_PNP_GP\n"
+        "M1 m_d vin 0 0 M_NMOS_GP\n"
+        "M2 m_d2 vin vcc vcc M_PMOS_GP\n"
+        "X1 vin 0 oa1_out OA_IDEAL\n"
+        "X2 vin 0 oa2_out vcc vee OA_GENERIC\n"
+        "X3 vin 0 oa3_out OA_POLY_TEST\n"
+        ".model D_SIGNAL D(Is=2.5n N=1.75 Rs=0.6 Cjo=4p M=0.33 Vj=0.5 TT=6n BV=100 IBV=100u)\n"
+        ".model D_RECT D(Is=10n N=1.9 Rs=0.04 Cjo=15p M=0.33 Vj=0.5 TT=3u BV=1000 IBV=5u)\n"
+        ".model D_LED_RED D(Is=1e-19 N=1.8 Rs=2.5 Cjo=20p BV=5 IBV=10u)\n"
+        ".model D_LED_GREEN D(Is=1e-22 N=2 Rs=3 Cjo=20p BV=5 IBV=10u)\n"
+        ".model D_Z3V3 D(Is=1n N=1.5 Rs=1 Cjo=100p BV=3.3 IBV=5m)\n"
+        ".model D_Z5V1 D(Is=1n N=1.5 Rs=1 Cjo=100p BV=5.1 IBV=5m)\n"
+        ".model D_Z12 D(Is=1n N=1.5 Rs=1 Cjo=50p BV=12 IBV=5m)\n"
+        ".model Q_NPN_GP NPN(Is=6.7f Bf=200 Vaf=100 Br=4 Rb=10 Rc=1 Re=0.2 Cje=4.5p "
+        "Cjc=3.6p Tf=0.3n Tr=240n)\n"
+        ".model Q_PNP_GP PNP(Is=6.5f Bf=180 Vaf=100 Br=4 Rb=10 Rc=2.5 Re=0.3 Cje=4.5p "
+        "Cjc=4.5p Tf=0.3n Tr=60n)\n"
+        ".model M_NMOS_GP NMOS(Level=1 Vto=2 Kp=0.1 Lambda=0.01 Rd=1 Rs=0.5 Cgso=50p "
+        "Cgdo=10p Cbd=20p)\n"
+        ".model M_PMOS_GP PMOS(Level=1 Vto=-2 Kp=0.05 Lambda=0.01)\n"
+        ".subckt OA_IDEAL inp inn out\n"
+        "Rin inp inn 1e12\n"
+        "E1 out 0 inp inn 1e6\n"
+        ".ends OA_IDEAL\n"
+        ".subckt OA_GENERIC inp inn out vp vn\n"
+        "Rin inp inn 2Meg\n"
+        "Gm 0 int inp inn 1m\n"
+        "Rint int 0 100Meg\n"
+        "Cint int 0 159p\n"
+        "Vcp vp cp DC 2\n"
+        "Vcn cn vn DC 2\n"
+        "Dp int cp DCLAMP\n"
+        "Dn cn int DCLAMP\n"
+        "Eout o1 0 int 0 1\n"
+        "Rout o1 out 75\n"
+        ".model DCLAMP D(Is=1e-14)\n"
+        ".ends OA_GENERIC\n"
+        ".subckt OA_POLY_TEST inp inn out\n"
+        ".param gain=1e5\n"
+        "Vsense inp 1 DC 0\n"
+        "Rin 1 inn 1Meg\n"
+        "Epoly n1 0 POLY(1) (1,inn) 0 {gain}\n"
+        "Gpoly 0 n2 POLY(1) (1,inn) 0 1m\n"
+        "Fpoly 0 n2 Vsense 1\n"
+        "Hpoly out 0 Vsense 100\n"
+        "Rload n2 0 1k\n"
+        ".ends OA_POLY_TEST\n"
+        ".nodeset v(oa1_out)=0\n"
+        ".op\n"
+        ".end\n"
+    )
+    validate_netlist_safety(full_library_netlist)
+    prepared = prepare_netlist(
+        NetlistResult(
+            netlist=full_library_netlist,
+            components={"V1": "c1", "D1": "c2", "Q1": "c3", "M1": "c4", "X1": "c5", "X2": "c6"},
+        )
+    )
+    assert ".model DCLAMP D(Is=1e-14)" in prepared
+    assert ".subckt OA_GENERIC inp inn out vp vn" in prepared
+    assert ".save all @d1[id]" in prepared
+    for omitted in ("@q1[i]", "@m1[i]", "@x1[i]", "@x2[i]"):
+        assert omitted not in prepared
+
+    ac_prepared = prepare_netlist(
+        NetlistResult(
+            netlist=full_library_netlist,
+            components={"V3": "c1", "D1": "c2", "X1": "c3"},
+        ),
+        AcAnalysis(
+            input_source_id="c1",
+            start_frequency=10.0,
+            stop_frequency=1000.0,
+            points_per_decade=5,
+        ),
+    )
+    assert "V__psice_sense_d1 vin __psice_sense_d1 DC 0" in ac_prepared
+    assert ".save all" in ac_prepared
+
+    # Every allowlisted .model type and element prefix must be accepted.
+    allowlist_probe = (
+        "* allowlisted prefixes and model types\n"
+        "R1 n1 0 1k\n"
+        "C1 n1 0 1u\n"
+        "L1 n1 0 1m\n"
+        "V1 n1 0 DC 1\n"
+        "I1 0 n1 DC 1m\n"
+        "D1 n1 0 MD\n"
+        "Q1 n1 n2 0 MQN\n"
+        "M1 n1 n2 0 0 MMN\n"
+        "J1 n1 n2 0 MJN\n"
+        "E1 n3 0 n1 0 1\n"
+        "F1 0 n3 V1 1\n"
+        "G1 0 n3 n1 0 1m\n"
+        "H1 n3 0 V1 1\n"
+        "S1 n1 n3 n1 0 MSW\n"
+        "W1 n1 n3 V1 MCSW\n"
+        "X1 n1 0 n3 OA_IDEAL\n"
+        ".model MR R(Rsh=1)\n"
+        ".model MC C(Cap=1u)\n"
+        ".model ML L(Ind=1m)\n"
+        ".model MD D(Is=1e-14)\n"
+        ".model MQN NPN(Bf=100)\n"
+        ".model MQP PNP(Bf=100)\n"
+        ".model MMN NMOS(Level=1)\n"
+        ".model MMP PMOS(Level=1)\n"
+        ".model MJN NJF(Beta=1e-4)\n"
+        ".model MJP PJF(Beta=1e-4)\n"
+        ".model MSW SW(Vt=2.5)\n"
+        ".model MCSW CSW(It=1m)\n"
+        ".op\n"
+        ".end\n"
+    )
+    validate_netlist_safety(allowlist_probe)
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_opamp_and_transistor_do_not_emit_fake_zero_currents() -> None:
+    netlist_result = NetlistResult(
+        netlist=(
+            "* opamp + npn + nmos op\n"
+            "V1 in 0 DC 2.5\n"
+            "R1 in inv 1k\n"
+            "R2 inv out 2k\n"
+            "X1 0 inv out OA_IDEAL\n"
+            "Rload out 0 1k\n"
+            "V2 vcc 0 DC 5\n"
+            "Rb in b 10k\n"
+            "Rc vcc c 1k\n"
+            "Q1 c b 0 Q_NPN_GP\n"
+            "Rd vcc d 1k\n"
+            "M1 d in 0 0 M_NMOS_GP\n"
+            ".subckt OA_IDEAL inp inn out\n"
+            "Rin inp inn 1e12\n"
+            "E1 out 0 inp inn 1e6\n"
+            ".ends OA_IDEAL\n"
+            ".model Q_NPN_GP NPN(Is=6.7f Bf=200 Vaf=100)\n"
+            ".model M_NMOS_GP NMOS(Level=1 Vto=1 Kp=0.1)\n"
+            ".op\n"
+            ".end\n"
+        ),
+        nets={
+            "in": ["w1"],
+            "inv": ["w2"],
+            "out": ["w3"],
+            "vcc": ["w4"],
+            "b": ["w5"],
+            "c": ["w6"],
+            "d": ["w7"],
+            "0": ["w8"],
+        },
+        components={
+            "V1": "c1",
+            "R1": "c2",
+            "R2": "c3",
+            "X1": "c4",
+            "Rload": "c5",
+            "V2": "c6",
+            "Rb": "c7",
+            "Rc": "c8",
+            "Q1": "c9",
+            "Rd": "c10",
+            "M1": "c11",
+        },
+    )
+    res = run_simulation(netlist_result, OpAnalysis())
+    assert res.errors == []
+    traces_by_name = {trace.name: trace for trace in res.traces}
+    assert traces_by_name["v(out)"].values[0] == pytest.approx(-5.0, abs=1e-3)
+    assert traces_by_name["i(Rload)"].values[0] == pytest.approx(-0.005, abs=1e-5)
+    for omitted in ("i(X1)", "i(Q1)", "i(M1)"):
+        assert omitted not in traces_by_name
 
 
 def test_oversized_netlist_rejected_before_disk_write(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -80,6 +80,10 @@ def validate_dev_url(raw_url: str) -> str:
     cleaned = raw_url.strip()
     if not cleaned:
         raise ValueError("L'URL de développement ne doit pas être vide.")
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in cleaned):
+        raise ValueError(
+            "L'URL de développement ne doit pas contenir d'espaces ni de caractères de contrôle."
+        )
 
     parsed = urlparse(cleaned)
     if parsed.scheme not in {"http", "https"}:

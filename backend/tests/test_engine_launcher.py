@@ -87,6 +87,12 @@ def test_validate_dev_url_accepts_localhost(valid_url: str) -> None:
         "javascript:alert(1)",
         "http://user:pass@127.0.0.1:5173",
         "http://127.0.0.1:99999",
+        "http://localhost\n:5173",
+        "http://localhost\r:5173",
+        "http://localhost\t:5173",
+        "http://localhost:5173/app path",
+        "http://localhost:5173\x00",
+        "http://localhost:5173\x7f",
     ],
 )
 def test_validate_dev_url_rejects_unsafe_or_remote_urls(invalid_url: str) -> None:
