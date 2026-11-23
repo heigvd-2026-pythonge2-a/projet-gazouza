@@ -10,6 +10,7 @@ argument and stay pure.
 
 import json
 import re
+from functools import cache
 from pathlib import Path
 from typing import Literal
 
@@ -162,3 +163,9 @@ def load_library(directory: Path = LIBRARY_DIR) -> dict[str, ComponentType]:
             raise ValueError(f"{path.name}: type {component_type.type!r} must match the file name")
         library[component_type.type] = component_type
     return library
+
+
+@cache
+def get_library() -> dict[str, ComponentType]:
+    """The bundled library, read once and then reused."""
+    return load_library()
