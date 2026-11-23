@@ -3,10 +3,11 @@
 import math
 from dataclasses import dataclass
 
-from app.models.netlist import Diagnostic, NetlistResult
+from app.models.netlist import Diagnostic, DiagnosticCode, NetlistResult
 from app.models.simulation import (
     Analysis,
     Axis,
+    DcAnalysis,
     OpAnalysis,
     SimulationResult,
     Trace,
@@ -290,6 +291,22 @@ def _extract_voltage_net(var_name: str) -> str | None:
     return None
 
 
+def _extract_at_current_component(token: str) -> str | None:
+    """Extract lowercase component name from an ngspice '@comp[param]' current token."""
+    if not token.startswith("@"):
+        return None
+    if token.endswith("[i]"):
+        comp = token[1:-3].strip()
+        return comp if comp.startswith(("r", "c", "v", "l")) else None
+    if token.endswith("[id]"):
+        comp = token[1:-4].strip()
+        return comp if comp.startswith("d") else None
+    if token.endswith("[c]"):
+        comp = token[1:-3].strip()
+        return comp if comp.startswith("i") else None
+    return None
+
+
 def _extract_current_match(var_name: str) -> tuple[str, int] | None:
     """Extract (lowercase_component_name, priority) from a SPICE current vector.
 
@@ -299,18 +316,20 @@ def _extract_current_match(var_name: str) -> tuple[str, int] | None:
     lowered = var_name.strip().lower()
     if lowered.startswith("i(") and lowered.endswith(")"):
         inner = lowered[2:-1].strip()
-        if inner.startswith("@") and inner.endswith("[i]"):
-            comp = inner[1:-3].strip()
+        if not inner:
+            return None
+        if inner.startswith("@"):
+            comp = _extract_at_current_component(inner)
             return (comp, 3) if comp else None
-        return (inner, 1) if inner else None
+        return (inner, 1)
 
     if lowered.endswith("#branch"):
         comp = lowered.removesuffix("#branch").strip()
         return (comp, 2) if comp else None
 
-    if lowered.startswith("@") and lowered.endswith("[i]"):
-        comp = lowered[1:-3].strip()
-        return (comp, 4) if comp else None
+    comp = _extract_at_current_component(lowered)
+    if comp is not None:
+        return (comp, 4)
 
     return None
 
@@ -380,12 +399,45 @@ def _error_result(
     analysis: Analysis,
     message: str,
     warnings: list[Diagnostic],
+    *,
+    code: DiagnosticCode = "SIMULATION_FAILED",
 ) -> SimulationResult:
     return SimulationResult(
         analysis=analysis.kind,
-        errors=[Diagnostic(code="SIMULATION_FAILED", message=message, targets=[])],
+        errors=[Diagnostic(code=code, message=message, targets=[])],
         warnings=list(warnings),
     )
+
+
+def resolve_dc_source_name(
+    analysis: DcAnalysis,
+    netlist_result: NetlistResult,
+) -> str | None:
+    """Resolve the swept SPICE source name matching ``analysis.source_id``."""
+    for spice_name, component_id in netlist_result.components.items():
+        if component_id == analysis.source_id:
+            return spice_name
+    return None
+
+
+def _extract_dc_sweep_values(
+    plot: RawPlot,
+    columns_by_lower: dict[str, list[float]],
+    spice_name: str,
+) -> list[float] | None:
+    """Extract the DC sweep axis vector from ngspice rawfile variables."""
+    preferred_keys = (
+        ("i(i-sweep)", "i-sweep", "sweep", "v(v-sweep)", "v-sweep")
+        if spice_name.strip().upper().startswith("I")
+        else ("v(v-sweep)", "v-sweep", "sweep", "i(i-sweep)", "i-sweep")
+    )
+    for key in preferred_keys:
+        if key in columns_by_lower:
+            return columns_by_lower[key]
+    for var in plot.variables:
+        if var.var_type.strip().lower() == "sweep":
+            return plot.columns[var.name]
+    return None
 
 
 def map_plot_to_simulation_result(
@@ -396,10 +448,17 @@ def map_plot_to_simulation_result(
     """Convert a parsed RawPlot into a SimulationResult matching the API contract."""
     warnings = list(netlist_result.warnings)
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
         return _error_result(
             analysis,
             f"Le type d'analyse « {analysis.kind} » n'est pas encore pris en charge.",
+            warnings,
+        )
+
+    if "complex" in plot.flags:
+        return _error_result(
+            analysis,
+            "Les valeurs complexes ne sont pas prises en charge pour cette analyse.",
             warnings,
         )
 
@@ -426,7 +485,7 @@ def map_plot_to_simulation_result(
                 "La sortie ngspice ne correspond pas à une analyse .op.",
                 warnings,
             )
-    else:
+    elif isinstance(analysis, TranAnalysis):
         if any(
             marker in plotname_lower for marker in ("operating point", "ac analysis", "dc transfer")
         ):
@@ -443,6 +502,32 @@ def map_plot_to_simulation_result(
                 warnings,
             )
         axis = Axis(name="time", unit="s", values=list(time_values))
+    else:
+        if "time" in columns_by_lower or any(
+            marker in plotname_lower for marker in ("operating point", "transient", "ac analysis")
+        ):
+            return _error_result(
+                analysis,
+                "La sortie ngspice ne correspond pas à une analyse .dc.",
+                warnings,
+            )
+        spice_name = resolve_dc_source_name(analysis, netlist_result)
+        if spice_name is None:
+            return _error_result(
+                analysis,
+                "La source balayée de l'analyse DC est introuvable dans la netlist.",
+                warnings,
+                code="DC_SOURCE_NOT_FOUND",
+            )
+        sweep_values = _extract_dc_sweep_values(plot, columns_by_lower, spice_name)
+        if sweep_values is None:
+            return _error_result(
+                analysis,
+                "L'axe de balayage DC est absent des résultats ngspice.",
+                warnings,
+            )
+        axis_unit = "A" if spice_name.strip().upper().startswith("I") else "V"
+        axis = Axis(name=spice_name, unit=axis_unit, values=list(sweep_values))
 
     traces = _build_traces(plot, netlist_result)
     has_expected_targets = any(net != "0" for net in netlist_result.nets) or bool(
@@ -483,7 +568,7 @@ def parse_ngspice_output(
             warnings=list(netlist_result.warnings),
         )
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
         return _error_result(
             analysis,
             f"Le type d'analyse « {analysis.kind} » n'est pas encore pris en charge.",

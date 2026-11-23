@@ -9,6 +9,9 @@ from pydantic import TypeAdapter
 from app.engines.parser import (
     MAX_RESULT_POINTS,
     RawParseError,
+    RawPlot,
+    RawVariable,
+    _extract_current_match,
     map_plot_to_simulation_result,
     parse_ngspice_output,
     parse_raw_ascii,
@@ -382,21 +385,14 @@ def test_unsupported_analysis_returns_diagnostic_error() -> None:
         stop_frequency=1e5,
         points_per_decade=20,
     )
-    dc = DcAnalysis(source_id="c1", start=0.0, stop=10.0, step=1.0)
 
     res_ac = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), ac)
-    res_dc = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), dc)
 
     assert res_ac.analysis == "ac"
     assert len(res_ac.errors) == 1
     assert res_ac.errors[0].code == "SIMULATION_FAILED"
     assert "ac" in res_ac.errors[0].message
     assert res_ac.errors[0].targets == []
-    assert res_dc.analysis == "dc"
-    assert len(res_dc.errors) == 1
-    assert res_dc.errors[0].code == "SIMULATION_FAILED"
-    assert "dc" in res_dc.errors[0].message
-    assert res_dc.errors[0].targets == []
 
     plot = parse_raw_ascii(DIVIDER_OP_RAW)
     direct_ac = map_plot_to_simulation_result(plot, _divider_netlist(), ac)
@@ -621,3 +617,310 @@ def test_parse_raw_ascii_and_output_reject_invalid_max_points(bad_max_points: in
     assert result.errors[0].code == "SIMULATION_FAILED"
     assert result.errors[0].targets == []
     assert "positif" in result.errors[0].message.lower()
+
+
+LOADED_DIVIDER_DC_RAW = """\
+Title: * diviseur chargé
+Date: Mon Nov 23 09:25:00  2026
+Command: ngspice-47, Build Aug 11 2026   13:55:25
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 7
+No. Points: 3
+Variables:
+\t0\tv(v-sweep)\tvoltage
+\t1\tv(n1)\tvoltage
+\t2\tv(n2)\tvoltage
+\t3\ti(v1)\tcurrent
+\t4\ti(@r1[i])\tcurrent
+\t5\ti(@r2[i])\tcurrent
+\t6\ti(@r3[i])\tcurrent
+Values:
+0\t\t0.0
+\t0.0
+\t0.0
+\t-0.0
+\t0.0
+\t0.0
+\t0.0
+1\t\t3.0
+\t3.0
+\t1.0
+\t-0.002
+\t0.002
+\t0.001
+\t0.001
+2\t\t6.0
+\t6.0
+\t2.0
+\t-0.004
+\t0.004
+\t0.002
+\t0.002
+"""
+
+
+def test_parse_dc_voltage_sweep_builds_axis_and_traces() -> None:
+    netlist_result = NetlistResult.model_validate_json(
+        (FIXTURES_DIR / "loaded_divider_dc" / "netlist.json").read_text(encoding="utf-8")
+    )
+    analysis = TypeAdapter(Analysis).validate_json(
+        (FIXTURES_DIR / "loaded_divider_dc" / "analysis.json").read_text(encoding="utf-8")
+    )
+
+    result = parse_ngspice_output(LOADED_DIVIDER_DC_RAW, netlist_result, analysis)
+
+    assert result.errors == []
+    assert result.warnings == []
+    assert result.analysis == "dc"
+    assert result.axis is not None
+    assert result.axis.name == "V1"
+    assert result.axis.unit == "V"
+    assert result.axis.values == [0.0, 3.0, 6.0]
+    assert [t.name for t in result.traces] == [
+        "v(n1)",
+        "v(n2)",
+        "i(V1)",
+        "i(R1)",
+        "i(R2)",
+        "i(R3)",
+    ]
+    traces = {t.name: t for t in result.traces}
+    assert traces["v(n2)"].values == [0.0, 1.0, 2.0]
+    assert str(traces["i(V1)"].values[0]) == "0.0"
+
+
+def test_parse_dc_current_sweep_and_alternative_sweep_vectors() -> None:
+    current_sweep_raw = """\
+Title: * current_sweep
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 4
+No. Points: 3
+Variables:
+\t0\ti(i-sweep)\tcurrent
+\t1\tv(out)\tvoltage
+\t2\ti(@isrc[c])\tcurrent
+\t3\ti(@r1[i])\tcurrent
+Values:
+0\t0.0\t0.0\t0.0\t0.0
+1\t0.002\t2.0\t0.002\t0.002
+2\t0.004\t4.0\t0.004\t0.004
+"""
+    netlist_result = NetlistResult(
+        netlist="* current sweep\nIsrc 0 out DC 1m\nR1 out 0 1k\n.dc Isrc 0 4m 2m\n.end\n",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"Isrc": "c1", "R1": "c2"},
+    )
+    analysis = DcAnalysis(source_id="c1", start=0.0, stop=4e-3, step=2e-3)
+
+    result = parse_ngspice_output(current_sweep_raw, netlist_result, analysis)
+
+    assert result.errors == []
+    assert result.analysis == "dc"
+    assert result.axis is not None
+    assert result.axis.name == "Isrc"
+    assert result.axis.unit == "A"
+    assert result.axis.values == [0.0, 0.002, 0.004]
+    assert [t.name for t in result.traces] == ["v(out)", "i(Isrc)", "i(R1)"]
+    assert result.traces[1].component_id == "c1"
+    assert result.traces[1].values == [0.0, 0.002, 0.004]
+
+    # Alternative sweep vector names: 'v-sweep', 'i-sweep', 'sweep', and var_type='sweep'.
+    for sweep_name, var_type, comp_name in (
+        ("v-sweep", "voltage", "V1"),
+        ("i-sweep", "current", "I1"),
+        ("sweep", "voltage", "V1"),
+        ("custom_axis", "sweep", "V1"),
+    ):
+        alt_plot = RawPlot(
+            title="* alt",
+            date="",
+            plotname="DC transfer characteristic",
+            flags=("real",),
+            variables=(
+                RawVariable(index=0, name=sweep_name, var_type=var_type),
+                RawVariable(index=1, name="v(out)", var_type="voltage"),
+            ),
+            num_points=2,
+            columns={sweep_name: [0.0, 5.0], "v(out)": [0.0, 2.5]},
+        )
+        alt_netlist = NetlistResult(
+            netlist="",
+            nets={"out": ["w1"], "0": ["w2"]},
+            components={comp_name: "c1"},
+        )
+        alt_res = map_plot_to_simulation_result(
+            alt_plot,
+            alt_netlist,
+            DcAnalysis(source_id="c1", start=0.0, stop=5.0, step=5.0),
+        )
+        assert alt_res.errors == []
+        assert alt_res.axis is not None
+        assert alt_res.axis.name == comp_name
+        assert alt_res.axis.unit == ("A" if comp_name.startswith("I") else "V")
+        assert alt_res.axis.values == [0.0, 5.0]
+
+
+def test_extract_current_match_supports_diode_and_current_source_vectors() -> None:
+    assert _extract_current_match("i(@r1[i])") == ("r1", 3)
+    assert _extract_current_match("@c1[i]") == ("c1", 4)
+    assert _extract_current_match("i(@d1[id])") == ("d1", 3)
+    assert _extract_current_match("@d1[id]") == ("d1", 4)
+    assert _extract_current_match("i(@i1[c])") == ("i1", 3)
+    assert _extract_current_match("@i1[c]") == ("i1", 4)
+    assert _extract_current_match("i(@q1[i])") is None
+    assert _extract_current_match("i(@m1[i])") is None
+    assert _extract_current_match("i(@x1[i])") is None
+    assert _extract_current_match("@x1[i]") is None
+    assert _extract_current_match("i(@r1[id])") is None
+    assert _extract_current_match("i(@q1[c])") is None
+    assert _extract_current_match("i(@d1[vd])") is None
+    assert _extract_current_match("i()") is None
+    assert _extract_current_match("i(@)") is None
+    assert _extract_current_match("@[i]") is None
+
+    raw = """\
+Title: * diode_and_isrc
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 7
+No. Points: 2
+Variables:
+\t0\tv(v-sweep)\tvoltage
+\t1\tv(out)\tvoltage
+\t2\t@d1[id]\tcurrent
+\t3\ti(@d1[id])\tcurrent
+\t4\t@i1[c]\tcurrent
+\t5\ti(@i1[c])\tcurrent
+\t6\ti(@r1[i])\tcurrent
+Values:
+0\t0.0\t0.0\t99.0\t1e-12\t88.0\t0.001\t-0.001
+1\t5.0\t0.7\t99.0\t0.0053\t88.0\t0.001\t0.0043
+"""
+    netlist_result = NetlistResult(
+        netlist="",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2", "D1": "c3", "I1": "c4"},
+    )
+    result = parse_ngspice_output(
+        raw,
+        netlist_result,
+        DcAnalysis(source_id="c1", start=0.0, stop=5.0, step=5.0),
+    )
+    assert result.errors == []
+    traces = {t.name: t for t in result.traces}
+    assert traces["i(D1)"].component_id == "c3"
+    assert traces["i(D1)"].values == [1e-12, 0.0053]
+    assert traces["i(I1)"].component_id == "c4"
+    assert traces["i(I1)"].values == [0.001, 0.001]
+    assert traces["i(R1)"].values == [-0.001, 0.0043]
+
+
+def test_dc_missing_source_id_returns_dc_source_not_found() -> None:
+    warning = Diagnostic(code="MILLI_SUFFIX", message="Avertissement")
+    netlist_result = NetlistResult(
+        netlist="* divider_dc\n",
+        nets={"n1": ["w1"], "n2": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "R2": "c3", "R3": "c4"},
+        warnings=[warning],
+    )
+    dc_missing = DcAnalysis(source_id="missing_source", start=0.0, stop=10.0, step=1.0)
+
+    res_parse = parse_ngspice_output(LOADED_DIVIDER_DC_RAW, netlist_result, dc_missing)
+    assert res_parse.traces == []
+    assert res_parse.axis is None
+    assert res_parse.errors == [
+        Diagnostic(
+            code="DC_SOURCE_NOT_FOUND",
+            message="La source balayée de l'analyse DC est introuvable dans la netlist.",
+            targets=[],
+        )
+    ]
+    assert res_parse.warnings == [warning]
+
+    plot = parse_raw_ascii(LOADED_DIVIDER_DC_RAW)
+    res_map = map_plot_to_simulation_result(plot, netlist_result, dc_missing)
+    assert res_map == res_parse
+
+
+def test_dc_plotname_mismatch_missing_axis_and_complex_flag_rejection() -> None:
+    dc_analysis = DcAnalysis(source_id="c1", start=0.0, stop=10.0, step=1.0)
+    netlist = NetlistResult(
+        netlist="",
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+
+    # Mismatched .op and .tran plots passed to DcAnalysis.
+    res_op_as_dc = parse_ngspice_output(DIVIDER_OP_RAW, _divider_netlist(), dc_analysis)
+    res_tran_as_dc = parse_ngspice_output(RC_TRAN_RAW, _rc_netlist(), dc_analysis)
+    res_ac_plot = map_plot_to_simulation_result(
+        RawPlot(
+            title="* ac",
+            date="",
+            plotname="AC Analysis",
+            flags=("real",),
+            variables=(
+                RawVariable(index=0, name="v(v-sweep)", var_type="voltage"),
+                RawVariable(index=1, name="v(in)", var_type="voltage"),
+            ),
+            num_points=1,
+            columns={"v(v-sweep)": [1.0], "v(in)": [1.0]},
+        ),
+        netlist,
+        dc_analysis,
+    )
+
+    # DC plot missing sweep axis vector.
+    no_sweep_raw = """\
+Title: * no_sweep
+Plotname: DC transfer characteristic
+Flags: real
+No. Variables: 1
+No. Points: 2
+Variables:
+\t0\tv(in)\tvoltage
+Values:
+0\t0.0
+1\t5.0
+"""
+    res_no_sweep = parse_ngspice_output(no_sweep_raw, netlist, dc_analysis)
+
+    # Direct RawPlot with complex flag rejected across OP, TRAN, and DC.
+    complex_plot = RawPlot(
+        title="* cplx",
+        date="",
+        plotname="DC transfer characteristic",
+        flags=("complex",),
+        variables=(
+            RawVariable(index=0, name="v(v-sweep)", var_type="voltage"),
+            RawVariable(index=1, name="v(in)", var_type="voltage"),
+        ),
+        num_points=1,
+        columns={"v(v-sweep)": [1.0], "v(in)": [1.0]},
+    )
+    res_complex_dc = map_plot_to_simulation_result(complex_plot, netlist, dc_analysis)
+    res_complex_op = map_plot_to_simulation_result(complex_plot, netlist, OpAnalysis())
+
+    # 1-point DC transfer passed to OpAnalysis is rejected.
+    dc_1pt = parse_raw_ascii(
+        "Title: * dc1\nPlotname: DC transfer characteristic\nFlags: real\n"
+        "No. Variables: 2\nNo. Points: 1\n"
+        "Variables:\n\t0\tv(v-sweep)\tvoltage\n\t1\tv(in)\tvoltage\n"
+        "Values:\n0\t0.0\t0.0\n"
+    )
+    res_dc_as_op = map_plot_to_simulation_result(dc_1pt, netlist, OpAnalysis())
+
+    for label, res in (
+        ("op_as_dc", res_op_as_dc),
+        ("tran_as_dc", res_tran_as_dc),
+        ("ac_as_dc", res_ac_plot),
+        ("no_sweep", res_no_sweep),
+        ("complex_dc", res_complex_dc),
+        ("complex_op", res_complex_op),
+        ("dc_as_op", res_dc_as_op),
+    ):
+        assert len(res.errors) == 1, label
+        assert res.errors[0].code == "SIMULATION_FAILED", label
+        assert res.errors[0].targets == [], label
