@@ -10,7 +10,7 @@ from collections import deque
 from pathlib import Path
 
 from app.engines.locator import NgspiceNotFoundError, locate_ngspice
-from app.engines.parser import MAX_RESULT_POINTS, parse_ngspice_output
+from app.engines.parser import MAX_RESULT_POINTS, parse_ngspice_output, resolve_dc_source_name
 from app.models.netlist import (
     ComponentTarget,
     Diagnostic,
@@ -21,6 +21,7 @@ from app.models.netlist import (
 )
 from app.models.simulation import (
     Analysis,
+    DcAnalysis,
     OpAnalysis,
     SimulationResult,
     TranAnalysis,
@@ -96,7 +97,12 @@ def _collect_save_tokens(
         # Voltage sources and inductors are already saved by `all` as `i(v*)` / `i(l*)`.
         if not comp_lower or comp_lower.startswith(("v", "l")):
             continue
-        token = f"@{comp_lower}[i]"
+        if comp_lower.startswith("d"):
+            token = f"@{comp_lower}[id]"
+        elif comp_lower.startswith("i"):
+            token = f"@{comp_lower}[c]"
+        else:
+            token = f"@{comp_lower}[i]"
         if token not in seen:
             needed.append(token)
             seen.add(token)
@@ -675,7 +681,7 @@ def run_simulation(
             warnings,
         )
 
-    if not isinstance(analysis, OpAnalysis | TranAnalysis):
+    if not isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis):
         return _error_result(
             analysis,
             "SIMULATION_FAILED",
@@ -724,6 +730,17 @@ def run_simulation(
             analysis,
             "SIMULATION_FAILED",
             exc.user_message,
+            warnings,
+        )
+
+    if (
+        isinstance(analysis, DcAnalysis)
+        and resolve_dc_source_name(analysis, netlist_result) is None
+    ):
+        return _error_result(
+            analysis,
+            "DC_SOURCE_NOT_FOUND",
+            "La source balayée de l'analyse DC est introuvable dans la netlist.",
             warnings,
         )
 

@@ -154,7 +154,6 @@ def test_blank_netlist_without_errors_returns_simulation_failed(
             stop_frequency=1e5,
             points_per_decade=20,
         ),
-        DcAnalysis(source_id="c1", start=0.0, stop=10.0, step=1.0),
     ],
 )
 def test_unsupported_analysis_returns_french_diagnostic(analysis: Analysis) -> None:
@@ -271,6 +270,145 @@ def test_prepare_netlist_wraps_long_save_lines_and_rejects_empty_netlist() -> No
         prepare_netlist(NetlistResult(netlist=""))
     with pytest.raises(ValueError, match="empty netlist"):
         prepare_netlist(NetlistResult(netlist="  \n\t  "))
+
+
+def test_prepare_netlist_save_tokens_for_diodes_and_current_sources() -> None:
+    netlist_result = NetlistResult(
+        netlist=(
+            "* diode and current source\n"
+            "V1 in 0 DC 5\n"
+            "R1 in out 1k\n"
+            "D1 out 0 DMOD\n"
+            "I1 0 out DC 1m\n"
+            "L1 out 0 1m\n"
+            ".model DMOD D\n"
+            ".dc V1 0 5 1\n"
+            ".end\n"
+        ),
+        components={"V1": "c1", "R1": "c2", "D1": "c3", "I1": "c4", "L1": "c5"},
+    )
+
+    prepared = prepare_netlist(netlist_result)
+    assert ".save all @r1[i] @d1[id] @i1[c]" in prepared.splitlines()
+
+    # Existing @d1[id] and @i1[c] tokens are deduplicated cleanly.
+    re_prepared = prepare_netlist(
+        NetlistResult(netlist=prepared, components=netlist_result.components)
+    )
+    assert re_prepared == prepared
+
+
+def test_run_simulation_dc_missing_source_returns_diagnostic_without_ngspice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail_call(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("ngspice must not be located or run when source_id is missing")
+
+    monkeypatch.setattr(runner_module, "locate_ngspice", _fail_call)
+    monkeypatch.setattr(runner_module.subprocess, "run", _fail_call)
+
+    warning = Diagnostic(code="MILLI_SUFFIX", message="Avertissement test.")
+    netlist_result = _divider_netlist().model_copy(update={"warnings": [warning]})
+    result = run_simulation(
+        netlist_result,
+        DcAnalysis(source_id="missing_source", start=0.0, stop=10.0, step=1.0),
+    )
+
+    assert result.analysis == "dc"
+    assert result.axis is None
+    assert result.traces == []
+    assert result.errors == [
+        Diagnostic(
+            code="DC_SOURCE_NOT_FOUND",
+            message="La source balayée de l'analyse DC est introuvable dans la netlist.",
+            targets=[],
+        )
+    ]
+    assert result.warnings == [warning]
+
+
+def test_run_simulation_dc_mocked_voltage_and_current_sweeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_exe = tmp_path / "ngspice_con.exe"
+    fake_exe.write_bytes(b"")
+
+    dc_raw = (
+        "Title: * dc_v\n"
+        "Plotname: DC transfer characteristic\n"
+        "Flags: real\n"
+        "No. Variables: 4\n"
+        "No. Points: 3\n"
+        "Variables:\n"
+        "\t0\tv(v-sweep)\tvoltage\n"
+        "\t1\tv(out)\tvoltage\n"
+        "\t2\ti(v1)\tcurrent\n"
+        "\t3\ti(@d1[id])\tcurrent\n"
+        "Values:\n"
+        "0\t0.0\t0.0\t0.0\t0.0\n"
+        "1\t1.0\t0.6\t-0.0004\t0.0004\n"
+        "2\t2.0\t0.65\t-0.00135\t0.00135\n"
+    )
+
+    def _fake_run(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
+        (Path(kwargs["cwd"]) / "output.raw").write_text(dc_raw, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner_module.subprocess, "run", _fake_run)
+
+    netlist_v = NetlistResult(
+        netlist="* dc diode\nV1 in 0 DC 2\nR1 in out 1k\nD1 out 0 DMOD\n.dc V1 0 2 1\n.end\n",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "D1": "c2"},
+    )
+    res_v = run_simulation(
+        netlist_v,
+        DcAnalysis(source_id="c1", start=0.0, stop=2.0, step=1.0),
+        ngspice_path=fake_exe,
+    )
+
+    assert res_v.errors == []
+    assert res_v.axis is not None
+    assert res_v.axis.name == "V1"
+    assert res_v.axis.unit == "V"
+    assert res_v.axis.values == [0.0, 1.0, 2.0]
+    assert [t.name for t in res_v.traces] == ["v(out)", "i(V1)", "i(D1)"]
+
+    current_raw = (
+        "Title: * dc_i\n"
+        "Plotname: DC transfer characteristic\n"
+        "Flags: real\n"
+        "No. Variables: 3\n"
+        "No. Points: 2\n"
+        "Variables:\n"
+        "\t0\ti(i-sweep)\tcurrent\n"
+        "\t1\tv(out)\tvoltage\n"
+        "\t2\ti(@i1[c])\tcurrent\n"
+        "Values:\n"
+        "0\t0.0\t0.0\t0.0\n"
+        "1\t0.005\t5.0\t0.005\n"
+    )
+
+    def _fake_run_i(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
+        (Path(kwargs["cwd"]) / "output.raw").write_text(current_raw, encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner_module.subprocess, "run", _fake_run_i)
+    netlist_i = NetlistResult(
+        netlist="* dc_i\nI1 0 out DC 1m\nR1 out 0 1k\n.dc I1 0 5m 5m\n.end\n",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"I1": "c1"},
+    )
+    res_i = run_simulation(
+        netlist_i,
+        DcAnalysis(source_id="c1", start=0.0, stop=5e-3, step=5e-3),
+        ngspice_path=fake_exe,
+    )
+    assert res_i.errors == []
+    assert res_i.axis is not None
+    assert res_i.axis.name == "I1"
+    assert res_i.axis.unit == "A"
+    assert res_i.axis.values == [0.0, 0.005]
 
 
 def test_missing_ngspice_binary_returns_french_diagnostic(
@@ -841,6 +979,105 @@ def test_ngspice_golden_rc_tran() -> None:
     # Validate round-trip JSON conformance with the contract.
     validated = SimulationResult.model_validate_json(json.dumps(result.model_dump()))
     assert validated == result
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_golden_loaded_divider_dc() -> None:
+    fixture_dir = FIXTURES_DIR / "loaded_divider_dc"
+    netlist_result = NetlistResult.model_validate_json(
+        (fixture_dir / "netlist.json").read_text(encoding="utf-8")
+    )
+    analysis = TypeAdapter(Analysis).validate_json(
+        (fixture_dir / "analysis.json").read_text(encoding="utf-8")
+    )
+    expected = SimulationResult.model_validate_json(
+        (fixture_dir / "result.json").read_text(encoding="utf-8")
+    )
+
+    result = run_simulation(netlist_result, analysis)
+
+    assert result.errors == []
+    assert result == expected
+    assert result.axis is not None
+    assert result.axis.name == "V1"
+    assert result.axis.unit == "V"
+    traces_by_name = {trace.name: trace for trace in result.traces}
+    assert traces_by_name["v(n2)"].values == pytest.approx([v / 3.0 for v in result.axis.values])
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_dc_diode_characteristic_and_current_source_sweep() -> None:
+    diode_netlist = NetlistResult(
+        netlist=(
+            "* diode dc sweep\n"
+            "V1 in 0 DC 5\n"
+            "R1 in out 1k\n"
+            "D1 out 0 D1N4148\n"
+            ".model D1N4148 D(IS=2.52n RS=0.568 N=1.752 BV=100 IBV=100u)\n"
+            ".dc V1 -1 5 0.5\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3", "w4"]},
+        components={"V1": "c1", "R1": "c2", "D1": "c3"},
+    )
+    diode_analysis = DcAnalysis(source_id="c1", start=-1.0, stop=5.0, step=0.5)
+
+    diode_res = run_simulation(diode_netlist, diode_analysis)
+
+    assert diode_res.errors == []
+    assert diode_res.analysis == "dc"
+    assert diode_res.axis is not None
+    assert diode_res.axis.name == "V1"
+    assert diode_res.axis.unit == "V"
+    assert len(diode_res.axis.values) == 13
+    assert diode_res.axis.values[0] == pytest.approx(-1.0)
+    assert diode_res.axis.values[-1] == pytest.approx(5.0)
+
+    diode_traces = {trace.name: trace for trace in diode_res.traces}
+    assert list(diode_traces) == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(D1)"]
+    v_diode = diode_traces["v(out)"].values
+    i_diode = diode_traces["i(D1)"].values
+    i_res = diode_traces["i(R1)"].values
+
+    # Reverse bias (-1 V): diode blocks current and node voltage follows -1 V.
+    assert v_diode[0] < -0.99
+    assert abs(i_diode[0]) < 1e-6
+
+    # Zero bias (0 V): ~0 V and ~0 A.
+    zero_idx = diode_res.axis.values.index(0.0)
+    assert abs(v_diode[zero_idx]) < 1e-9
+    assert abs(i_diode[zero_idx]) < 1e-12
+
+    # Forward bias (+5 V): typical silicon drop ~0.65 V and forward current ~4.35 mA.
+    assert 0.55 < v_diode[-1] < 0.8
+    assert i_diode[-1] > 0.004
+    assert i_diode[-1] == pytest.approx(i_res[-1], abs=1e-4)
+    # Diode forward current grows monotonically from 0 V to 5 V.
+    assert all(i_diode[idx] < i_diode[idx + 1] for idx in range(zero_idx, len(i_diode) - 1))
+
+    # Real current source DC sweep.
+    isrc_netlist = NetlistResult(
+        netlist=("* current source dc sweep\nI1 0 out DC 1m\nR1 out 0 1k\n.dc I1 0 10m 2m\n.end\n"),
+        nets={"out": ["w1"], "0": ["w2", "w3"]},
+        components={"I1": "c1", "R1": "c2"},
+    )
+    isrc_res = run_simulation(
+        isrc_netlist,
+        DcAnalysis(source_id="c1", start=0.0, stop=10e-3, step=2e-3),
+    )
+
+    assert isrc_res.errors == []
+    assert isrc_res.analysis == "dc"
+    assert isrc_res.axis is not None
+    assert isrc_res.axis.name == "I1"
+    assert isrc_res.axis.unit == "A"
+    assert isrc_res.axis.values == pytest.approx([0.0, 2e-3, 4e-3, 6e-3, 8e-3, 1e-2])
+    isrc_traces = {trace.name: trace for trace in isrc_res.traces}
+    assert isrc_traces["v(out)"].values == pytest.approx([0.0, 2.0, 4.0, 6.0, 8.0, 10.0])
+    assert isrc_traces["i(I1)"].values == pytest.approx([0.0, 2e-3, 4e-3, 6e-3, 8e-3, 1e-2])
+    assert isrc_traces["i(R1)"].values == pytest.approx([0.0, 2e-3, 4e-3, 6e-3, 8e-3, 1e-2])
 
 
 @pytest.mark.ngspice
