@@ -10,6 +10,7 @@ argument and stay pure.
 
 import json
 import re
+from functools import cache
 from pathlib import Path
 from typing import Literal
 
@@ -106,6 +107,8 @@ class ComponentType(BaseModel):
             raise ValueError(f"{self.type}: duplicate pin names {pin_names}")
         if len(set(param_names)) != len(param_names):
             raise ValueError(f"{self.type}: duplicate parameter names {param_names}")
+        if "name" in param_names:
+            raise ValueError(f"{self.type}: 'name' is reserved for the component name")
 
         if (self.prefix is None) != (self.spice is None):
             raise ValueError(f"{self.type}: `prefix` and `spice` must both be set or both None")
@@ -140,6 +143,15 @@ class ComponentType(BaseModel):
                 )
         return self
 
+    def used_params(self, values: dict[str, str]) -> list[ParamDef]:
+        """The parameters a component uses: for a source, only those of its waveform.
+
+        Only these are checked, and only these may reach the netlist: any other key of
+        `params` is ignored (it could hide SPICE lines).
+        """
+        waveform = values.get("waveform", "").strip()
+        return [p for p in self.params if not p.waveforms or waveform in p.waveforms]
+
     def _check_placeholder(self, placeholder: str, pins: list[str], params: list[str]) -> None:
         if placeholder == "name":
             return
@@ -162,3 +174,9 @@ def load_library(directory: Path = LIBRARY_DIR) -> dict[str, ComponentType]:
             raise ValueError(f"{path.name}: type {component_type.type!r} must match the file name")
         library[component_type.type] = component_type
     return library
+
+
+@cache
+def get_library() -> dict[str, ComponentType]:
+    """The bundled library, read once and then reused."""
+    return load_library()

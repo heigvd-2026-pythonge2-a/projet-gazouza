@@ -186,8 +186,11 @@ def test_launcher_app_preserves_api_and_schema_routes(tmp_path: Path) -> None:
         assert client.get("/api/health").status_code == 200
 
         empty_req = {"schematic": {"version": 2}, "analysis": {"kind": "op"}}
-        assert client.post("/api/netlist", json=empty_req).status_code == 501
-        assert client.post("/api/simulate", json=empty_req).status_code == 501
+        # The routes are implemented: an empty circuit is a user error (200 + NO_GROUND).
+        for route in ("/api/netlist", "/api/simulate"):
+            response = client.post(route, json=empty_req)
+            assert response.status_code == 200
+            assert [e["code"] for e in response.json()["errors"]] == ["NO_GROUND"]
         assert client.post("/api/netlist", json={"schematic": {"version": 1}}).status_code == 422
 
         # Unknown /api/* routes must reach FastAPI (JSON 404), never static fallback HTML.
