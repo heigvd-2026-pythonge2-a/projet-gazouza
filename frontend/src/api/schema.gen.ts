@@ -13,9 +13,9 @@ export interface paths {
     };
     /**
      * Library
-     * @description Every component type: pins, parameters (with defaults and labels) and SPICE template.
+     * @description Every component type: pins and parameters (with defaults and labels), sorted by type.
      *
-     *     Sorted by type. The library is read once; it is the same for every request.
+     *     The SPICE templates and models stay in the backend: they are not part of the contract.
      */
     get: operations["library_api_library_get"];
     put?: never;
@@ -174,48 +174,6 @@ export interface components {
       /** Comp */
       comp: string;
     };
-    /**
-     * ComponentType
-     * @description One library file.
-     */
-    ComponentType: {
-      /**
-       * Type
-       * @description Library id, equal to the file name (e.g. 'resistor').
-       */
-      type: string;
-      /**
-       * Label
-       * @description Name shown to the user, in French.
-       */
-      label: string;
-      /**
-       * Prefix
-       * @description SPICE prefix ('R', 'C'...). None for 'ground' and 'label', which produce no SPICE line.
-       */
-      prefix: string | null;
-      /** Pins */
-      pins: components["schemas"]["PinDef"][];
-      /** Params */
-      params?: components["schemas"]["ParamDef"][];
-      /**
-       * Spice
-       * @description SPICE line template. None when `prefix` is None.
-       */
-      spice: string | null;
-      /**
-       * Waveforms
-       * @description Sources only: template of each waveform, selected by the 'waveform' param.
-       */
-      waveforms?: {
-        [key: string]: string;
-      };
-      /**
-       * Includes
-       * @description Model files to `.include`.
-       */
-      includes?: string[];
-    };
     /** DcAnalysis */
     DcAnalysis: {
       /**
@@ -328,6 +286,31 @@ export interface components {
     JunctionTarget: {
       /** Junction */
       junction: string;
+    };
+    /**
+     * LibraryComponent
+     * @description One component type, as the editor sees it.
+     */
+    LibraryComponent: {
+      /**
+       * Type
+       * @description Library id (e.g. 'resistor'), used in `Component.type`.
+       */
+      type: string;
+      /**
+       * Label
+       * @description Name shown to the user, in French.
+       */
+      label: string;
+      /**
+       * Prefix
+       * @description SPICE prefix ('R', 'C'...), first letter of `Component.name`. None for 'ground' and 'label', which have no name.
+       */
+      prefix: string | null;
+      /** Pins */
+      pins: components["schemas"]["PinDef"][];
+      /** Params */
+      params?: components["schemas"]["ParamDef"][];
     };
     /**
      * NetTarget
@@ -645,7 +628,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ComponentType"][];
+          "application/json": components["schemas"]["LibraryComponent"][];
         };
       };
     };

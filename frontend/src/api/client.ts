@@ -6,7 +6,7 @@ export type Schematic = components["schemas"]["Schematic"];
 export type NetlistResult = components["schemas"]["NetlistResult"];
 export type SimulationRequest = components["schemas"]["SimulationRequest"];
 export type SimulationResult = components["schemas"]["SimulationResult"];
-export type ComponentType = components["schemas"]["ComponentType"];
+export type LibraryComponent = components["schemas"]["LibraryComponent"];
 
 /** Longest wait for a response by default, in ms (a simulation can take a while). */
 export const DEFAULT_TIMEOUT_MS = 60_000;
@@ -120,7 +120,7 @@ export const getHealth = (options?: RequestOptions) =>
 
 /** The component library (pins, parameters, labels), sorted by type. */
 export const getLibrary = (options?: RequestOptions) =>
-  request<ComponentType[]>("/api/library", {}, options);
+  request<LibraryComponent[]>("/api/library", {}, options);
 
 export const generateNetlist = (body: SimulationRequest, options?: RequestOptions) =>
   request<NetlistResult>("/api/netlist", { method: "POST", body: JSON.stringify(body) }, options);

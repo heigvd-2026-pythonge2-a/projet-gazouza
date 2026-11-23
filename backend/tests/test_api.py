@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 import app.main as main_module
 from app.engines import NgspiceNotFoundError, locate_ngspice
 from app.main import app
-from app.models import Analysis, ComponentType, NetlistResult, SimulationResult
+from app.models import Analysis, LibraryComponent, NetlistResult, SimulationResult
 
 client = TestClient(app)
 
@@ -134,7 +134,7 @@ def test_simulate_with_real_ngspice_gives_the_rc_charge() -> None:
 def test_library_route() -> None:
     response = client.get("/api/library")
     assert response.status_code == 200
-    library = TypeAdapter(list[ComponentType]).validate_python(response.json())
+    library = TypeAdapter(list[LibraryComponent]).validate_python(response.json())
 
     types = [c.type for c in library]
     assert types == sorted(types)
@@ -153,4 +153,18 @@ def test_library_route() -> None:
 def test_library_is_in_the_contract() -> None:
     # The editor gets its TypeScript types from openapi.json: the schema must be there.
     schemas = client.get("/openapi.json").json()["components"]["schemas"]
-    assert {"ComponentType", "ParamDef", "ParamOption", "PinDef"} <= set(schemas)
+    assert {"LibraryComponent", "ParamDef", "ParamOption", "PinDef"} <= set(schemas)
+    # The SPICE side stays in the backend: changing a template never changes the contract.
+    assert "ComponentType" not in schemas
+    assert set(schemas["LibraryComponent"]["properties"]) == {
+        "type",
+        "label",
+        "prefix",
+        "pins",
+        "params",
+    }
+
+
+def test_library_route_hides_the_spice_side() -> None:
+    for component in client.get("/api/library").json():
+        assert set(component) == {"type", "label", "prefix", "pins", "params"}

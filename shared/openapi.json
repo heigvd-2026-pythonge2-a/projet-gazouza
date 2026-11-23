@@ -8,7 +8,7 @@
     "/api/library": {
       "get": {
         "summary": "Library",
-        "description": "Every component type: pins, parameters (with defaults and labels) and SPICE template.\n\nSorted by type. The library is read once; it is the same for every request.",
+        "description": "Every component type: pins and parameters (with defaults and labels), sorted by type.\n\nThe SPICE templates and models stay in the backend: they are not part of the contract.",
         "operationId": "library_api_library_get",
         "responses": {
           "200": {
@@ -17,7 +17,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ComponentType"
+                    "$ref": "#/components/schemas/LibraryComponent"
                   },
                   "type": "array",
                   "title": "Response Library Api Library Get"
@@ -275,86 +275,6 @@
         ],
         "title": "ComponentTarget"
       },
-      "ComponentType": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "title": "Type",
-            "description": "Library id, equal to the file name (e.g. 'resistor')."
-          },
-          "label": {
-            "type": "string",
-            "title": "Label",
-            "description": "Name shown to the user, in French."
-          },
-          "prefix": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prefix",
-            "description": "SPICE prefix ('R', 'C'...). None for 'ground' and 'label', which produce no SPICE line."
-          },
-          "pins": {
-            "items": {
-              "$ref": "#/components/schemas/PinDef"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Pins"
-          },
-          "params": {
-            "items": {
-              "$ref": "#/components/schemas/ParamDef"
-            },
-            "type": "array",
-            "title": "Params"
-          },
-          "spice": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Spice",
-            "description": "SPICE line template. None when `prefix` is None."
-          },
-          "waveforms": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Waveforms",
-            "description": "Sources only: template of each waveform, selected by the 'waveform' param."
-          },
-          "includes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Includes",
-            "description": "Model files to `.include`."
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "type",
-          "label",
-          "prefix",
-          "pins",
-          "spice"
-        ],
-        "title": "ComponentType",
-        "description": "One library file."
-      },
       "DcAnalysis": {
         "properties": {
           "kind": {
@@ -542,6 +462,57 @@
           "junction"
         ],
         "title": "JunctionTarget"
+      },
+      "LibraryComponent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Library id (e.g. 'resistor'), used in `Component.type`."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Name shown to the user, in French."
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix",
+            "description": "SPICE prefix ('R', 'C'...), first letter of `Component.name`. None for 'ground' and 'label', which have no name."
+          },
+          "pins": {
+            "items": {
+              "$ref": "#/components/schemas/PinDef"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Pins"
+          },
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamDef"
+            },
+            "type": "array",
+            "title": "Params"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "label",
+          "prefix",
+          "pins"
+        ],
+        "title": "LibraryComponent",
+        "description": "One component type, as the editor sees it."
       },
       "NetTarget": {
         "properties": {

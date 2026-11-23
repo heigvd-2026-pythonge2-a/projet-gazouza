@@ -2,16 +2,21 @@
 
 from fastapi import APIRouter
 
-from app.models import ComponentType
+from app.models import LibraryComponent
 from app.netlist.library import get_library
 
 router = APIRouter()
 
+PUBLIC_FIELDS = set(LibraryComponent.model_fields)
+
 
 @router.get("/api/library")
-def library() -> list[ComponentType]:
-    """Every component type: pins, parameters (with defaults and labels) and SPICE template.
+def library() -> list[LibraryComponent]:
+    """Every component type: pins and parameters (with defaults and labels), sorted by type.
 
-    Sorted by type. The library is read once; it is the same for every request.
+    The SPICE templates and models stay in the backend: they are not part of the contract.
     """
-    return list(get_library().values())
+    return [
+        LibraryComponent.model_validate(component.model_dump(include=PUBLIC_FIELDS))
+        for component in get_library().values()
+    ]

@@ -1,39 +1,129 @@
 """Component library: one JSON file per component type, in `app/netlist/library/`.
 
-Owner: Damien. Format: `app/models/library.py` (part of the API contract, served by
-`GET /api/library`) and docs/format-schema.md, section 5.
+Owner: Damien. Format: docs/format-schema.md, section 5.
 
-Each file describes a type once (pins, parameters, SPICE line template), so adding a component
-needs no code. Loading happens once; the netlist functions then receive the library as an
-argument and stay pure.
+`ComponentType` is the full, internal description of a type: the public part served to the
+editor (`app.models.LibraryComponent`: pins, parameters) plus the SPICE templates. It checks
+every file when it is loaded, so a broken library never starts. Adding a component needs no
+code. Loading happens once; the netlist functions then receive the library as an argument and
+stay pure.
 """
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 
-from app.models.library import (
-    PLACEHOLDER,
-    SPICE_NUMBER,
-    ComponentType,
-    ParamDef,
-    ParamOption,
-    PinDef,
-)
+from pydantic import Field, model_validator
+
+from app.models.library import LibraryComponent, ParamDef, ParamOption, PinDef
 
 __all__ = [
     "LIBRARY_DIR",
     "PLACEHOLDER",
     "SPICE_NUMBER",
     "ComponentType",
-    "ParamOption",
     "ParamDef",
+    "ParamOption",
     "PinDef",
     "get_library",
     "load_library",
 ]
 
 LIBRARY_DIR = Path(__file__).parent / "library"
+
+# Matches the placeholders of a template: "{name} {pin:1} {resistance}" -> name, pin:1, resistance
+PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
+
+# A SPICE number as written in the library defaults: "5", "-1.5", "1e-3", "4.7u", "10Meg".
+# Deliberately strict (no trailing letters, unlike SPICE): a typo such as "1kk" is refused.
+# User input is read by `app.netlist.values.parse_value`.
+SPICE_NUMBER = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?(meg|[fpnumkgt])?", re.IGNORECASE)
+
+
+class ComponentType(LibraryComponent):
+    """One library file: the public part (`LibraryComponent`) plus the SPICE side."""
+
+    spice: str | None = Field(description="SPICE line template. None when `prefix` is None.")
+    waveforms: dict[str, str] = Field(
+        default_factory=dict,
+        description="Sources only: template of each waveform, selected by the 'waveform' param.",
+    )
+    includes: list[str] = Field(default_factory=list, description="Model files to `.include`.")
+
+    @model_validator(mode="after")
+    def check_consistency(self) -> "ComponentType":
+        for param in self.params:
+            values = [o.value for o in param.options]
+            if param.kind == "choice" and param.default not in values:
+                raise ValueError(f"{param.name}: default {param.default!r} is not in {values}")
+            if param.kind != "choice" and param.options:
+                raise ValueError(f"{param.name}: only a 'choice' parameter has options")
+            if param.kind == "value" and not SPICE_NUMBER.fullmatch(param.default):
+                raise ValueError(f"{param.name}: default {param.default!r} is not a SPICE number")
+
+        pin_names = [p.name for p in self.pins]
+        param_names = [p.name for p in self.params]
+        if len(set(pin_names)) != len(pin_names):
+            raise ValueError(f"{self.type}: duplicate pin names {pin_names}")
+        if len(set(param_names)) != len(param_names):
+            raise ValueError(f"{self.type}: duplicate parameter names {param_names}")
+        if "name" in param_names:
+            raise ValueError(f"{self.type}: 'name' is reserved for the component name")
+
+        if (self.prefix is None) != (self.spice is None):
+            raise ValueError(f"{self.type}: `prefix` and `spice` must both be set or both None")
+
+        if self.spice is not None:
+            for placeholder in PLACEHOLDER.findall(self.spice):
+                self._check_placeholder(placeholder, pin_names, param_names)
+        for name, template in self.waveforms.items():
+            for placeholder in PLACEHOLDER.findall(template):
+                if placeholder not in param_names:
+                    raise ValueError(f"{self.type}: waveform {name!r} uses unknown {placeholder!r}")
+
+        # The 'waveform' parameter and the `waveforms` templates go together.
+        waveform = next((p for p in self.params if p.name == "waveform"), None)
+        if (waveform is None) != (not self.waveforms):
+            raise ValueError(f"{self.type}: a 'waveform' parameter needs `waveforms`, and back")
+        if waveform is not None and {o.value for o in waveform.options} != set(self.waveforms):
+            raise ValueError(f"{self.type}: 'waveform' options must match `waveforms`")
+
+        # Each parameter lists the waveforms that use it, and the list must say exactly what
+        # the templates use: the editor shows only the fields of the selected waveform.
+        for param in self.params:
+            used_by = {
+                name
+                for name, template in self.waveforms.items()
+                if param.name in PLACEHOLDER.findall(template)
+            }
+            if set(param.waveforms) != used_by:
+                raise ValueError(
+                    f"{self.type}: {param.name!r} lists waveforms {param.waveforms}, "
+                    f"but is used by {sorted(used_by)}"
+                )
+        return self
+
+    def used_params(self, values: dict[str, str]) -> list[ParamDef]:
+        """The parameters a component uses: for a source, only those of its waveform.
+
+        Only these are checked, and only these may reach the netlist: any other key of
+        `params` is ignored (it could hide SPICE lines).
+        """
+        waveform = values.get("waveform", "").strip()
+        return [p for p in self.params if not p.waveforms or waveform in p.waveforms]
+
+    def _check_placeholder(self, placeholder: str, pins: list[str], params: list[str]) -> None:
+        if placeholder == "name":
+            return
+        if placeholder == "waveform" and self.waveforms:
+            return
+        if placeholder.startswith("pin:"):
+            if placeholder[4:] not in pins:
+                raise ValueError(f"{self.type}: {{{placeholder}}} refers to an unknown pin")
+            return
+        if placeholder not in params:
+            raise ValueError(f"{self.type}: {{{placeholder}}} refers to an unknown parameter")
 
 
 def load_library(directory: Path = LIBRARY_DIR) -> dict[str, ComponentType]:
