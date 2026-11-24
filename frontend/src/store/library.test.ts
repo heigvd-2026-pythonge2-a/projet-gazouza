@@ -56,15 +56,15 @@ describe("setLibrary", () => {
 
   it("leaves out a type the editor cannot draw yet, and says so", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const diode: LibraryComponent = {
-      type: "diode",
-      label: "Diode",
-      prefix: "D",
+    const thyristor: LibraryComponent = {
+      type: "thyristor",
+      label: "Thyristor",
+      prefix: "X",
       pins: [{ name: "A", x: 0, y: -2 }],
     };
-    setLibrary([...fixtureLibrary(), diode]);
-    expect(() => getDef("diode")).toThrow("Unknown component type: diode");
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("diode"));
+    setLibrary([...fixtureLibrary(), thyristor]);
+    expect(() => getDef("thyristor")).toThrow("Unknown component type: thyristor");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("thyristor"));
   });
 
   it("leaves out a symbol the backend does not serve", () => {
@@ -72,6 +72,106 @@ describe("setLibrary", () => {
     expect(() => getDef("inductor")).toThrow();
     expect(paletteGroups()[0]?.defs.map((d) => d.type)).toEqual(["resistor", "capacitor"]);
   });
+});
+
+// Pins of the semiconductors and op-amps, as the backend library defines them
+// (backend/app/netlist/library/*.json). The editor draws the symbols, the backend owns the pins:
+// each pin must sit at the end of a lead of the symbol.
+const SEMICONDUCTORS: LibraryComponent[] = [
+  ...(["diode", "zener", "led"] as const).map((type): LibraryComponent => ({
+    type,
+    label: type,
+    prefix: "D",
+    pins: [
+      { name: "A", x: 0, y: -2 },
+      { name: "K", x: 0, y: 2 },
+    ],
+  })),
+  {
+    type: "npn",
+    label: "NPN",
+    prefix: "Q",
+    pins: [
+      { name: "C", x: 1, y: -2 },
+      { name: "B", x: -2, y: 0 },
+      { name: "E", x: 1, y: 2 },
+    ],
+  },
+  {
+    type: "pnp",
+    label: "PNP",
+    prefix: "Q",
+    pins: [
+      { name: "C", x: 1, y: 2 },
+      { name: "B", x: -2, y: 0 },
+      { name: "E", x: 1, y: -2 },
+    ],
+  },
+  {
+    type: "nmos",
+    label: "NMOS",
+    prefix: "M",
+    pins: [
+      { name: "D", x: 1, y: -2 },
+      { name: "G", x: -2, y: 0 },
+      { name: "S", x: 1, y: 2 },
+    ],
+  },
+  {
+    type: "opamp",
+    label: "Ampli-op",
+    prefix: "X",
+    pins: [
+      { name: "+", x: -2, y: 1 },
+      { name: "-", x: -2, y: -1 },
+      { name: "out", x: 2, y: 0 },
+    ],
+  },
+  {
+    type: "opamp_real",
+    label: "Ampli-op réel",
+    prefix: "X",
+    pins: [
+      { name: "+", x: -2, y: 1 },
+      { name: "-", x: -2, y: -1 },
+      { name: "out", x: 2, y: 0 },
+      { name: "V+", x: 0, y: -2 },
+      { name: "V-", x: 0, y: 2 },
+    ],
+  },
+];
+
+describe("semiconductor and op-amp symbols", () => {
+  it("are grouped after the basic tools, which keep their digit keys", () => {
+    setLibrary([...fixtureLibrary(), ...SEMICONDUCTORS]);
+    const groups = paletteGroups().map((g) => [g.id, g.defs.map((d) => d.type)]);
+    expect(groups).toEqual([
+      ["passive", ["resistor", "capacitor", "inductor"]],
+      ["source", ["voltage_source", "current_source"]],
+      ["connection", ["ground", "label"]],
+      ["semiconductor", ["diode", "zener", "led", "npn", "pnp", "nmos"]],
+      ["amplifier", ["opamp", "opamp_real"]],
+    ]);
+  });
+
+  it.each([...fixtureLibrary(), ...SEMICONDUCTORS].map((c) => [c.type]))(
+    "%s: every pin is the end of a line of the symbol",
+    (type) => {
+      setLibrary([...fixtureLibrary(), ...SEMICONDUCTORS]);
+      const def = getDef(type);
+      const ends = def.symbol.flatMap((s) =>
+        s.kind === "line"
+          ? [
+              [s.points[0], s.points[1]],
+              [s.points.at(-2), s.points.at(-1)],
+            ]
+          : [],
+      );
+      for (const pin of def.pins) {
+        expect(ends, `${type}, pin ${pin.name}`).toContainEqual([pin.x, pin.y]);
+      }
+    },
+  );
 });
 
 describe("loadLibrary", () => {

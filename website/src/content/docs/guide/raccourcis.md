@@ -47,7 +47,7 @@ afficher cette liste à tout moment.
 
 | Geste | Action |
 |---|---|
-| <kbd>1</kbd> à <kbd>8</kbd> | Choisir l'outil de la palette |
+| <kbd>1</kbd> à <kbd>9</kbd> | Choisir l'un des neuf premiers outils de la palette |
 | Clic (outil composant) | Poser le composant |
 | <kbd>Échap</kbd> ou clic droit | Arrêter de poser |
 
