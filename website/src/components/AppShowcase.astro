@@ -1,0 +1,351 @@
+---
+/**
+ * Illustration of the Psice window: an RC circuit in the editor and its step response in the
+ * results panel, with a probe on the "out" node. Pure SVG, follows the light / dark theme.
+ */
+
+// Step response of the RC circuit: 0 -> 5 V at t0, tau = 1 ms, plotted from 0 to 5 ms.
+const T0 = 0.5;
+const TAU = 1;
+const plot = { x0: 612, x1: 930, y0: 362, y1: 132, tMax: 5, vMax: 5 };
+const px = (t: number) => plot.x0 + (t / plot.tMax) * (plot.x1 - plot.x0);
+const py = (v: number) => plot.y0 - (v / plot.vMax) * (plot.y0 - plot.y1);
+
+const out: string[] = [];
+for (let i = 0; i <= 120; i++) {
+	const t = (i / 120) * plot.tMax;
+	const v = t < T0 ? 0 : 5 * (1 - Math.exp(-(t - T0) / TAU));
+	out.push(`${i === 0 ? 'M' : 'L'}${px(t).toFixed(1)} ${py(v).toFixed(1)}`);
+}
+const input = `M${px(0)} ${py(0)} L${px(T0)} ${py(0)} L${px(T0)} ${py(5)} L${px(plot.tMax)} ${py(5)}`;
+const cursorT = T0 + TAU;
+const cursorV = 5 * (1 - Math.exp(-1));
+const xTicks = [0, 1, 2, 3, 4, 5];
+const yTicks = [0, 1, 2, 3, 4, 5];
+---
+
+<figure class="showcase not-content">
+	<svg
+		viewBox="0 0 960 430"
+		role="img"
+		aria-labelledby="showcase-title showcase-desc"
+		xmlns="http://www.w3.org/2000/svg"
+	>
+		<title id="showcase-title">Aperçu de Psice</title>
+		<desc id="showcase-desc">
+			Un circuit RC dessiné dans l'éditeur, et la courbe de charge du condensateur dans le panneau
+			des résultats. La sonde posée sur le nœud out indique 3,16 V à t = 1,5 ms.
+		</desc>
+		<defs>
+			<pattern id="sc-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+				<circle cx="1" cy="1" r="1" class="sc-dot"></circle>
+			</pattern>
+			<linearGradient id="sc-area" x1="0" x2="0" y1="0" y2="1">
+				<stop offset="0" stop-color="#2563eb" stop-opacity="0.28"></stop>
+				<stop offset="1" stop-color="#2563eb" stop-opacity="0"></stop>
+			</linearGradient>
+		</defs>
+
+		<!-- Window -->
+		<rect class="sc-window" x="0.5" y="0.5" width="959" height="429" rx="14"></rect>
+		<path class="sc-bar" d="M14 0.5 H946 A13.5 13.5 0 0 1 959.5 14 V40 H0.5 V14 A13.5 13.5 0 0 1 14 0.5Z"
+		></path>
+		<circle cx="22" cy="20" r="5" fill="#ef4444"></circle>
+		<circle cx="40" cy="20" r="5" fill="#f59e0b"></circle>
+		<circle cx="58" cy="20" r="5" fill="#22c55e"></circle>
+		<text class="sc-title" x="480" y="25" text-anchor="middle">Psice — circuit-rc.psice.json</text>
+
+		<!-- Toolbar -->
+		<g class="sc-toolbar">
+			<rect x="16" y="52" width="26" height="22" rx="5"></rect>
+			<rect x="48" y="52" width="26" height="22" rx="5"></rect>
+			<rect x="80" y="52" width="26" height="22" rx="5"></rect>
+			<rect x="124" y="52" width="26" height="22" rx="5"></rect>
+			<rect x="156" y="52" width="26" height="22" rx="5"></rect>
+		</g>
+		<rect class="sc-run" x="470" y="50" width="96" height="26" rx="13"></rect>
+		<path d="M486 57 L486 69 L496 63 Z" fill="#fff"></path>
+		<text x="503" y="68" class="sc-run-label">Simuler</text>
+
+		<!-- Editor -->
+		<rect x="12" y="88" width="572" height="330" rx="10" fill="url(#sc-grid)" class="sc-panel"
+		></rect>
+
+		<!-- Wires -->
+		<g class="sc-wire">
+			<path d="M110 196 V130 H206"></path>
+			<path d="M286 130 H380 V214"></path>
+			<path d="M380 226 V330"></path>
+			<path d="M110 264 V330 H380"></path>
+			<path d="M245 330 V346"></path>
+		</g>
+		<!-- Moving current (animation du courant) -->
+		<g class="sc-current">
+			<path d="M110 196 V130 H206"></path>
+			<path d="M286 130 H380 V214"></path>
+		</g>
+
+		<!-- V1: pulse source -->
+		<circle cx="110" cy="230" r="34" class="sc-part"></circle>
+		<path d="M94 240 H102 V220 H118 V240 H126" class="sc-symbol"></path>
+		<text x="102" y="206" class="sc-pin">+</text>
+		<text x="156" y="226" class="sc-name">V1</text>
+		<text x="156" y="244" class="sc-value">PULSE 0→5 V</text>
+
+		<!-- R1: IEC rectangle -->
+		<rect x="206" y="118" width="80" height="24" rx="2" class="sc-part"></rect>
+		<text x="246" y="104" text-anchor="middle" class="sc-name">R1</text>
+		<text x="246" y="166" text-anchor="middle" class="sc-value">1k</text>
+
+		<!-- C1 -->
+		<path d="M354 214 H406 M354 226 H406" class="sc-plate"></path>
+		<text x="420" y="216" class="sc-name">C1</text>
+		<text x="420" y="234" class="sc-value">1u</text>
+
+		<!-- Ground -->
+		<path d="M227 346 H263 M234 353 H256 M241 360 H249" class="sc-plate"></path>
+
+		<!-- Node labels -->
+		<g class="sc-flag">
+			<path d="M110 130 L96 116 H72 V104 H96 Z" transform="translate(0 0)"></path>
+			<text x="78" y="114">in</text>
+		</g>
+		<g class="sc-flag">
+			<path d="M380 130 L394 116 H424 V104 H394 Z"></path>
+			<text x="398" y="114">out</text>
+		</g>
+
+		<!-- Connection dots -->
+		<circle cx="110" cy="130" r="4.5" class="sc-node"></circle>
+		<circle cx="380" cy="130" r="4.5" class="sc-node"></circle>
+		<circle cx="245" cy="330" r="4.5" class="sc-node"></circle>
+
+		<!-- Probe on "out" -->
+		<g class="sc-probe">
+			<path d="M380 130 L430 160" class="sc-probe-line"></path>
+			<circle cx="380" cy="130" r="10" class="sc-probe-ring"></circle>
+			<rect x="430" y="146" width="128" height="40" rx="9" class="sc-tip"></rect>
+			<text x="444" y="164" class="sc-tip-label">v(out)</text>
+			<text x="444" y="179" class="sc-tip-value">3,16 V à 1,5 ms</text>
+		</g>
+
+		<!-- Results panel -->
+		<rect x="596" y="88" width="352" height="330" rx="10" class="sc-panel sc-results"></rect>
+		<text x="612" y="112" class="sc-panel-title">Résultats · .tran 5 ms</text>
+
+		<g class="sc-axis">
+			{
+				yTicks.map((v) => (
+					<>
+						<line x1={plot.x0} x2={plot.x1} y1={py(v)} y2={py(v)} class="sc-gridline" />
+						<text x={plot.x0 - 8} y={py(v) + 4} text-anchor="end">
+							{v}
+						</text>
+					</>
+				))
+			}
+			{
+				xTicks.map((t) => (
+					<text x={px(t)} y={plot.y0 + 18} text-anchor="middle">
+						{t}
+					</text>
+				))
+			}
+			<text x={plot.x1} y={plot.y0 + 38} text-anchor="end">t (ms)</text>
+			<text x={plot.x0 - 4} y={plot.y1 - 10} text-anchor="end">V</text>
+		</g>
+
+		<path d={input} class="sc-trace-in"></path>
+		<path d={`${out.join(' ')} L${plot.x1} ${plot.y0} L${plot.x0} ${plot.y0} Z`} fill="url(#sc-area)"
+		></path>
+		<path d={out.join(' ')} class="sc-trace-out"></path>
+
+		<line x1={px(cursorT)} x2={px(cursorT)} y1={plot.y1} y2={plot.y0} class="sc-cursor"></line>
+		<circle cx={px(cursorT)} cy={py(cursorV)} r="5" class="sc-cursor-dot"></circle>
+
+		<g class="sc-legend">
+			<line x1="742" x2="760" y1="108" y2="108" class="sc-trace-in"></line>
+			<text x="765" y="112">v(in)</text>
+			<line x1="812" x2="830" y1="108" y2="108" class="sc-trace-out"></line>
+			<text x="835" y="112">v(out)</text>
+		</g>
+	</svg>
+</figure>
+
+<style>
+	.showcase {
+		margin: 0;
+		border-radius: 16px;
+		box-shadow:
+			0 30px 80px -30px var(--psice-glow),
+			0 10px 30px -12px rgba(2, 6, 23, 0.45);
+	}
+	svg {
+		display: block;
+		width: 100%;
+		height: auto;
+		font-family: var(--sl-font);
+	}
+	.sc-window {
+		fill: var(--sl-color-bg);
+		stroke: var(--psice-card-border);
+	}
+	.sc-bar {
+		fill: var(--sl-color-gray-6);
+	}
+	.sc-title {
+		font-size: 12px;
+		fill: var(--sl-color-gray-3);
+	}
+	.sc-toolbar rect {
+		fill: var(--sl-color-gray-6);
+	}
+	.sc-run {
+		fill: #2563eb;
+	}
+	.sc-run-label {
+		font-size: 12px;
+		font-weight: 600;
+		fill: #fff;
+	}
+	.sc-panel {
+		stroke: var(--psice-card-border);
+	}
+	.sc-results {
+		fill: var(--sl-color-bg-nav);
+	}
+	.sc-dot {
+		fill: var(--psice-grid-dot);
+	}
+	.sc-panel-title {
+		font-size: 12px;
+		font-weight: 600;
+		fill: var(--sl-color-gray-2);
+	}
+	.sc-wire path {
+		fill: none;
+		stroke: var(--sl-color-gray-2);
+		stroke-width: 2.5;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.sc-current path {
+		fill: none;
+		stroke: #60a5fa;
+		stroke-width: 3;
+		stroke-linecap: round;
+		stroke-dasharray: 2 16;
+		animation: sc-flow 1.2s linear infinite;
+	}
+	@keyframes sc-flow {
+		to {
+			stroke-dashoffset: -18;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.sc-current path {
+			animation: none;
+		}
+	}
+	.sc-part {
+		fill: var(--sl-color-bg);
+		stroke: var(--sl-color-white);
+		stroke-width: 2.5;
+	}
+	.sc-symbol,
+	.sc-plate {
+		fill: none;
+		stroke: var(--sl-color-white);
+		stroke-width: 2.5;
+		stroke-linecap: round;
+	}
+	.sc-plate {
+		stroke-width: 3;
+	}
+	.sc-pin {
+		font-size: 13px;
+		font-weight: 700;
+		fill: var(--sl-color-gray-3);
+	}
+	.sc-name {
+		font-size: 13px;
+		font-weight: 700;
+		fill: var(--sl-color-white);
+	}
+	.sc-value {
+		font-size: 12px;
+		fill: var(--sl-color-accent);
+		font-family: var(--sl-font-mono);
+	}
+	.sc-flag path {
+		fill: var(--sl-color-accent-low);
+		stroke: var(--sl-color-accent);
+		stroke-width: 1.5;
+	}
+	.sc-flag text {
+		font-size: 11px;
+		font-weight: 600;
+		fill: var(--sl-color-accent-high);
+	}
+	.sc-node {
+		fill: #2563eb;
+	}
+	.sc-probe-line {
+		stroke: #dc2626;
+		stroke-width: 1.5;
+		stroke-dasharray: 4 3;
+	}
+	.sc-probe-ring {
+		fill: none;
+		stroke: #dc2626;
+		stroke-width: 2;
+	}
+	.sc-tip {
+		fill: var(--sl-color-gray-6);
+		stroke: #dc2626;
+		stroke-width: 1.5;
+	}
+	.sc-tip-label {
+		font-size: 11px;
+		fill: var(--sl-color-gray-3);
+		font-family: var(--sl-font-mono);
+	}
+	.sc-tip-value {
+		font-size: 13px;
+		font-weight: 700;
+		fill: var(--sl-color-white);
+	}
+	.sc-axis text {
+		font-size: 10.5px;
+		fill: var(--sl-color-gray-3);
+	}
+	.sc-gridline {
+		stroke: var(--psice-card-border);
+	}
+	.sc-trace-in {
+		fill: none;
+		stroke: var(--sl-color-gray-3);
+		stroke-width: 2;
+		stroke-dasharray: 5 4;
+	}
+	.sc-trace-out {
+		fill: none;
+		stroke: #3b82f6;
+		stroke-width: 3;
+		stroke-linejoin: round;
+	}
+	.sc-cursor {
+		stroke: #dc2626;
+		stroke-width: 1.5;
+		stroke-dasharray: 4 3;
+	}
+	.sc-cursor-dot {
+		fill: #dc2626;
+		stroke: var(--sl-color-bg);
+		stroke-width: 2;
+	}
+	.sc-legend text {
+		font-size: 11px;
+		fill: var(--sl-color-gray-2);
+	}
+</style>

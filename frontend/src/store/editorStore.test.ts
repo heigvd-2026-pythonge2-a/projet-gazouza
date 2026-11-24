@@ -182,7 +182,7 @@ describe("selection, clipboard and deletion", () => {
     expect(store().clipboard).toBeNull();
   });
 
-  it("deletes a bend selected on its own", () => {
+  it("deletes the whole wire of a bend selected on its own", () => {
     store().startWiring();
     for (const p of [
       { x: 0, y: 0 },
@@ -197,7 +197,9 @@ describe("selection, clipboard and deletion", () => {
     store().selectWirePart({ wire, kind: "bend", index: 1 });
     store().deleteSelection();
     expect(store().wirePart).toBeNull();
-    expect(store().doc.wires[0]!.points).toHaveLength(1);
+    expect(store().doc.wires).toEqual([]);
+    store().undo();
+    expect(store().doc.wires).toHaveLength(1);
   });
 });
 

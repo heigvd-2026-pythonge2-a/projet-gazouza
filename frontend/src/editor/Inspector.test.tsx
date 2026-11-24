@@ -89,6 +89,38 @@ describe("Inspector", () => {
     expect(name).not.toHaveAttribute("aria-invalid");
   });
 
+  it("checks the values while typing: errors and warnings", async () => {
+    const user = userEvent.setup();
+    dropComponent("resistor");
+    render(<Inspector />);
+    const field = screen.getByLabelText("Résistance");
+
+    await user.clear(field);
+    await user.type(field, "1,5k");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(/écris « 1.5k »/);
+
+    await user.clear(field);
+    await user.type(field, "1M");
+    expect(field).not.toHaveAttribute("aria-invalid");
+    expect(field).toHaveAccessibleDescription(/« M » veut dire milli/);
+
+    await user.clear(field);
+    await user.type(field, "1Meg");
+    expect(field).not.toHaveAccessibleDescription();
+  });
+
+  it("lays out the many fields of a source on two columns", async () => {
+    const user = userEvent.setup();
+    dropComponent("voltage_source");
+    render(<Inspector />);
+    await user.selectOptions(screen.getByLabelText("Forme d'onde"), "Impulsion");
+    const grid = screen.getByLabelText("Période").closest("[style*='grid']");
+    expect(grid).not.toBeNull();
+    // The double-click still goes to the main value, in the grid too.
+    expect(grid!.querySelector("[data-value-field]")).not.toBeNull();
+  });
+
   it("shows the parameters of the chosen waveform only", async () => {
     const user = userEvent.setup();
     dropComponent("voltage_source");
