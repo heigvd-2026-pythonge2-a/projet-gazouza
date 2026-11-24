@@ -13,9 +13,9 @@ on:
       - '.github/workflows/ci.yml'
   # Every pull request runs this workflow, so that the "CI OK" job below always reports:
   # it is the check the ruleset of main requires. The `changes` job decides which parts
-  # actually need to run.
+  # actually need to run. No `branches` filter: a stacked PR (based on another feature
+  # branch) needs "CI OK" too, since it is retargeted to main when its base is merged.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
