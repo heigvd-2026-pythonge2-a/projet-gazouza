@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { addComponent, emptyDoc, setParam } from "./document";
+import { addComponent, emptyDoc, renameComponent, setParam, type EditorDoc } from "./document";
 import { paletteGroups } from "./library";
-import { invalidValues, valueProblem } from "./values";
+import { componentProblems, invalidValues, valueProblem } from "./values";
 
 describe("valueProblem", () => {
   it("accepts SPICE numbers, with a suffix and a unit, in any case", () => {
@@ -79,6 +79,52 @@ describe("invalidValues", () => {
         label: "Résistance",
         message: expect.stringMatching(/non reconnue/),
       },
+    ]);
+  });
+});
+
+describe("componentProblems", () => {
+  const place = (doc: EditorDoc, type: string) =>
+    addComponent(doc, { type, position: { x: 0, y: 0 }, rotation: 0, mirror: false });
+
+  it("finds nothing in a document with default values", () => {
+    const r = place(emptyDoc(), "resistor");
+    const g = place(r.doc, "ground");
+    expect(componentProblems(place(g.doc, "label").doc)).toEqual([]);
+  });
+
+  it("gives one problem per component, errors before warnings", () => {
+    const r = place(emptyDoc(), "resistor");
+    const c = place(r.doc, "capacitor");
+    let doc = setParam(c.doc, r.id, "resistance", "1M");
+    doc = setParam(doc, c.id, "capacitance", "abc");
+    expect(componentProblems(doc)).toEqual([
+      {
+        comp: r.id,
+        param: "resistance",
+        level: "warning",
+        message: expect.stringMatching(/milli/),
+      },
+      {
+        comp: c.id,
+        param: "capacitance",
+        level: "error",
+        message: expect.stringMatching(/non reconnue/),
+      },
+    ]);
+    // A wrong name comes before a warning on the value, and is reported with no parameter.
+    expect(componentProblems(renameComponent(doc, r.id, "X1"))[0]).toEqual({
+      comp: r.id,
+      param: null,
+      level: "error",
+      message: "Le nom doit commencer par « R ».",
+    });
+  });
+
+  it("checks the node name of a label", () => {
+    const l = place(emptyDoc(), "label");
+    expect(componentProblems(setParam(l.doc, l.id, "net", "n3"))).toEqual([
+      { comp: l.id, param: "net", level: "error", message: expect.stringMatching(/réservé/) },
     ]);
   });
 });

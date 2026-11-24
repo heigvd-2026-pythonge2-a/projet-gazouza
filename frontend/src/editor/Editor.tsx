@@ -25,6 +25,7 @@ import {
 import { AnimationControls } from "./AnimationControls";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport } from "./fitView";
 import { newFile, openFile, saveFile } from "./fileActions";
@@ -733,6 +734,14 @@ export function SchematicCanvas() {
           <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
         )}
       </Stage>
+      <ErrorBubbles
+        doc={doc}
+        viewport={viewport}
+        onPick={(comp, param) => {
+          select([comp]);
+          focusInspector({ param });
+        }}
+      />
       <AnimationControls />
       <div
         style={{

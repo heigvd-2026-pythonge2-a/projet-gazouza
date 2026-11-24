@@ -11,7 +11,7 @@ import {
   type PlacedComponent,
   type ValueProblem,
 } from "../store";
-import { INSPECTOR_ID, VALUE_FIELD_ATTR } from "./inspectorFocus";
+import { FIELD_ATTR, INSPECTOR_ID, NAME_FIELD, VALUE_FIELD_ATTR } from "./inspectorFocus";
 import { COLORS, UI } from "./theme";
 
 /** Colour of a warning (a value that works, but probably not as meant). */
@@ -43,9 +43,11 @@ function Field(props: {
   wide?: boolean;
   /** The component's main value: the field a double-click on the component goes to. */
   valueField?: boolean;
+  /** Names the field, for the error bubbles of the schematic (`FIELD_ATTR`). */
+  field: string;
   onChange: (value: string) => void;
 }) {
-  const { label, value, unit, options, valueField, wide, onChange } = props;
+  const { label, value, unit, options, valueField, field, wide, onChange } = props;
   const problem: ValueProblem | null =
     typeof props.problem === "string"
       ? { level: "error", message: props.problem }
@@ -87,6 +89,7 @@ function Field(props: {
             id={id}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            {...{ [FIELD_ATTR]: field }}
             style={controlStyle}
           >
             {options.map((o) => (
@@ -110,6 +113,7 @@ function Field(props: {
             }}
             onKeyDown={onKeyDown}
             {...(valueField ? { [VALUE_FIELD_ATTR]: "" } : {})}
+            {...{ [FIELD_ATTR]: field }}
             spellCheck={false}
             aria-invalid={problem?.level === "error" ? true : undefined}
             aria-describedby={problem ? `${id}-problem` : undefined}
@@ -156,6 +160,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
         {def.prefix !== null && (
           <Field
             label="Nom"
+            field={NAME_FIELD}
             wide
             value={c.name ?? ""}
             problem={nameProblem(doc, c, def.prefix)}
@@ -167,6 +172,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           return (
             <Field
               key={p.name}
+              field={p.name}
               label={p.label}
               value={value}
               unit={p.unit}
