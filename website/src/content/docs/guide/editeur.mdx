@@ -44,7 +44,13 @@ Deux composants peuvent quand même se toucher par **une** broche : ils sont alo
 - Lâcher un fil **au milieu d'un autre fil** crée une **jonction** (le point bleu d'un « T ») :
   les trois fils sont alors reliés.
 
-Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
+Quand tu déplaces un composant, ses fils **restent accrochés** et suivent ; s'ils passeraient
+à travers un autre composant, ils sont retracés autour. Avec <kbd>Ctrl</kbd> enfoncé pendant le
+glisser, les fils restent sur place et se détachent du composant. Deux composants reliés broche
+contre broche le restent aussi : un fil apparaît entre eux quand tu les écartes.
+
+Une broche posée **sur un fil** (ou un fil tracé ou glissé sur une broche) y est reliée. Un
+composant posé sur un fil qui passe par ses deux broches est **inséré dans le fil**, en série.
 
 <Aside type="tip">
 	Un fil dont un bout n'est relié à rien est accepté (le schéma s'enregistre), mais Psice t'avertit
@@ -62,6 +68,7 @@ Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
 | Double-clic sur un fil | Sélectionner le fil entier |
 | <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
 | Flèches | Déplacer la sélection d'un pas de grille |
+| <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) : la copie suit la souris, un clic la pose |
 | <kbd>Ctrl+D</kbd> | Dupliquer (la copie suit aussi la souris) |
 | <kbd>Suppr</kbd> | Supprimer |
