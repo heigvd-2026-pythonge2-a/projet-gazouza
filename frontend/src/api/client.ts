@@ -74,7 +74,8 @@ async function request<T>(
   // MODE at build time, so this branch and its import are left out of the app's build.
   if (import.meta.env.MODE === "demo") {
     const { demoAnswer, DEMO_UNAVAILABLE } = await import("./demoBackend");
-    const answer = demoAnswer(init.method ?? "GET", path);
+    const body: unknown = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+    const answer = demoAnswer(init.method ?? "GET", path, body);
     if (answer === undefined) throw new ApiError("unreachable", DEMO_UNAVAILABLE);
     return answer as T;
   }
