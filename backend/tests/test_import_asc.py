@@ -224,6 +224,25 @@ def test_ltspice_sine_is_read_as_sin() -> None:
     assert (params["waveform"], params["amplitude"], params["frequency"]) == ("sin", "1", "1k")
 
 
+@pytest.mark.parametrize(
+    ("value", "value2"),
+    [
+        ("PULSE(0 5 0 1n 1n 5m 10m)", "AC 1"),  # where LTspice writes it
+        ("PULSE(0 5 0 1n 1n 5m 10m)", "AC 1 45"),  # with a phase
+        ("AC 1 PULSE(0 5 0 1n 1n 5m 10m)", ""),  # typed before the waveform
+        ("AC 1 0 PULSE(0 5 0 1n 1n 5m 10m)", ""),  # before, with a phase
+    ],
+)
+def test_ac_spec_does_not_eat_the_waveform(value: str, value2: str) -> None:
+    params = source(value, value2)
+    assert (params["waveform"], params["v2"], params["period"]) == ("pulse", "5", "10m")
+
+
+@pytest.mark.parametrize("value", ["AC 1 DC 5", "DC 5 AC 1 0", "5 AC 1"])
+def test_ac_spec_keeps_the_dc_value(value: str) -> None:
+    assert (source(value)["waveform"], source(value)["dc"]) == ("dc", "5")
+
+
 def test_current_source_uses_i1_i2() -> None:
     params = source("PULSE(0 1m 0 1n 1n 1m 2m)", symbol="current")
     assert (params["i1"], params["i2"]) == ("0", "1m")

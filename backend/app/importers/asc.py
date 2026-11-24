@@ -239,7 +239,7 @@ def _source(text: str, definition: SymbolDef, name: str, result: AscImport) -> d
     """'PULSE(0 5 0 1n 1n 5m 10m) AC 1' or 'DC 5' or '5' -> Psice source parameters."""
     letter = "v" if definition.psice_type == "voltage_source" else "i"
     params: dict[str, str] = {}
-    text = re.sub(r"\bAC\s+\S+(\s+\S+)?", "", text, flags=re.IGNORECASE)  # .ac input: see below
+    text = _strip_ac(text)  # .ac input: see _has_ac
     function = FUNCTION.search(text)
     if function is None:
         number = re.sub(r"^\s*DC\s+", "", text, flags=re.IGNORECASE).split()
@@ -263,6 +263,26 @@ def _source(text: str, definition: SymbolDef, name: str, result: AscImport) -> d
     if len(args) > len(WAVEFORM_ARGS[kind]):
         result.warnings.append(f"{name} : le nombre de cycles de {kind.upper()} est ignoré.")
     return params
+
+
+AC_SPEC = re.compile(r"\bAC\s+\S+(?P<phase>\s+\S+)?", re.IGNORECASE)
+
+
+def _strip_ac(text: str) -> str:
+    """Remove 'AC <mag> [<phase>]'. The phase is optional: the token after the magnitude is
+    only taken if it is a number, so 'AC 1 PULSE(...)' keeps its waveform."""
+
+    def replace(match: re.Match[str]) -> str:
+        phase = match["phase"]
+        if phase is None:
+            return ""
+        try:
+            parse_value(phase)
+        except InvalidValueError:
+            return phase  # not a phase: it belongs to the source, keep it
+        return ""
+
+    return AC_SPEC.sub(replace, text)
 
 
 def _has_ac(attributes: dict[str, str]) -> bool:
