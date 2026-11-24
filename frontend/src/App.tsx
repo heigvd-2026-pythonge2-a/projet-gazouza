@@ -45,8 +45,12 @@ const TOOL_BUTTON: CSSProperties = {
   cursor: "pointer",
 };
 
+/** How long the full screen waits, once the properties panel lost the focus, to come back (#95). */
+const FULL_SCREEN_RETURN_MS = 3000;
+
 // App shell, layout "C" chosen in issue #3: palette | schematic | results above the inspector.
-// The results can also go under the schematic; the layout is remembered between launches.
+// The results can also go under the schematic; the layout is remembered between launches. The
+// results only show once there is something to show (#96), the properties can be closed (#164).
 export default function App() {
   const [backend, setBackend] = useState("connexion…");
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -65,22 +69,54 @@ export default function App() {
   const update = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
 
   const [maximized, setMaximized] = useState<Maximized>(null);
+  /**
+   * The schematic left full screen only to show the properties (#95): it comes back once the
+   * user is done with them (the focus left the panel a while ago, or Escape there), unless they
+   * left full screen themselves meanwhile.
+   */
+  const [returnPending, setReturnPending] = useState(false);
+  const [focusInInspector, setFocusInInspector] = useState(false);
+  /** Counts the requests for the properties: each one gives the user time again. */
+  const [inspectorRequests, setInspectorRequests] = useState(0);
+  /** The user changes the full screen themselves: no automatic return any more. */
+  const setFullScreen = (m: Maximized) => {
+    setReturnPending(false);
+    setMaximized(m);
+  };
   const toggle = (panel: Exclude<Maximized, null>) =>
-    setMaximized((m) => (m === panel ? null : panel));
+    setFullScreen(maximized === panel ? null : panel);
+  const returnToFullScreen = () => setFullScreen("schematic");
+
+  useEffect(() => {
+    if (!returnPending || focusInInspector) return;
+    const timer = window.setTimeout(() => {
+      setReturnPending(false);
+      setMaximized("schematic");
+    }, FULL_SCREEN_RETURN_MS);
+    return () => window.clearTimeout(timer);
+  }, [returnPending, focusInInspector, inspectorRequests]);
+
   // Hidden panels stay mounted (display: none) so they keep their state (zoom, selection, curves).
   // Exception: moving the results between right and bottom remounts them.
   const shown = (visible: boolean) => (visible ? "flex" : "none");
   const normal = maximized === null;
   const showSchematic = maximized !== "results";
-  const showResults = maximized !== "schematic";
+  const resultsShown = maximized === "results" || (normal && layout.resultsVisible);
+  const inspectorShown = normal && layout.inspectorVisible;
+  const sideShown = right ? resultsShown || inspectorShown : inspectorShown;
 
-  // The editor asks for the properties panel (double-click on a component, "Propriétés…"): it is
-  // hidden in full screen, so leave it.
+  // The editor asks for the properties panel (double-click on a component, "Propriétés…"): show
+  // it, leaving full screen for as long as the user edits there.
   useEffect(() => {
-    const onShowInspector = () => setMaximized(null);
+    const onShowInspector = () => {
+      if (maximized === "schematic") setReturnPending(true);
+      setMaximized(null);
+      setInspectorRequests((n) => n + 1);
+      setLayout((l) => (l.inspectorVisible ? l : { ...l, inspectorVisible: true }));
+    };
     window.addEventListener(SHOW_INSPECTOR_EVENT, onShowInspector);
     return () => window.removeEventListener(SHOW_INSPECTOR_EVENT, onShowInspector);
-  }, []);
+  }, [maximized]);
 
   // Escape leaves full screen, unless the editor uses it (placing a component, drawing a wire).
   useEffect(() => {
@@ -97,6 +133,26 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [normal]);
 
+  // The results show at the end of every simulation, even if they were hidden by hand, and hide
+  // again for a new or opened schematic (#96).
+  useEffect(
+    () =>
+      useEditorStore.subscribe((s, prev) => {
+        const ended =
+          (s.simulation !== null && s.simulation !== prev.simulation) ||
+          (s.simulationError !== null && s.simulationError !== prev.simulationError);
+        const fresh =
+          s.doc !== prev.doc &&
+          s.history.past.length === 0 &&
+          s.history.future.length === 0 &&
+          s.simulation === null;
+        if (ended || fresh) {
+          setLayout((l) => (l.resultsVisible === ended ? l : { ...l, resultsVisible: ended }));
+        }
+      }),
+    [],
+  );
+
   useEffect(() => {
     getHealth()
       .then((health) => setBackend(health.status))
@@ -111,11 +167,20 @@ export default function App() {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <b>Résultats</b>
-        <MaximizeButton
-          panel="les résultats"
-          maximized={maximized === "results"}
-          onClick={() => toggle("results")}
-        />
+        <div style={{ display: "flex", gap: 4 }}>
+          <MaximizeButton
+            panel="les résultats"
+            maximized={maximized === "results"}
+            onClick={() => toggle("results")}
+          />
+          <CloseButton
+            label="Masquer les résultats"
+            onClick={() => {
+              setFullScreen(null);
+              update({ resultsVisible: false });
+            }}
+          />
+        </div>
       </div>
       <PanelErrorBoundary panel="les résultats">
         <SimulationReport />
@@ -175,8 +240,37 @@ export default function App() {
         <AnimateButton style={TOOL_BUTTON} />
         <button
           type="button"
+          aria-pressed={layout.resultsVisible}
+          title={
+            layout.resultsVisible
+              ? "Masquer le panneau des résultats"
+              : "Afficher le panneau des résultats"
+          }
+          style={{ ...TOOL_BUTTON, marginLeft: "auto", ...(layout.resultsVisible ? PRESSED : {}) }}
+          onClick={() => {
+            if (maximized === "results") setFullScreen(null);
+            update({ resultsVisible: !layout.resultsVisible });
+          }}
+        >
+          Résultats
+        </button>
+        <button
+          type="button"
+          aria-pressed={layout.inspectorVisible}
+          title={
+            layout.inspectorVisible
+              ? "Masquer le panneau des propriétés"
+              : "Afficher le panneau des propriétés"
+          }
+          style={{ ...TOOL_BUTTON, ...(layout.inspectorVisible ? PRESSED : {}) }}
+          onClick={() => update({ inspectorVisible: !layout.inspectorVisible })}
+        >
+          Propriétés
+        </button>
+        <button
+          type="button"
           title={right ? "Placer les résultats sous le schéma" : "Placer les résultats à droite"}
-          style={{ ...TOOL_BUTTON, marginLeft: "auto" }}
+          style={TOOL_BUTTON}
           onClick={() => update({ resultsPosition: right ? "bottom" : "right" })}
         >
           Résultats : {right ? "à droite" : "en bas"}
@@ -187,7 +281,7 @@ export default function App() {
           style={TOOL_BUTTON}
           onClick={() => {
             setLayout(DEFAULT_LAYOUT);
-            setMaximized(null);
+            setFullScreen(null);
           }}
         >
           Réinitialiser la disposition
@@ -234,7 +328,7 @@ export default function App() {
               />
             </div>
           </div>
-          {!right && normal && (
+          {!right && normal && resultsShown && (
             <Splitter
               orientation="horizontal"
               label="Redimensionner les résultats"
@@ -250,11 +344,11 @@ export default function App() {
           )}
           {!right &&
             resultsPanel({
-              display: showResults ? "block" : "none",
+              display: resultsShown ? "block" : "none",
               ...(normal ? { height: results, flex: "none" } : { flex: 1, minHeight: 0 }),
             })}
         </div>
-        {normal && (
+        {normal && sideShown && (
           <Splitter
             orientation="vertical"
             label="Redimensionner le panneau de droite"
@@ -268,16 +362,16 @@ export default function App() {
         <div
           ref={sideRef}
           style={{
-            display: shown(right ? showResults : normal),
+            display: shown(sideShown),
             flexDirection: "column",
             ...(maximized === "results"
               ? { flex: 1, minWidth: 0 }
               : { width: sideWidth, flex: "none" }),
           }}
         >
-          {/* Hidden with its column when the schematic is in full screen, but still mounted. */}
-          {right && resultsPanel({ flex: 1, minHeight: 0 })}
-          {right && normal && (
+          {right &&
+            resultsPanel({ display: resultsShown ? "block" : "none", flex: 1, minHeight: 0 })}
+          {right && resultsShown && inspectorShown && (
             <Splitter
               orientation="horizontal"
               label="Redimensionner les propriétés"
@@ -292,14 +386,34 @@ export default function App() {
             />
           )}
           <div
+            // While full screen waits (#95): back to it once the focus has left for a while, or
+            // at once with Escape (after the field has used it to take back the typing).
+            onFocus={() => setFocusInInspector(true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                setFocusInInspector(false);
+              }
+            }}
+            onKeyDownCapture={(e) => {
+              if (e.key === "Escape" && returnPending) window.setTimeout(returnToFullScreen);
+            }}
             style={{
-              display: shown(normal),
-              ...(right ? { height: inspector, flex: "none" } : { flex: 1, minHeight: 0 }),
+              display: shown(inspectorShown),
+              position: "relative",
+              ...(right && resultsShown
+                ? { height: inspector, flex: "none" }
+                : { flex: 1, minHeight: 0 }),
             }}
           >
             <PanelErrorBoundary panel="les propriétés" onRescue={saveRescueCopy}>
               <Inspector />
             </PanelErrorBoundary>
+            <div style={{ position: "absolute", top: 6, right: 8 }}>
+              <CloseButton
+                label="Masquer les propriétés"
+                onClick={() => update({ inspectorVisible: false })}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -308,5 +422,36 @@ export default function App() {
         <StatusBar />
       </PanelErrorBoundary>
     </main>
+  );
+}
+
+/** Look of a toggle button of the toolbar while it is on. */
+const PRESSED: CSSProperties = { background: "#eff6ff", color: "#2563eb", borderColor: "#bfdbfe" };
+
+/** Small × button in a panel's corner, to hide the panel. */
+function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      style={{
+        display: "grid",
+        placeItems: "center",
+        width: 24,
+        height: 24,
+        padding: 0,
+        border: BORDER,
+        borderRadius: 5,
+        background: "#ffffff",
+        color: "#4b5563",
+        cursor: "pointer",
+        fontSize: 16,
+        lineHeight: 1,
+      }}
+    >
+      ×
+    </button>
   );
 }

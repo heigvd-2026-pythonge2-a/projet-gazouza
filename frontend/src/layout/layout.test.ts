@@ -19,6 +19,8 @@ describe("parseLayout", () => {
       sideWidth: 500,
       inspectorFraction: 0.3,
       resultsFraction: 0.6,
+      resultsVisible: true,
+      inspectorVisible: false,
     };
     expect(parseLayout(stored)).toEqual(stored);
   });
@@ -34,6 +36,8 @@ describe("parseLayout", () => {
       sideWidth: "500",
       inspectorFraction: 1.5,
       resultsFraction: 0,
+      resultsVisible: "yes",
+      inspectorVisible: 1,
     });
     expect(layout).toEqual(DEFAULT_LAYOUT);
   });
