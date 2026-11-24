@@ -27,6 +27,8 @@ describe("placing components", () => {
       { x: PASTE_OFFSET.x, y: PASTE_OFFSET.y },
       { x: 2 * PASTE_OFFSET.x, y: 2 * PASTE_OFFSET.y },
     ]);
+    // Shifted before being connected to anything: no wire to the one it was placed on.
+    expect(store().doc.wires).toEqual([]);
   });
 
   it("does not move a component onto another one", () => {
@@ -104,8 +106,8 @@ describe("undo / redo", () => {
 
   it("merges a held arrow key into one step", () => {
     const c = dropResistor({ x: 0, y: 0 });
-    store().moveSelection({ x: 1, y: 0 }, true);
-    store().moveSelection({ x: 1, y: 0 }, true);
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
     expect(store().doc.components[0]!.position).toEqual({ x: 2, y: 0 });
     store().undo();
     expect(store().doc.components[0]!.position).toEqual(c.position);
@@ -214,6 +216,7 @@ describe("selection, clipboard and deletion", () => {
     const [a, b] = store().doc.components;
     expect(b!.position).not.toEqual(a!.position);
     expect(overlappingPairs(store().doc, new Set([b!.id])).size).toBe(0);
+    expect(store().doc.wires).toEqual([]);
   });
 
   it("drops nothing when the paste is cancelled", () => {

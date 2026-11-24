@@ -143,7 +143,7 @@ function useKeyboardShortcuts() {
       if (arrow) {
         if (s.tool.kind !== "select" || s.selection.length === 0) return;
         // Holding the key down repeats it: one undo step for the whole move.
-        s.moveSelection(arrow, true);
+        s.moveSelection(arrow, { merge: true });
         e.preventDefault();
         return;
       }
@@ -198,8 +198,15 @@ export function SchematicCanvas() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
-  /** Items being dragged and how far (grid units): shown moved before the store changes. */
-  const [drag, setDrag] = useState<{ ids: ReadonlySet<string>; delta: GridPoint } | null>(null);
+  /**
+   * Items being dragged and how far (grid units): shown moved before the store changes. With
+   * Ctrl (`detach`), the wires stay where they are.
+   */
+  const [drag, setDrag] = useState<{
+    ids: ReadonlySet<string>;
+    delta: GridPoint;
+    detach: boolean;
+  } | null>(null);
   /** Where the selected wire part is being dragged (grid point), before the store changes. */
   const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
@@ -243,7 +250,7 @@ export function SchematicCanvas() {
 
   // While dragging, show the dragged items (and the wires they pull) at their new place.
   const doc = drag
-    ? moveItems(storeDoc, drag.ids, drag.delta)
+    ? moveItems(storeDoc, drag.ids, drag.delta, { detach: drag.detach })
     : partTarget && wirePart
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
@@ -649,18 +656,18 @@ export function SchematicCanvas() {
               onContextPress={() => {
                 rightPressed.current = c.id;
               }}
-              onDrag={(position) => {
+              onDrag={(position, detach) => {
                 const delta = deltaFrom(storeComponent(c), position);
                 setDrag((d) =>
-                  d && d.delta.x === delta.x && d.delta.y === delta.y
+                  d && d.delta.x === delta.x && d.delta.y === delta.y && d.detach === detach
                     ? d
-                    : { ids: d?.ids ?? dragIds(c), delta },
+                    : { ids: d?.ids ?? dragIds(c), delta, detach },
                 );
               }}
-              onMove={(position) => {
+              onMove={(position, detach) => {
                 setDrag(null);
                 if (!selection.includes(c.id)) select([c.id]);
-                moveSelection(deltaFrom(storeComponent(c), position));
+                moveSelection(deltaFrom(storeComponent(c), position), { detach });
               }}
               onDoubleClick={
                 tool.kind === "select"

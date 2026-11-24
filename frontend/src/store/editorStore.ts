@@ -8,6 +8,7 @@ import {
   addComponent,
   addWire,
   anchorAt,
+  connectPinsOnWires,
   copyItems,
   deleteItems,
   deleteSegment,
@@ -122,9 +123,10 @@ interface EditorState {
   /**
    * Moves the selected items by `delta` (grid units), or to the nearest place where no component
    * lies on another one (see `freeMove`). `merge` makes consecutive moves one undo step (arrow
-   * keys held down).
+   * keys held down); `detach` leaves the wires where they are (Ctrl + drag). Except while merging,
+   * a pin that lands on a wire is connected to it (see `connectPinsOnWires`).
    */
-  moveSelection: (delta: GridPoint, merge?: boolean) => void;
+  moveSelection: (delta: GridPoint, options?: { merge?: boolean; detach?: boolean }) => void;
   renameComponent: (id: string, name: string) => void;
   setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
@@ -272,14 +274,16 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (s.tool.kind !== "place") return {};
       const { type, rotation, mirror } = s.tool;
       const added = addComponent(s.doc, { type, position, rotation, mirror });
-      return change(s, nudgeFree(added.doc, new Set([added.id]), PASTE_OFFSET));
+      const ids = new Set([added.id]);
+      return change(s, connectPinsOnWires(nudgeFree(added.doc, ids, PASTE_OFFSET), { comps: ids }));
     }),
 
   dropComponent: (type, position) =>
     set((s) => {
       const added = addComponent(s.doc, { type, position, rotation: 0, mirror: false });
+      const ids = new Set([added.id]);
       return {
-        ...change(s, nudgeFree(added.doc, new Set([added.id]), PASTE_OFFSET)),
+        ...change(s, connectPinsOnWires(nudgeFree(added.doc, ids, PASTE_OFFSET), { comps: ids })),
         selection: [added.id],
         wirePart: null,
         tool: { kind: "select" },
@@ -294,9 +298,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return change(s, moveComponent(s.doc, id, position));
     }),
 
-  moveSelection: (delta, merge = false) =>
+  moveSelection: (delta, { merge = false, detach = false } = {}) =>
     set((s) => {
-      const doc = freeMove(s.doc, new Set(s.selection), delta);
+      const ids = new Set(s.selection);
+      let doc = freeMove(s.doc, ids, delta, { detach });
+      // Arrow keys step through the wires: connecting each one passed over would be a trap.
+      if (doc !== s.doc && !merge) {
+        doc = connectPinsOnWires(connectPinsOnWires(doc, { comps: ids }), { wires: ids });
+      }
       return change(s, doc, merge ? `move:${s.selection.join(",")}` : null);
     }),
 
@@ -329,8 +338,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (!doubleClick && !anchorAt(s.doc, position)) return { draft: { ...draft, points } };
 
       const added = addWire(s.doc, routeThrough(s.doc, points));
+      const doc = added && connectPinsOnWires(added.doc, { wires: new Set([added.id]) });
       return {
-        ...(added ? change(s, added.doc) : {}),
+        ...(doc ? change(s, doc) : {}),
         draft: null,
         ...(draft.returnToSelect ? { tool: { kind: "select" } as const } : {}),
       };
@@ -410,7 +420,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   moveWirePart: (target, landing) =>
     set((s) => {
       if (!s.wirePart) return {};
-      return { ...change(s, moveWirePart(s.doc, s.wirePart, target)), wirePart: landing };
+      const moved = moveWirePart(s.doc, s.wirePart, target);
+      const doc =
+        moved === s.doc ? moved : connectPinsOnWires(moved, { wires: new Set([s.wirePart.wire]) });
+      // A cut changes the parts of the wire: the landing part may not exist any more.
+      return {
+        ...change(s, doc),
+        wirePart: doc.wires.length === moved.wires.length ? landing : null,
+      };
     }),
 
   toggleSelected: (id) =>
@@ -469,8 +486,16 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const anchor = clipAnchor(s.tool.clip);
       const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
       const pasted = pasteClip(s.doc, s.tool.clip, offset);
-      // Every overlap is new: the pasted items were not there before.
-      const doc = freeMove(pasted.doc, new Set(pasted.ids), { x: 0, y: 0 }, new Set());
+      // Every overlap is new: the pasted items were not there before. Nothing outside is wired
+      // to them yet, and pins they touch where they were dropped must not get wired either.
+      const ids = new Set(pasted.ids);
+      const placed = freeMove(
+        pasted.doc,
+        ids,
+        { x: 0, y: 0 },
+        { allowed: new Set(), detach: true },
+      );
+      const doc = connectPinsOnWires(connectPinsOnWires(placed, { comps: ids }), { wires: ids });
       return {
         ...change(s, doc),
         selection: pasted.ids,

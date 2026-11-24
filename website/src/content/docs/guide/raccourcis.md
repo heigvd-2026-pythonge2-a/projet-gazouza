@@ -28,7 +28,8 @@ afficher cette liste à tout moment.
 
 | Geste | Action |
 |---|---|
-| Glisser | Déplacer la sélection |
+| Glisser | Déplacer la sélection (les fils suivent) |
+| <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | Flèches | Déplacer la sélection d'un pas |
 | <kbd>R</kbd> | Tourner |
 | <kbd>M</kbd> | Miroir |
