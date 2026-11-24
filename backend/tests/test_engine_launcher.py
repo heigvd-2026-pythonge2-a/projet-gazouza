@@ -1056,6 +1056,39 @@ def test_launch_displays_in_window_error_and_handles_load_html_failure(
     assert "Failed to display startup error in window." in caplog.text
 
 
+def test_launch_displays_in_window_error_for_unexpected_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+    fake_window = _make_fake_window()
+    fake_window.load_url.side_effect = TypeError("unexpected webview error")
+
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        fake_window.events.loaded.fire()
+        assert func is not None
+        func()
+        fake_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
+    exit_code = launcher.main(["--frontend-dist", str(dist_dir)])
+
+    assert exit_code == 1
+    fake_window.load_html.assert_called_once()
+    rendered = str(fake_window.load_html.call_args.args[0])
+    assert "Impossible de démarrer Psice" in rendered
+    assert "unexpected webview error" in rendered
+
+
 def test_launch_real_server_waits_for_loaded_before_load_url_and_closed_during_wait(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

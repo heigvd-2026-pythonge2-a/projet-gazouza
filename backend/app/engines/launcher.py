@@ -1034,7 +1034,7 @@ def launch(
     splash_ready_or_closed = threading.Event()
     worker_started = threading.Event()
     worker_done = threading.Event()
-    startup_error: RuntimeError | TimeoutError | OSError | None = None
+    startup_error: Exception | None = None
 
     def _on_loaded() -> None:
         splash_ready_or_closed.set()
@@ -1053,10 +1053,14 @@ def launch(
         try:
             server.start()
             _wait_for_health_endpoint(server.url, stop_event=closed_event)
-            splash_ready_or_closed.wait(SPLASH_READY_TIMEOUT_S)
+            if not splash_ready_or_closed.wait(SPLASH_READY_TIMEOUT_S):
+                logger.warning(
+                    "Splash screen did not emit 'loaded' within %.1fs; proceeding anyway.",
+                    SPLASH_READY_TIMEOUT_S,
+                )
             if not closed_event.is_set():
                 window.load_url(server.url)
-        except (RuntimeError, TimeoutError, OSError) as exc:
+        except Exception as exc:
             if closed_event.is_set():
                 return
             startup_error = exc
@@ -1342,7 +1346,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         _report_error(exc, _format_launch_error(exc, port=args.port))
         return 2
-    except (RuntimeError, TimeoutError, OSError) as exc:
+    except Exception as exc:
         _report_error(exc, _format_launch_error(exc, port=args.port))
         return 1
     return 0

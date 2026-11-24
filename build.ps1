@@ -191,7 +191,7 @@ try {
         "--hidden-import", "clr"
     )
 
-    # Bundle the multi-size Windows icon when assets/brand/psice.ico is present (added in PR #159).
+    # Bundle the multi-size Windows application icon.
     if (Test-Path -LiteralPath $IconFile -PathType Leaf) {
         $pyinstallerArgs += @(
             "--icon", $IconFile,
@@ -199,7 +199,7 @@ try {
         )
     }
     else {
-        Write-Host "==> Application icon not found ($IconFile); omitting --icon." -ForegroundColor Yellow
+        Write-Host "==> Warning: application icon missing ($IconFile); building without custom icon." -ForegroundColor Yellow
     }
 
     $pyinstallerArgs += $EntryScript
