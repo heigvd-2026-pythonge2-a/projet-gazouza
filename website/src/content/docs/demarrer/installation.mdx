@@ -1,0 +1,50 @@
+---
+title: Installation
+description: Obtenir l'application Windows de Psice et la lancer, sans rien installer.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Psice est livré comme une **application Windows portable** : un dossier zippé qui contient tout ce
+qu'il faut, y compris le moteur de simulation ngspice. Il n'y a **rien à installer** et la
+simulation fonctionne **hors ligne**.
+
+## Configuration requise
+
+- Windows 10 ou Windows 11 ;
+- aucune connexion Internet, aucun droit d'administrateur.
+
+## Obtenir l'application
+
+<Aside type="caution" title="Pas encore de version publiée">
+	La première version téléchargeable sera publiée sur la page
+	[Releases du dépôt GitHub](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases)
+	lors du jalon S11-12. En attendant, l'application se construit depuis les sources avec
+	`build.ps1` (voir [Environnement de développement](/projet-gazouza/developpeurs/environnement/#construire-lapplication-windows)).
+</Aside>
+
+<Steps>
+
+1. Télécharge l'archive `.zip` de Psice depuis la page Releases.
+
+2. Fais un clic droit sur le fichier, puis **Extraire tout…**, et choisis un dossier (par exemple
+   `Documents\Psice`).
+
+3. Ouvre le dossier extrait et double-clique sur **`Psice.exe`**.
+
+</Steps>
+
+## Avertissement Windows SmartScreen
+
+L'exécutable n'est pas signé numériquement. Au premier lancement, Windows peut afficher
+« Windows a protégé votre ordinateur ».
+
+1. Clique sur **Informations complémentaires**.
+2. Clique sur **Exécuter quand même**.
+
+Windows s'en souvient ensuite pour ce fichier.
+
+## Désinstaller
+
+Il suffit de supprimer le dossier de Psice. Tes schémas, enregistrés
+où tu l'as choisi (fichiers `.psice.json`), ne sont pas touchés.

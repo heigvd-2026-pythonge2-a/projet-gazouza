@@ -7,11 +7,12 @@ import subprocess
 import sys
 import tempfile
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.engines.locator import NgspiceNotFoundError, locate_ngspice
-from app.engines.parser import MAX_RESULT_POINTS, parse_ngspice_output, resolve_dc_source_name
+from app.engines.parser import MAX_RESULT_POINTS, parse_ngspice_output, resolve_source_name
 from app.models.netlist import (
     ComponentTarget,
     Diagnostic,
@@ -59,7 +60,16 @@ _ALLOWED_MODEL_TYPES: frozenset[str] = frozenset(
 _ALLOWED_ELEMENT_PREFIXES: frozenset[str] = frozenset(
     {"r", "c", "l", "v", "i", "d", "q", "m", "j", "e", "f", "g", "h", "s", "w", "x"}
 )
+_ANALYSIS_DIRECTIVES: frozenset[str] = frozenset({".op", ".tran", ".ac", ".dc"})
+_ANALYSIS_KIND_TO_DIRECTIVE: dict[str, str] = {
+    "op": ".op",
+    "tran": ".tran",
+    "ac": ".ac",
+    "dc": ".dc",
+}
 _MODEL_TYPE_RE = re.compile(r"^[a-z0-9_]+")
+_AC_EXCITATION_TOKEN_RE = re.compile(r"\bac\b", re.IGNORECASE)
+_NGSPICE_DEFAULT_PARAM_WARNING = "warning, ngspice assumes default parameter(s)"
 
 
 class UnsafeNetlistError(ValueError):
@@ -310,8 +320,283 @@ def _allocate_unique_name(base: str, used_lower: set[str]) -> str:
     return candidate
 
 
+@dataclass(slots=True)
+class _SpiceBlock:
+    """Either raw trivia lines or a logical SPICE statement with its unfolded tokens."""
+
+    lines: list[str]
+    tokens: list[str] | None = None
+
+
+def _is_finite_number(value: object) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int | float) and math.isfinite(value)
+
+
+def _is_positive_finite(value: object) -> bool:
+    return _is_finite_number(value) and value > 0
+
+
+def _is_positive_int(value: object) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value >= 1
+
+
+def _format_spice_number(value: float) -> str:
+    """Format a finite float cleanly for SPICE directives without '-0'."""
+    normalized = 0.0 if value == 0.0 else float(value)
+    return f"{normalized:.12g}"
+
+
+def _unfold_block_tokens(lines: list[str]) -> list[str]:
+    """Unfold physical head and '+' continuation lines into logical SPICE tokens."""
+    parts: list[str] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip().lstrip("\ufeff").strip()
+        if not stripped or stripped.startswith("*"):
+            continue
+        if idx > 0 and stripped.startswith("+"):
+            cont = stripped[1:].strip().lstrip("\ufeff").strip()
+            if cont:
+                parts.append(cont)
+        else:
+            parts.append(stripped)
+    return " ".join(parts).split()
+
+
+def _parse_body_blocks(raw_lines: list[str]) -> list[_SpiceBlock]:
+    """Group body lines (raw_lines[1:]) into trivia and logical statements up to .end."""
+    blocks: list[_SpiceBlock] = []
+    current_lines: list[str] | None = None
+    pending_trivia: list[str] = []
+
+    def _flush_current() -> None:
+        nonlocal current_lines
+        if current_lines is not None:
+            blocks.append(
+                _SpiceBlock(lines=current_lines, tokens=_unfold_block_tokens(current_lines))
+            )
+            current_lines = None
+
+    for line in raw_lines[1:]:
+        stripped = line.strip().lstrip("\ufeff").strip()
+        if not stripped or stripped.startswith("*"):
+            pending_trivia.append(line)
+            continue
+
+        if stripped.startswith("+"):
+            if current_lines is not None:
+                current_lines.extend(pending_trivia)
+                pending_trivia.clear()
+                current_lines.append(line)
+            else:
+                blocks.append(_SpiceBlock(lines=[*pending_trivia, line]))
+                pending_trivia.clear()
+            continue
+
+        _flush_current()
+        if pending_trivia:
+            blocks.append(_SpiceBlock(lines=list(pending_trivia)))
+            pending_trivia.clear()
+
+        first_base = stripped.split(None, 1)[0].lower().split(";", 1)[0]
+        if first_base == ".end":
+            return blocks
+
+        current_lines = [line]
+
+    _flush_current()
+    if pending_trivia:
+        blocks.append(_SpiceBlock(lines=pending_trivia))
+    return blocks
+
+
+def _iter_top_level_statements(blocks: list[_SpiceBlock]) -> Iterator[list[str]]:
+    """Yield unfolded token lists for top-level SPICE statements outside .subckt blocks."""
+    subckt_depth = 0
+    for block in blocks:
+        if not block.tokens:
+            continue
+        base = block.tokens[0].lower().split(";", 1)[0]
+        if base == ".subckt":
+            subckt_depth += 1
+            continue
+        if base == ".ends":
+            subckt_depth = max(0, subckt_depth - 1)
+            continue
+        if subckt_depth == 0:
+            yield block.tokens
+
+
+def _collect_top_level_directives(blocks: list[_SpiceBlock]) -> list[tuple[str, list[str]]]:
+    """Return top-level analysis directives outside .subckt blocks."""
+    directives: list[tuple[str, list[str]]] = []
+    for tokens in _iter_top_level_statements(blocks):
+        base = tokens[0].lower().split(";", 1)[0]
+        if base in _ANALYSIS_DIRECTIVES:
+            directives.append((base, tokens))
+    return directives
+
+
+def _validate_analysis_parameters(analysis: Analysis) -> str | None:
+    """Validate numeric bounds of an Analysis model before preparing or invoking ngspice."""
+    if isinstance(analysis, TranAnalysis):
+        if not _is_positive_finite(analysis.stop_time):
+            return "La durée de l'analyse transitoire doit être finie et strictement positive."
+        if analysis.max_step is not None and not _is_positive_finite(analysis.max_step):
+            return "Le pas maximal de l'analyse transitoire doit être fini et strictement positif."
+        return None
+
+    if isinstance(analysis, DcAnalysis):
+        if not (
+            _is_finite_number(analysis.start)
+            and _is_finite_number(analysis.stop)
+            and _is_positive_finite(analysis.step)
+        ):
+            return (
+                "Les bornes et le pas de l'analyse DC doivent être finis, "
+                "avec un pas strictement positif."
+            )
+        return None
+
+    if isinstance(analysis, AcAnalysis):
+        if not (
+            _is_positive_finite(analysis.start_frequency)
+            and _is_positive_finite(analysis.stop_frequency)
+        ):
+            return (
+                "Les fréquences de début et de fin de l'analyse AC doivent être "
+                "finies et strictement positives."
+            )
+        if analysis.start_frequency > analysis.stop_frequency:
+            return "La fréquence de début de l'analyse AC ne peut pas dépasser la fréquence de fin."
+        if not _is_positive_int(analysis.points_per_decade):
+            return (
+                "Le nombre de points par décade de l'analyse AC doit être "
+                "un entier strictement positif."
+            )
+        return None
+
+    return None
+
+
+def _validate_top_level_directives(
+    blocks: list[_SpiceBlock],
+    analysis: Analysis,
+    netlist_result: NetlistResult,
+) -> str | None:
+    """Validate top-level analysis directives against ``analysis`` before running ngspice."""
+    directives = _collect_top_level_directives(blocks)
+    if not directives:
+        return None
+    if len(directives) > 1:
+        return "La netlist contient plusieurs directives d'analyse."
+
+    dir_name, dir_tokens = directives[0]
+    expected_dir = _ANALYSIS_KIND_TO_DIRECTIVE[analysis.kind]
+    if dir_name != expected_dir:
+        return (
+            f"La directive SPICE « {dir_name} » ne correspond pas au type d'analyse "
+            f"« {analysis.kind} »."
+        )
+
+    if isinstance(analysis, DcAnalysis):
+        if len(dir_tokens) < 2:
+            return "La directive SPICE « .dc » est incomplète."
+        dc_source_name = resolve_source_name(analysis.source_id, netlist_result)
+        if dc_source_name is not None and dir_tokens[1].lower() != dc_source_name.lower():
+            return (
+                f"La directive « .dc » balaie « {dir_tokens[1]} » au lieu de « {dc_source_name} »."
+            )
+    return None
+
+
+def _format_analysis_directive(
+    analysis: Analysis,
+    netlist_result: NetlistResult,
+) -> str | None:
+    """Build a SPICE analysis directive matching ``analysis`` when omitted from the netlist."""
+    if isinstance(analysis, OpAnalysis):
+        return ".op"
+    if isinstance(analysis, TranAnalysis):
+        tstop = _format_spice_number(analysis.stop_time)
+        if analysis.max_step is None:
+            tstep = _format_spice_number(analysis.stop_time / 1000.0)
+            return f".tran {tstep} {tstop}"
+        step = _format_spice_number(analysis.max_step)
+        return f".tran {step} {tstop} 0 {step}"
+    if isinstance(analysis, AcAnalysis):
+        start = _format_spice_number(analysis.start_frequency)
+        stop = _format_spice_number(analysis.stop_frequency)
+        return f".ac dec {analysis.points_per_decade} {start} {stop}"
+    source_name = resolve_source_name(analysis.source_id, netlist_result)
+    if source_name is None:
+        return None
+    step_val = -analysis.step if analysis.start > analysis.stop else analysis.step
+    start = _format_spice_number(analysis.start)
+    stop = _format_spice_number(analysis.stop)
+    step = _format_spice_number(step_val)
+    return f".dc {source_name} {start} {stop} {step}"
+
+
+def _normalize_dc_step_line(tokens: list[str]) -> str | None:
+    """Negate a positive .dc step token for descending sweeps (start > stop)."""
+    if len(tokens) < 5:
+        return None
+    step_val, sep, comment_tail = tokens[4].partition(";")
+    if not step_val or step_val.startswith("-"):
+        return None
+    unsigned = step_val.lstrip("+")
+    if not unsigned or not any(ch in "123456789" for ch in unsigned):
+        return None
+    negated_step = f"-{unsigned}{sep}{comment_tail}"
+    return " ".join([*tokens[:4], negated_step, *tokens[5:]])
+
+
+def _append_ac_excitation_to_block(
+    lines: list[str],
+    tokens: list[str],
+) -> tuple[list[str], list[str]]:
+    """Append 'AC 1' to a source statement when its specification lacks an AC token."""
+    if len(tokens) < 3:
+        return lines, tokens
+    spec_before_comment = " ".join(tokens[3:]).split(";", 1)[0]
+    if _AC_EXCITATION_TOKEN_RE.search(spec_before_comment):
+        return lines, tokens
+
+    updated_lines = list(lines)
+    for idx in range(len(updated_lines) - 1, -1, -1):
+        stripped = updated_lines[idx].strip().lstrip("\ufeff").strip()
+        if not stripped or stripped.startswith("*"):
+            continue
+        if idx > 0 and stripped.startswith("+") and not stripped[1:].strip():
+            continue
+        raw = updated_lines[idx]
+        if ";" in raw:
+            head, sep, tail = raw.partition(";")
+            updated_lines[idx] = f"{head.rstrip()} AC 1 {sep}{tail}"
+        else:
+            updated_lines[idx] = f"{raw.rstrip()} AC 1"
+        break
+    return updated_lines, _unfold_block_tokens(updated_lines)
+
+
+def _rewrite_ac_sense_block(
+    lines: list[str],
+    tokens: list[str],
+    sense_node: str,
+) -> list[str]:
+    """Rewrite a non-V/L element statement to connect its first terminal to ``sense_node``."""
+    head_tokens = lines[0].strip().lstrip("\ufeff").strip().split()
+    if len(head_tokens) >= 3:
+        rewritten_head = f"{head_tokens[0]} {sense_node} {' '.join(head_tokens[2:])}"
+        return [rewritten_head, *lines[1:]]
+
+    comments = [line for line in lines[1:] if line.strip().lstrip("\ufeff").strip().startswith("*")]
+    rewritten = f"{tokens[0]} {sense_node} {' '.join(tokens[2:])}"
+    return [*comments, rewritten]
+
+
 def _collect_existing_identifiers(
-    raw_lines: list[str],
+    blocks: list[_SpiceBlock],
     netlist_result: NetlistResult,
 ) -> tuple[set[str], set[str]]:
     """Collect existing lowercased node and component identifiers to avoid collisions."""
@@ -319,100 +604,111 @@ def _collect_existing_identifiers(
     used_components_lower = {
         name.strip().lower() for name in netlist_result.components if name.strip()
     }
-    in_subckt = False
-    for raw_line in raw_lines[1:]:
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith(("*", "+")):
+    for tokens in _iter_top_level_statements(blocks):
+        if tokens[0].startswith("."):
             continue
-        tokens = stripped.split()
-        first_lower = tokens[0].lower()
-        if first_lower == ".end":
-            break
-        if first_lower == ".subckt":
-            in_subckt = True
-            continue
-        if first_lower == ".ends":
-            in_subckt = False
-            continue
-        if first_lower.startswith(".") or in_subckt:
-            continue
-        used_components_lower.add(first_lower)
+        used_components_lower.add(tokens[0].lower())
         for tok in tokens[1:]:
             used_nodes_lower.add(tok.lower())
     return used_nodes_lower, used_components_lower
 
 
+def _validate_netlist_and_components_safety(netlist_result: NetlistResult) -> None:
+    """Validate both netlist lines and component keys against SPICE injection rules."""
+    validate_netlist_safety(netlist_result.netlist)
+    for spice_name in netlist_result.components:
+        _validate_save_component_name(spice_name)
+
+
 def _prepare_netlist_for_execution(
     netlist_result: NetlistResult,
     analysis: Analysis | None = None,
+    *,
+    _raw_lines: list[str] | None = None,
+    _blocks: list[_SpiceBlock] | None = None,
 ) -> tuple[str, dict[str, str], dict[str, str]]:
     """Prepare a netlist and return (prepared_text, current_aliases, node_aliases)."""
     if not netlist_result.netlist.strip():
         raise ValueError("Cannot prepare an empty netlist.")
 
-    validate_netlist_safety(netlist_result.netlist)
+    _validate_netlist_and_components_safety(netlist_result)
 
-    normalized = netlist_result.netlist.replace("\r\n", "\n").replace("\r", "\n")
-    raw_lines = normalized.splitlines()
+    if _raw_lines is None or _blocks is None:
+        normalized = netlist_result.netlist.replace("\r\n", "\n").replace("\r", "\n")
+        raw_lines = normalized.splitlines()
+        blocks = _parse_body_blocks(raw_lines)
+    else:
+        raw_lines = _raw_lines
+        blocks = _blocks
 
     is_ac = isinstance(analysis, AcAnalysis)
+    is_descending_dc = isinstance(analysis, DcAnalysis) and analysis.start > analysis.stop
+    ac_source_lower: str | None = None
     used_nodes_lower: set[str] = set()
     used_components_lower: set[str] = set()
     if is_ac:
         used_nodes_lower, used_components_lower = _collect_existing_identifiers(
-            raw_lines, netlist_result
+            blocks, netlist_result
         )
+        ac_source_name = resolve_source_name(analysis.input_source_id, netlist_result)
+        if ac_source_name is not None:
+            ac_source_lower = ac_source_name.strip().lower()
 
     # Preserve line 0 intact because SPICE treats the first line as the circuit title.
     body_lines: list[str] = [raw_lines[0]]
     existing_save_tokens: set[str] = set()
-    in_existing_save = False
-    in_subckt = False
+    subckt_depth = 0
+    has_analysis_directive = False
     current_aliases: dict[str, str] = {}
     node_aliases: dict[str, str] = {}
     instrumented_lower: set[str] = set()
 
-    for line in raw_lines[1:]:
-        stripped = line.strip()
-        if not stripped:
-            in_existing_save = False
-            body_lines.append(line)
+    for block in blocks:
+        if not block.tokens:
+            body_lines.extend(block.lines)
             continue
 
-        if stripped.startswith("*"):
-            in_existing_save = False
-            body_lines.append(line)
+        block_lines = block.lines
+        tokens = block.tokens
+        base_token = tokens[0].lower().split(";", 1)[0]
+
+        if base_token == ".subckt":
+            subckt_depth += 1
+            body_lines.extend(block_lines)
             continue
 
-        if in_existing_save and stripped.startswith("+"):
-            existing_save_tokens.update(tok.lower() for tok in stripped[1:].split())
-            body_lines.append(line)
+        if base_token == ".ends":
+            subckt_depth = max(0, subckt_depth - 1)
+            body_lines.extend(block_lines)
             continue
 
-        in_existing_save = False
-        tokens = stripped.split()
-        first_token = tokens[0].lower()
-
-        if first_token == ".end":
-            break
-
-        if first_token == ".subckt":
-            in_subckt = True
-            body_lines.append(line)
+        if subckt_depth > 0:
+            body_lines.extend(block_lines)
             continue
 
-        if first_token == ".ends":
-            in_subckt = False
-            body_lines.append(line)
-            continue
-
-        if first_token == ".save":
-            in_existing_save = True
+        if base_token == ".save":
             existing_save_tokens.update(tok.lower() for tok in tokens[1:])
-            body_lines.append(line)
+            body_lines.extend(block_lines)
             continue
 
-        if is_ac and not in_subckt and not first_token.startswith((".", "+")) and len(tokens) >= 3:
+        if base_token in _ANALYSIS_DIRECTIVES:
+            has_analysis_directive = True
+            if is_descending_dc and base_token == ".dc":
+                rewritten_dc = _normalize_dc_step_line(tokens)
+                if rewritten_dc is not None:
+                    body_lines.append(rewritten_dc)
+                    continue
+            body_lines.extend(block_lines)
+            continue
+
+        if base_token.startswith("."):
+            body_lines.extend(block_lines)
+            continue
+
+        if ac_source_lower is not None and base_token == ac_source_lower:
+            block_lines, tokens = _append_ac_excitation_to_block(block_lines, tokens)
+
+        if is_ac and len(tokens) >= 3:
             resolved = _find_matching_component(tokens[0], netlist_result.components)
             if resolved is not None:
                 spice_name, _ = resolved
@@ -429,15 +725,25 @@ def _prepare_netlist_for_execution(
                         f"V__psice_sense_{safe_suffix}", used_components_lower
                     )
                     current_aliases[sense_source.lower()] = spice_name
-                    node_aliases[sense_node.lower()] = tokens[1]
+                    if tokens[1] != "0":
+                        node_aliases[sense_node.lower()] = tokens[1]
                     body_lines.append(f"{sense_source} {tokens[1]} {sense_node} DC 0")
-                    body_lines.append(f"{tokens[0]} {sense_node} {' '.join(tokens[2:])}")
+                    body_lines.extend(_rewrite_ac_sense_block(block_lines, tokens, sense_node))
                     continue
 
-        body_lines.append(line)
+        body_lines.extend(block_lines)
 
     while len(body_lines) > 1 and not body_lines[-1].strip():
         body_lines.pop()
+
+    if (
+        analysis is not None
+        and not has_analysis_directive
+        and isinstance(analysis, OpAnalysis | TranAnalysis | DcAnalysis | AcAnalysis)
+    ):
+        directive = _format_analysis_directive(analysis, netlist_result)
+        if directive is not None:
+            body_lines.append(directive)
 
     save_tokens = _collect_save_tokens(
         netlist_result.components,
@@ -498,13 +804,14 @@ def _find_vl_loop_components(
 ) -> list[tuple[str, str]]:
     """Find voltage sources and inductors participating in a SPICE loop via 2-core pruning."""
     lines = netlist.replace("\r\n", "\n").replace("\r", "\n").splitlines()
+    blocks = _parse_body_blocks(lines)
     edges: list[tuple[str, str, str, str]] = []
-    for line in lines[1:]:
-        stripped = line.strip()
-        if not stripped or stripped.startswith(("*", ".", "+")):
-            continue
-        tokens = stripped.split()
-        if len(tokens) < 3 or not tokens[0].lower().startswith(("v", "l")):
+    for tokens in _iter_top_level_statements(blocks):
+        if (
+            tokens[0].startswith(".")
+            or len(tokens) < 3
+            or not tokens[0].lower().startswith(("v", "l"))
+        ):
             continue
         resolved = _find_matching_component(tokens[0], components)
         if resolved is not None:
@@ -570,8 +877,9 @@ def _find_vl_loop_components(
     return loop_components
 
 
-def _extract_error_summary(stderr: str, stdout: str) -> str | None:
-    """Extract the most informative raw error detail from ngspice stderr/stdout."""
+def _is_ngspice_boilerplate_line(stripped: str) -> bool:
+    """Return True for generic ngspice abort phrases and resource/banner boilerplate."""
+    lowered = stripped.lower()
     generic_phrases = (
         "simulation interrupted due to error",
         "run simulation(s) aborted",
@@ -579,6 +887,32 @@ def _extract_error_summary(stderr: str, stdout: str) -> str | None:
         "no resource usage information",
         "or no active circuit available",
     )
+    boilerplate_prefixes = (
+        "current ngspice program size =",
+        "maximum ngspice program size =",
+        "total dram available =",
+        "dram currently available =",
+        "total analysis time",
+        "total elapsed time",
+        "shared ngspice pages =",
+        "text (code) pages =",
+        "stack =",
+        "library pages =",
+        "no. of data rows",
+        "no. of data columns",
+        "using sparse",
+        "doing analysis at temp",
+        "ascii raw file",
+        "circuit:",
+        "note: no compatibility mode selected",
+    )
+    return any(phrase in lowered for phrase in generic_phrases) or any(
+        lowered.startswith(prefix) for prefix in boilerplate_prefixes
+    )
+
+
+def _extract_error_summary(stderr: str, stdout: str) -> str | None:
+    """Extract the most informative raw error detail from ngspice stderr/stdout."""
     error_markers = (
         "error",
         "fatal",
@@ -586,25 +920,22 @@ def _extract_error_summary(stderr: str, stdout: str) -> str | None:
         "could not find",
         "unable to find",
         "invalid",
+        _NGSPICE_DEFAULT_PARAM_WARNING,
     )
     candidates: list[str] = []
     for stream in (stderr, stdout):
         lines = stream.splitlines()
         for idx, line in enumerate(lines):
             stripped = line.strip()
-            if not stripped:
+            if not stripped or _is_ngspice_boilerplate_line(stripped):
                 continue
             lowered = stripped.lower()
-            if any(phrase in lowered for phrase in generic_phrases):
-                continue
             if any(marker in lowered for marker in error_markers):
                 if lowered.startswith("error on line") and stripped.endswith(":"):
                     details = [stripped]
                     for follow in lines[idx + 1 : idx + 3]:
                         follow_stripped = follow.strip()
-                        if not follow_stripped:
-                            break
-                        if any(phrase in follow_stripped.lower() for phrase in generic_phrases):
+                        if not follow_stripped or _is_ngspice_boilerplate_line(follow_stripped):
                             break
                         details.append(follow_stripped)
                     candidates.append(" ".join(details))
@@ -615,7 +946,11 @@ def _extract_error_summary(stderr: str, stdout: str) -> str | None:
         return candidates[0][:300]
 
     for stream in (stderr, stdout):
-        lines = [line.strip() for line in stream.splitlines() if line.strip()]
+        lines = [
+            stripped
+            for line in stream.splitlines()
+            if (stripped := line.strip()) and not _is_ngspice_boilerplate_line(stripped)
+        ]
         if lines:
             return lines[-1][:300]
 
@@ -779,6 +1114,7 @@ def _match_syntax_or_model_error(
             "circuit not parsed",
             "tstep is invalid",
             "syntax error",
+            _NGSPICE_DEFAULT_PARAM_WARNING,
         )
     ):
         return None
@@ -799,13 +1135,20 @@ def _match_structural_ngspice_diagnostic(
     *,
     node_aliases: dict[str, str] | None = None,
 ) -> Diagnostic | None:
-    """Detect structural singularity or voltage-source loops even if transient OP masked them."""
+    """Detect structural or default-parameter ngspice failures even on exit code 0."""
     combined = "\n".join(part for part in (stderr, stdout) if part)
     lowered = combined.lower()
     loop_diag = _match_voltage_loop(combined, lowered, netlist_result)
     if loop_diag is not None:
         return loop_diag
-    return _match_singular_matrix(combined, lowered, netlist_result, node_aliases=node_aliases)
+    singular_diag = _match_singular_matrix(
+        combined, lowered, netlist_result, node_aliases=node_aliases
+    )
+    if singular_diag is not None:
+        return singular_diag
+    if _NGSPICE_DEFAULT_PARAM_WARNING in lowered:
+        return _match_syntax_or_model_error(lowered, stdout, stderr)
+    return None
 
 
 def _match_ngspice_diagnostic(
@@ -921,7 +1264,7 @@ def run_simulation(
             warnings,
         )
 
-    if isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
+    if not _is_positive_finite(timeout):
         return _error_result(
             analysis,
             "SIMULATION_FAILED",
@@ -929,7 +1272,7 @@ def run_simulation(
             warnings,
         )
 
-    if isinstance(max_points, bool) or not isinstance(max_points, int) or max_points <= 0:
+    if not _is_positive_int(max_points):
         return _error_result(
             analysis,
             "SIMULATION_FAILED",
@@ -937,11 +1280,20 @@ def run_simulation(
             warnings,
         )
 
-    if isinstance(max_raw_bytes, bool) or not isinstance(max_raw_bytes, int) or max_raw_bytes <= 0:
+    if not _is_positive_int(max_raw_bytes):
         return _error_result(
             analysis,
             "SIMULATION_FAILED",
             "La taille maximale du fichier de résultats doit être strictement positive.",
+            warnings,
+        )
+
+    analysis_error = _validate_analysis_parameters(analysis)
+    if analysis_error is not None:
+        return _error_result(
+            analysis,
+            "SIMULATION_FAILED",
+            analysis_error,
             warnings,
         )
 
@@ -956,10 +1308,7 @@ def run_simulation(
         )
 
     try:
-        prepared_netlist, current_aliases, node_aliases = _prepare_netlist_for_execution(
-            netlist_result,
-            analysis=analysis,
-        )
+        _validate_netlist_and_components_safety(netlist_result)
     except UnsafeNetlistError as exc:
         return _error_result(
             analysis,
@@ -969,13 +1318,51 @@ def run_simulation(
         )
 
     if (
+        isinstance(analysis, AcAnalysis)
+        and resolve_source_name(analysis.input_source_id, netlist_result) is None
+    ):
+        return _error_result(
+            analysis,
+            "AC_SOURCE_NOT_FOUND",
+            "La source d'entrée de l'analyse AC est introuvable dans la netlist.",
+            warnings,
+        )
+
+    if (
         isinstance(analysis, DcAnalysis)
-        and resolve_dc_source_name(analysis, netlist_result) is None
+        and resolve_source_name(analysis.source_id, netlist_result) is None
     ):
         return _error_result(
             analysis,
             "DC_SOURCE_NOT_FOUND",
             "La source balayée de l'analyse DC est introuvable dans la netlist.",
+            warnings,
+        )
+
+    normalized = netlist_result.netlist.replace("\r\n", "\n").replace("\r", "\n")
+    raw_lines = normalized.splitlines()
+    blocks = _parse_body_blocks(raw_lines)
+    directive_error = _validate_top_level_directives(blocks, analysis, netlist_result)
+    if directive_error is not None:
+        return _error_result(
+            analysis,
+            "SIMULATION_FAILED",
+            directive_error,
+            warnings,
+        )
+
+    try:
+        prepared_netlist, current_aliases, node_aliases = _prepare_netlist_for_execution(
+            netlist_result,
+            analysis=analysis,
+            _raw_lines=raw_lines,
+            _blocks=blocks,
+        )
+    except UnsafeNetlistError as exc:
+        return _error_result(
+            analysis,
+            "SIMULATION_FAILED",
+            exc.user_message,
             warnings,
         )
 

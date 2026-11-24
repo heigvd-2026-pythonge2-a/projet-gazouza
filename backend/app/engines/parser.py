@@ -222,6 +222,12 @@ def _parse_header_and_variables(
                 )
             in_variables = True
 
+    if in_variables and num_points == 0:
+        raise RawParseError(
+            "Ngspice rawfile has 0 points and no 'Values:' section.",
+            user_message="La simulation ngspice n'a produit aucun point.",
+        )
+
     raise RawParseError(
         "Missing 'Values:' section in SPICE3 ASCII rawfile.",
         user_message="La section « Values: » est absente de la sortie ngspice.",
@@ -459,15 +465,23 @@ def _error_result(
     )
 
 
+def resolve_source_name(
+    source_id: str,
+    netlist_result: NetlistResult,
+) -> str | None:
+    """Resolve a SPICE V*/I* source name matching ``source_id``."""
+    for spice_name, component_id in netlist_result.components.items():
+        if component_id == source_id and spice_name.strip().upper().startswith(("V", "I")):
+            return spice_name
+    return None
+
+
 def resolve_dc_source_name(
     analysis: DcAnalysis,
     netlist_result: NetlistResult,
 ) -> str | None:
     """Resolve the swept SPICE source name matching ``analysis.source_id``."""
-    for spice_name, component_id in netlist_result.components.items():
-        if component_id == analysis.source_id:
-            return spice_name
-    return None
+    return resolve_source_name(analysis.source_id, netlist_result)
 
 
 def _extract_dc_sweep_values(
@@ -477,9 +491,9 @@ def _extract_dc_sweep_values(
 ) -> list[float] | None:
     """Extract the DC sweep axis vector from ngspice rawfile variables."""
     preferred_keys = (
-        ("i(i-sweep)", "i-sweep", "sweep", "v(v-sweep)", "v-sweep")
+        ("i(i-sweep)", "i-sweep", "sweep")
         if spice_name.strip().upper().startswith("I")
-        else ("v(v-sweep)", "v-sweep", "sweep", "i(i-sweep)", "i-sweep")
+        else ("v(v-sweep)", "v-sweep", "sweep")
     )
     for key in preferred_keys:
         if key in columns_by_lower:
