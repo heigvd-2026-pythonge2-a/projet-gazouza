@@ -10,6 +10,7 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer · F : ajuster la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
+  paste: "Clic : poser la copie · Échap ou clic droit : annuler",
 };
 
 /** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */
@@ -107,12 +108,19 @@ export function StatusBar() {
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
+  const segments = useEditorStore((s) => s.segments.length);
 
   const unconnected = useMemo(() => unconnectedPins(doc).length, [doc]);
 
   let selected = "";
   if (wirePart) {
     selected = wirePart.kind === "bend" ? "Sélection : coude de fil" : "Sélection : tronçon de fil";
+  } else if (segments > 0) {
+    const items = selection.length + segments;
+    selected =
+      items === 1
+        ? "Sélection : tronçon de fil"
+        : `${items} éléments sélectionnés (tronçons compris)`;
   } else if (selection.length === 1) {
     const c = doc.components.find((x) => x.id === selection[0]);
     selected = c ? `Sélection : ${c.name ?? c.params.net ?? "masse"}` : "Sélection : fil";

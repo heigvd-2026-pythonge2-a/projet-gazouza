@@ -13,6 +13,7 @@ afficher cette liste à tout moment.
 | <kbd>Ctrl+N</kbd> | Nouveau schéma |
 | <kbd>Ctrl+O</kbd> | Ouvrir un schéma |
 | <kbd>Ctrl+S</kbd> | Enregistrer le schéma |
+| <kbd>Ctrl+Maj+S</kbd> | Enregistrer le schéma sous un autre nom |
 
 ## Sélection
 
@@ -20,7 +21,8 @@ afficher cette liste à tout moment.
 |---|---|
 | Clic | Sélectionner |
 | <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
-| Glisser dans le vide | Sélection par zone (<kbd>Maj</kbd> : ajouter) |
+| Glisser dans le vide | Sélectionner ce qui est entièrement dans la zone (tronçons de fil compris) |
+| <kbd>Maj</kbd> + glisser dans le vide | Ajouter ce qui touche la zone, retirer ce qui était déjà sélectionné |
 | <kbd>Ctrl+A</kbd> | Tout sélectionner |
 | <kbd>Échap</kbd> | Vider la sélection |
 
@@ -28,14 +30,17 @@ afficher cette liste à tout moment.
 
 | Geste | Action |
 |---|---|
-| Glisser | Déplacer la sélection |
+| Glisser | Déplacer la sélection (les fils suivent) |
+| <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | Flèches | Déplacer la sélection d'un pas |
 | <kbd>R</kbd> | Tourner |
 | <kbd>M</kbd> | Miroir |
 | <kbd>Suppr</kbd> | Supprimer |
-| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (décalé, avec de nouveaux noms) |
+| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
+| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
+| Double-clic sur un composant | Changer sa valeur sur le schéma |
 | Clic droit sur un composant | Menu des actions |
 
 ## Composants

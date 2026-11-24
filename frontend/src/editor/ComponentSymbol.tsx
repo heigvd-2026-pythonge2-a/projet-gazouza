@@ -117,10 +117,13 @@ interface ComponentSymbolProps {
   onSelect?: (e: KonvaEventObject<MouseEvent>) => void;
   /** Right press on the component (the canvas decides on release what it means). */
   onContextPress?: () => void;
-  /** While dragging: the grid position the component would be dropped at. */
-  onDrag?: (position: { x: number; y: number }) => void;
-  /** End of a drag, with the grid position the component was dropped at. */
-  onMove?: (position: { x: number; y: number }) => void;
+  /**
+   * While dragging: the grid position the component would be dropped at, and whether Ctrl is
+   * held (move without the wires).
+   */
+  onDrag?: (position: { x: number; y: number }, detach: boolean) => void;
+  /** End of a drag, with the grid position the component was dropped at (and Ctrl, as above). */
+  onMove?: (position: { x: number; y: number }, detach: boolean) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
@@ -170,14 +173,17 @@ export function ComponentSymbol({
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: snap(node.x()), y: snap(node.y()) });
-        onDrag?.({ x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) });
+        onDrag?.(
+          { x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) },
+          e.evt.ctrlKey || e.evt.metaKey,
+        );
       }}
       onDragEnd={(e) => {
         const node = e.target;
         const position = { x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) };
         // Force the node onto the grid even if the store value does not change.
         node.position({ x: position.x * GRID, y: position.y * GRID });
-        onMove?.(position);
+        onMove?.(position, e.evt.ctrlKey || e.evt.metaKey);
       }}
     >
       <Group rotation={c.rotation} scaleX={c.mirror ? -1 : 1}>
