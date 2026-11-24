@@ -6,11 +6,7 @@ on:
     paths:
       - "website/**"
       - ".github/workflows/pages.yml"
-  pull_request:
-    branches: ["main"]
-    paths:
-      - "website/**"
-      - ".github/workflows/pages.yml"
+  # Pull requests build the site in ci.yml (job "Site web"), behind the "CI OK" check.
   workflow_dispatch:
 
 permissions:
