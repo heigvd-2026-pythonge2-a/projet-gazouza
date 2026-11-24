@@ -21,3 +21,11 @@
 # Website, CI and repository settings
 /website/                    @Guenin04
 /.github/                    @Guenin04
+
+# Root configuration and AI agent settings
+/.claude/                    @Guenin04
+/.gemini/                    @Guenin04
+/.editorconfig               @Guenin04
+/.gitattributes              @Guenin04
+/.gitignore                  @Guenin04
+/.pre-commit-config.yaml     @Guenin04
