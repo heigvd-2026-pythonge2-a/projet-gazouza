@@ -98,4 +98,6 @@ propriétaire.
 | `backend/app/models/`, `netlist/`, `importers/`, `api/` | Damien Bignens |
 | `backend/app/engines/`, `backend/vendor/ngspice/`, `launcher.py`, `build.ps1` | Antoine Bezençon |
 | `shared/fixtures/` | Tous (chaque fichier a un producteur) |
-| `website/`, `frontend/src/api/client.ts`, `frontend/src/App.tsx`, CI, configs racine | À coordonner en équipe |
+| `website/` | Noé Guenin |
+| `.github/` (CI, modèles), configs racine, réglages du dépôt (labels, milestones, règles) | Noé Guenin (gère le dépôt ; changement à annoncer à l'équipe) |
+| `frontend/src/api/client.ts`, `frontend/src/App.tsx` | À coordonner en équipe |
