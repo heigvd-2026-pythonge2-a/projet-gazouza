@@ -181,7 +181,10 @@ Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie �
   `.model` (suites en `+` permises) ou un bloc `.subckt` … `.ends`. Par exemple
   `{ "D1N4148": ".model D1N4148 D(Is=2.52n Rs=0.568 N=1.752)" }`. Jamais de `.include` : le
   runner l'interdit (aucune lecture de fichier), décidé dans la PR #131 (issue #133). Le
-  chargeur refuse tout autre directive (`.include`, `.lib`, `.control`…).
+  chargeur refuse toute autre directive (`.include`, `.lib`, `.control`…).
+  Le texte ne contient que des caractères ASCII imprimables et des retours à la ligne ; un bloc
+  `.subckt` n'a qu'un seul `.ends`, sur sa dernière ligne. Chaque option du paramètre `model`
+  doit avoir son texte, et un même nom de modèle ne peut pas avoir deux textes différents.
 
 La réponse de `GET /api/library` ne contient que `type`, `label`, `prefix`, `pins` et `params`
 (`LibraryComponent`) : `spice`, `waveforms` et `models` restent dans le backend.

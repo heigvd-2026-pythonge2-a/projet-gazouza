@@ -7,7 +7,7 @@
 
 import re
 
-from app.models import AcAnalysis, Analysis, NetlistResult, Schematic
+from app.models import AcAnalysis, Analysis, Component, NetlistResult, Schematic
 from app.netlist.checks import check_nodes, check_structure
 from app.netlist.connectivity import build_nodes
 from app.netlist.library import ComponentType, get_library
@@ -23,14 +23,20 @@ def header(title: str | None) -> str:
     return "* " + (LINE_BREAKS.sub(" ", title or "").strip() or "Psice")
 
 
-def used_models(line: str, ctype: ComponentType) -> dict[str, str]:
-    """The models of `ctype` named on its SPICE line ('D1 a k D1N4148' -> D1N4148).
+def used_models(comp: Component, ctype: ComponentType) -> dict[str, str]:
+    """The models of `ctype` this component uses: the value of its 'choice' parameters (the
+    'model' choice) and the words written as is in the template.
 
-    The text comes from the library only, never from the schematic.
+    Not the whole SPICE line: a node named like another model (a label "DLED" next to a
+    D1N4148 diode) must not add that model. The text comes from the library only.
     """
-    tokens = {token.lower() for token in line.split()[1:]}
+    names = ctype.fixed_tokens() | {
+        comp.params[p.name].strip().lower()
+        for p in ctype.used_params(comp.params)
+        if p.kind == "choice"
+    }
     return {
-        name.lower(): text.strip() for name, text in ctype.models.items() if name.lower() in tokens
+        name.lower(): text.strip() for name, text in ctype.models.items() if name.lower() in names
     }
 
 
@@ -66,7 +72,7 @@ def generate_netlist(
         ctype = library[comp.type]
         line = component_line(comp, ctype, nodes.pin_node, ac_input=comp.id == ac_input)
         lines.append(line)
-        models.update(used_models(line, ctype))
+        models.update(used_models(comp, ctype))
     lines += models.values()
     lines += [analysis_line(analysis, names), ".end"]
 
