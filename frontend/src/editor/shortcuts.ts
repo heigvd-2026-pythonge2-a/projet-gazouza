@@ -61,6 +61,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Échap (outil fil)", action: "Enlever le dernier coude" },
       { keys: "Clic sur un fil", action: "Sélectionner un coude ou un tronçon, à glisser" },
       { keys: "Double-clic sur un fil", action: "Sélectionner le fil entier" },
+      {
+        keys: "Suppr (coude / tronçon)",
+        action: "Supprimer le fil entier / couper le fil à cet endroit",
+      },
     ],
   },
   {

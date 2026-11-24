@@ -530,38 +530,10 @@ export function moveWirePart(doc: EditorDoc, part: WirePart, target: GridPoint):
 }
 
 /**
- * Removes a bend. To keep the wire orthogonal, a neighbouring bend is pulled into line with the
- * point on the other side (the next bend if there is one, else the previous one). A bend between
- * the two ends of the wire cannot go: `doc` is returned unchanged.
- */
-export function deleteBend(doc: EditorDoc, part: WirePart): EditorDoc {
-  const w = doc.wires.find((wire) => wire.id === part.wire);
-  if (!w || part.kind !== "bend" || !wirePartPoints(doc, part)) return doc;
-  const path = partPath(doc, w).map((p) => ({ ...p }));
-  const i = part.index;
-  const last = path.length - 1;
-  const bend = path[i] as GridPoint;
-  const prev = path[i - 1] as GridPoint;
-  const next = path[i + 1] as GridPoint;
-  if (i + 1 < last) {
-    // bend -> next and next -> after turn at a right angle: next slides along the latter.
-    if (next.x === bend.x) next.x = prev.x;
-    else next.y = prev.y;
-  } else if (i - 1 > 0) {
-    if (prev.x === bend.x) prev.x = next.x;
-    else prev.y = next.y;
-  } else {
-    return doc;
-  }
-  const without = path.filter((_, j) => j !== i);
-  if (without.some((p, j) => j > 0 && isDiagonal(without[j - 1] as GridPoint, p))) return doc;
-  return withPath(doc, w.id, without);
-}
-
-/**
  * Removes one segment of a wire: the wire is cut in two around it, each remaining piece keeping
  * its attached end and getting a free end where the segment was. A piece reduced to a single
- * point disappears, so removing the only segment removes the whole wire.
+ * point disappears, so removing the only segment removes the whole wire. Junctions left with
+ * fewer than three wires are cleaned up (see `cleanJunctions`).
  */
 export function deleteSegment(doc: EditorDoc, part: WirePart): EditorDoc {
   const w = doc.wires.find((wire) => wire.id === part.wire);
@@ -579,10 +551,87 @@ export function deleteSegment(doc: EditorDoc, part: WirePart): EditorDoc {
     const points = path.slice(i + 2, -1).map((p) => ({ ...p }));
     pieces.push({ ...w, id, from: { ...b }, points });
   }
-  return {
+  const cut = {
     ...doc,
     wires: doc.wires.flatMap((wire) => (wire.id === w.id ? pieces : [wire])),
   };
+  return cleanJunctions(cut, junctionsOf([w]));
+}
+
+/** Ids of the junctions the ends of these wires are attached to. */
+function junctionsOf(wires: readonly EditorWire[]): Set<string> {
+  const ids = new Set<string>();
+  for (const w of wires) {
+    for (const end of [w.from, w.to]) if ("junction" in end) ids.add(end.junction);
+  }
+  return ids;
+}
+
+/** `w` turned around: from its `to` end to its `from` end. */
+const reversed = (w: EditorWire): EditorWire => ({
+  ...w,
+  from: w.to,
+  to: w.from,
+  points: [...w.points].reverse(),
+});
+
+/**
+ * Removes the junctions (among `ids`) that no longer join three wires, so no dot is left where
+ * nothing meets any more. A junction with one wire end (or none) goes, and that end becomes a
+ * free end in the same place. A junction between exactly two wires goes too: both wires are
+ * merged into one going through its position (the first one keeps its id). A merge that would
+ * give a wire looping back to where it starts is not done, and the junction is kept.
+ */
+export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+  let out = doc;
+  for (const id of ids) {
+    const junction = out.junctions.find((j) => j.id === id);
+    if (!junction) continue;
+    const onJunction = (end: WireEnd) => "junction" in end && end.junction === id;
+    const attached = out.wires.filter((w) => onJunction(w.from) || onJunction(w.to));
+    const ends = attached.reduce(
+      (n, w) => n + (onJunction(w.from) ? 1 : 0) + (onJunction(w.to) ? 1 : 0),
+      0,
+    );
+    if (ends >= 3) continue;
+    const position = junction.position;
+    const without = out.junctions.filter((j) => j.id !== id);
+
+    if (ends === 2 && attached.length === 2) {
+      const [first, second] = attached as [EditorWire, EditorWire];
+      // Orient them first -> junction -> second.
+      const a = onJunction(first.to) ? first : reversed(first);
+      const b = onJunction(second.from) ? second : reversed(second);
+      if (sameEnd(a.from, b.to)) continue;
+      const points = simplifyPath([
+        endPosition(out, a.from),
+        ...a.points,
+        position,
+        ...b.points,
+        endPosition(out, b.to),
+      ]).slice(1, -1);
+      const merged: EditorWire = { id: first.id, from: a.from, to: b.to, points };
+      out = {
+        ...out,
+        junctions: without,
+        wires: out.wires.flatMap((w) =>
+          w.id === first.id ? [merged] : w.id === second.id ? [] : [w],
+        ),
+      };
+      continue;
+    }
+    // A wire with both ends on the junction (a loop) is left as it is.
+    if (ends === 2) continue;
+    const free = (end: WireEnd): WireEnd => (onJunction(end) ? { ...position } : end);
+    out = {
+      ...out,
+      junctions: without,
+      wires: out.wires.map((w) =>
+        attached.includes(w) ? { ...w, from: free(w.from), to: free(w.to) } : w,
+      ),
+    };
+  }
+  return out;
 }
 
 const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });
@@ -866,7 +915,8 @@ export function pasteClip(
 
 /**
  * Deletes components, wires and junctions by id. Wire ends attached to a deleted component or
- * junction become free {x, y} ends at the same place, so no wire ever points to nothing.
+ * junction become free {x, y} ends at the same place, so no wire ever points to nothing. The
+ * junctions the deleted wires ended on are cleaned up (see `cleanJunctions`).
  */
 export function deleteItems(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
   const detach = (end: WireEnd): WireEnd => {
@@ -880,11 +930,12 @@ export function deleteItems(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc
     }
     return end;
   };
-  return {
+  const after = {
     components: doc.components.filter((c) => !ids.has(c.id)),
     junctions: doc.junctions.filter((j) => !ids.has(j.id)),
     wires: doc.wires
       .filter((w) => !ids.has(w.id))
       .map((w) => ({ ...w, from: detach(w.from), to: detach(w.to) })),
   };
+  return cleanJunctions(after, junctionsOf(doc.wires.filter((w) => ids.has(w.id))));
 }

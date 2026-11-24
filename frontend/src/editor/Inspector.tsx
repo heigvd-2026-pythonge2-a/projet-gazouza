@@ -5,12 +5,20 @@ import {
   nameProblem,
   netNameProblem,
   useEditorStore,
+  valueProblem,
   visibleParams,
   type ParamOption,
   type PlacedComponent,
+  type ValueProblem,
 } from "../store";
 import { INSPECTOR_ID, VALUE_FIELD_ATTR } from "./inspectorFocus";
 import { COLORS, UI } from "./theme";
+
+/** Colour of a warning (a value that works, but probably not as meant). */
+const WARNING = "#b45309";
+
+/** Components with at least this many fields show them on two columns, when there is room. */
+const TWO_COLUMNS_FROM = 4;
 
 const controlStyle: CSSProperties = {
   flex: 1,
@@ -29,12 +37,20 @@ function Field(props: {
   unit?: string;
   /** For a "choice" parameter: a drop-down list instead of a text field. */
   options?: ParamOption[];
-  problem?: string | null;
+  /** What is wrong with the value: a string is an error. */
+  problem?: string | ValueProblem | null;
+  /** Takes the whole width of a two-column layout. */
+  wide?: boolean;
   /** The component's main value: the field a double-click on the component goes to. */
   valueField?: boolean;
   onChange: (value: string) => void;
 }) {
-  const { label, value, unit, options, problem, valueField, onChange } = props;
+  const { label, value, unit, options, valueField, wide, onChange } = props;
+  const problem: ValueProblem | null =
+    typeof props.problem === "string"
+      ? { level: "error", message: props.problem }
+      : (props.problem ?? null);
+  const problemColor = problem?.level === "warning" ? WARNING : UI.error;
   const id = useId();
   /** True once the text was changed since the field got the focus. */
   const edited = useRef(false);
@@ -50,7 +66,7 @@ function Field(props: {
     e.currentTarget.blur();
   };
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 8, minWidth: 0, ...(wide ? { gridColumn: "1 / -1" } : {}) }}>
       <label
         htmlFor={id}
         style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 3 }}
@@ -61,7 +77,7 @@ function Field(props: {
         style={{
           display: "flex",
           alignItems: "center",
-          border: `1px solid ${problem ? UI.error : "#d1d5db"}`,
+          border: `1px solid ${problem ? problemColor : "#d1d5db"}`,
           borderRadius: 4,
           background: "#ffffff",
         }}
@@ -95,13 +111,18 @@ function Field(props: {
             onKeyDown={onKeyDown}
             {...(valueField ? { [VALUE_FIELD_ATTR]: "" } : {})}
             spellCheck={false}
-            aria-invalid={problem ? true : undefined}
+            aria-invalid={problem?.level === "error" ? true : undefined}
+            aria-describedby={problem ? `${id}-problem` : undefined}
             style={controlStyle}
           />
         )}
         {unit && <span style={{ padding: "0 8px", color: "#9ca3af" }}>{unit}</span>}
       </div>
-      {problem && <p style={{ margin: "3px 0 0", fontSize: 12, color: UI.error }}>{problem}</p>}
+      {problem && (
+        <p id={`${id}-problem`} style={{ margin: "3px 0 0", fontSize: 12, color: problemColor }}>
+          {problem.message}
+        </p>
+      )}
     </div>
   );
 }
@@ -114,6 +135,16 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
   const params = visibleParams(def, c.params);
   const mainValue = params.find((p) => p.kind === "value");
   const hasValues = mainValue !== undefined;
+  const fields = params.length + (def.prefix !== null ? 1 : 0);
+  // Two columns where there is room (a source in pulse mode has 9 fields); one when narrow.
+  const layout: CSSProperties =
+    fields >= TWO_COLUMNS_FROM
+      ? {
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+          columnGap: 10,
+        }
+      : {};
 
   return (
     <>
@@ -121,29 +152,39 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
         {def.label}
         {c.name && <span style={{ textTransform: "none" }}> — {c.name}</span>}
       </h3>
-      {def.prefix !== null && (
-        <Field
-          label="Nom"
-          value={c.name ?? ""}
-          problem={nameProblem(doc, c, def.prefix)}
-          onChange={(name) => renameComponent(c.id, name)}
-        />
-      )}
-      {params.map((p) => {
-        const value = c.params[p.name] ?? "";
-        return (
+      <div style={layout}>
+        {def.prefix !== null && (
           <Field
-            key={p.name}
-            label={p.label}
-            value={value}
-            unit={p.unit}
-            options={p.kind === "choice" ? p.options : undefined}
-            valueField={p.name === mainValue?.name}
-            problem={c.type === "label" && p.name === "net" ? netNameProblem(value) : null}
-            onChange={(v) => setParam(c.id, p.name, v)}
+            label="Nom"
+            wide
+            value={c.name ?? ""}
+            problem={nameProblem(doc, c, def.prefix)}
+            onChange={(name) => renameComponent(c.id, name)}
           />
-        );
-      })}
+        )}
+        {params.map((p) => {
+          const value = c.params[p.name] ?? "";
+          return (
+            <Field
+              key={p.name}
+              label={p.label}
+              value={value}
+              unit={p.unit}
+              options={p.kind === "choice" ? p.options : undefined}
+              valueField={p.name === mainValue?.name}
+              wide={p.kind === "choice"}
+              problem={
+                c.type === "label" && p.name === "net"
+                  ? netNameProblem(value)
+                  : p.kind === "value"
+                    ? valueProblem(value, p.unit)
+                    : null
+              }
+              onChange={(v) => setParam(c.id, p.name, v)}
+            />
+          );
+        })}
+      </div>
       {def.params.length === 0 && (
         <p style={{ fontSize: 12, color: UI.muted }}>Ce composant n'a pas de paramètre.</p>
       )}

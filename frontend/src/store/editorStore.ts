@@ -9,7 +9,6 @@ import {
   addWire,
   anchorAt,
   copyItems,
-  deleteBend,
   deleteItems,
   deleteSegment,
   emptyDoc,
@@ -342,9 +341,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   deleteSelection: () =>
     set((s) => {
       const part = s.wirePart;
-      // A bend goes only if the wire stays orthogonal; a segment cuts its wire in two.
+      // A segment cuts its wire in two. A bend is there to be moved: deleting it deletes its
+      // whole wire, rather than redrawing part of it (#158).
       if (part) {
-        const doc = part.kind === "bend" ? deleteBend(s.doc, part) : deleteSegment(s.doc, part);
+        const doc =
+          part.kind === "bend"
+            ? deleteItems(s.doc, new Set([part.wire]))
+            : deleteSegment(s.doc, part);
         return doc === s.doc ? {} : { ...change(s, doc), wirePart: null };
       }
       return s.selection.length > 0

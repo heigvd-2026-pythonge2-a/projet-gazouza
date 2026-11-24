@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   addComponent,
   addWire,
-  deleteBend,
+  cleanJunctions,
+  deleteItems,
   deleteSegment,
   docBounds,
   emptyDoc,
@@ -96,25 +97,6 @@ describe("moveWirePart", () => {
   });
 });
 
-describe("deleteBend", () => {
-  it("pulls the next bend into line", () => {
-    const { doc, wire } = stepWire();
-    const after = deleteBend(doc, { wire, kind: "bend", index: 1 });
-    expect(pathOf(after, wire)).toEqual([p(0, 0), p(0, 5), p(10, 5)]);
-  });
-
-  it("pulls the previous bend when the next point is the wire end", () => {
-    const { doc, wire } = stepWire();
-    const after = deleteBend(doc, { wire, kind: "bend", index: 2 });
-    expect(pathOf(after, wire)).toEqual([p(0, 0), p(10, 0), p(10, 5)]);
-  });
-
-  it("refuses to remove the only bend of an L", () => {
-    const added = addWire(emptyDoc(), [p(0, 0), p(5, 0), p(5, 5)])!;
-    expect(deleteBend(added.doc, { wire: added.id, kind: "bend", index: 1 })).toBe(added.doc);
-  });
-});
-
 describe("deleteSegment", () => {
   it("cuts the wire in two pieces with free ends", () => {
     const { doc, wire } = stepWire();
@@ -154,6 +136,79 @@ describe("rotate and mirror", () => {
       expect(path[0]).toEqual(endPosition(after, w.from));
       expect(orthogonal(path)).toBe(true);
     }
+  });
+});
+
+describe("cleaning junctions after a deletion", () => {
+  /** A horizontal wire (0,0)-(10,0) and a branch from (5,5) up to it: a junction at (5,0). */
+  function tee() {
+    let doc = addWire(emptyDoc(), [p(0, 0), p(10, 0)])!.doc;
+    const branch = addWire(doc, [p(5, 5), p(5, 0)])!;
+    doc = branch.doc;
+    return { doc, branch: branch.id, junction: doc.junctions[0]!.id };
+  }
+
+  it("merges the two wires left on a junction when the third one is deleted", () => {
+    const { doc, branch } = tee();
+    expect(doc.wires).toHaveLength(3);
+    const after = deleteItems(doc, new Set([branch]));
+    expect(after.junctions).toEqual([]);
+    expect(after.wires).toHaveLength(1);
+    expect(wirePath(after, after.wires[0]!)).toEqual([p(0, 0), p(10, 0)]);
+  });
+
+  it("keeps a junction that still joins three wires", () => {
+    let { doc } = tee();
+    doc = addWire(doc, [p(5, -5), p(5, 0)])!.doc;
+    const fourth = doc.wires.at(-1)!.id;
+    const after = deleteItems(doc, new Set([fourth]));
+    expect(after.junctions).toHaveLength(1);
+    expect(after.wires).toHaveLength(3);
+  });
+
+  it("removes a junction left with one wire, whose end becomes free", () => {
+    const { doc, junction } = tee();
+    const onJunction = doc.wires.filter(
+      (w) => "junction" in w.to && w.to.junction === junction && !("junction" in w.from),
+    );
+    // Delete two of the three wires: the last one keeps a free end at (5,0).
+    const keep = onJunction[0]!.id;
+    const others = doc.wires.filter((w) => w.id !== keep).map((w) => w.id);
+    const after = deleteItems(doc, new Set(others));
+    expect(after.junctions).toEqual([]);
+    expect(after.wires).toHaveLength(1);
+    expect(after.wires[0]!.to).toEqual(p(5, 0));
+  });
+
+  it("cleans the junction when deleting the segment of the branch that reaches it", () => {
+    const { doc, branch } = tee();
+    const after = deleteSegment(doc, { wire: branch, kind: "segment", index: 0 });
+    expect(after.junctions).toEqual([]);
+    expect(after.wires.map((w) => wirePath(after, w))).toEqual([[p(0, 0), p(10, 0)]]);
+  });
+
+  it("does not merge two wires into one looping back to the same pin", () => {
+    let doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: p(0, 0),
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    // Pin 2 of the resistor is at (0,2): two wires from it meet at (4,4), and a third arrives.
+    doc = addWire(doc, [p(0, 2), p(4, 2), p(4, 4)])!.doc;
+    doc = addWire(doc, [p(0, 2), p(0, 4), p(4, 4)])!.doc;
+    doc = addWire(doc, [p(8, 4), p(4, 4)])!.doc;
+    expect(doc.junctions).toHaveLength(1);
+    const third = doc.wires.at(-1)!.id;
+    const after = deleteItems(doc, new Set([third]));
+    expect(after.junctions).toHaveLength(1);
+    expect(after.wires).toHaveLength(2);
+  });
+
+  it("ignores junctions it is not asked about", () => {
+    const { doc, junction } = tee();
+    expect(cleanJunctions(doc, new Set(["nope"]))).toBe(doc);
+    expect(cleanJunctions(doc, new Set([junction]))).toBe(doc);
   });
 });
 
