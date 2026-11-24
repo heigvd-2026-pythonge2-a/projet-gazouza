@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="341.06 285.96 376.88 376.88" role="img" aria-label="Psice">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="358.06 285.96 376.88 376.88" role="img" aria-label="Psice">
 <title>Psice</title>
-<rect x="344.83" y="289.73" width="369.34" height="369.34" rx="75.38" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="7.54"/>
-<path d="M473.01 557.00V357.80H535.01A62.99 62.99 0 0 1 535.01 483.78H473.01" fill="none" stroke="#0F172A" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="473.01" cy="483.78" r="26" fill="#2563EB"/>
-<circle cx="473.01" cy="579.00" r="22" fill="none" stroke="#2563EB" stroke-width="16"/>
+<rect x="361.83" y="289.73" width="369.34" height="369.34" rx="75.38" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="7.54"/>
+<path d="M490.01 557.00V357.80H552.01A62.99 62.99 0 0 1 552.01 483.78H490.01" fill="none" stroke="#0F172A" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="490.01" cy="483.78" r="26" fill="#2563EB"/>
+<circle cx="490.01" cy="579.00" r="22" fill="none" stroke="#2563EB" stroke-width="16"/>
 </svg>

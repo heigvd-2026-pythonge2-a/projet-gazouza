@@ -27,6 +27,8 @@ la version simplifiée pour ces tailles, et la version complète à partir de 48
 | Couleur | Code | Où |
 |---|---|---|
 | Bleu nuit | `#0F172A` | Lettre P et texte « sice » |
+| Rouge | `#DC2626` | Contour du point du « i », dessiné comme une broche non connectée dans l'éditeur (`COLORS.pin`) |
+| Rouge très clair | `#FADEDE` | Intérieur du point du « i » (le rouge à 15 % de l'éditeur, sur fond blanc) |
 | Bleu | `#2563EB` | Point de connexion et borne |
 | Blanc | `#FFFFFF` | Fond de l'icône |
 | Gris clair | `#CBD5E1` | Bord de la tuile de l'icône |
@@ -42,8 +44,12 @@ uv run --no-project --with pillow --with fonttools python assets/brand/make_bran
 Pillow et fontTools ne servent qu'à ce script : ce ne sont **pas** des dépendances du projet
 (`--no-project --with` les installe dans un environnement temporaire).
 
-L'animation est un GIF généré image par image par ce script : le grand P se trace, le point et
-la borne apparaissent, puis « s », « i », « c », « e » arrivent une par une.
+L'animation est un GIF généré image par image par ce script (version « Vague », choisie par
+l'équipe) : la borne apparaît, une étincelle trace le grand P, le point de connexion s'allume
+avec un flash, puis les lettres de « sice » montent doucement l'une après l'autre. Enfin, le
+point du « i » apparaît comme une broche non connectée et lance une onde rouge, comme une
+alerte. Elle dure environ une seconde et demie (50 images par seconde) avant de s'arrêter sur
+le logo.
 
 ## Origine et licence
 

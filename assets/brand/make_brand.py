@@ -10,17 +10,23 @@ Pillow and fontTools are only needed here, they are not project dependencies.
 import math
 from pathlib import Path
 
+from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.ttLib import TTFont
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 BRAND = Path(__file__).resolve().parent
 DOCS_IMAGES = BRAND.parent.parent / "docs" / "images"
 
 NAVY_HEX = "#0F172A"
 BLUE_HEX = "#2563EB"
+RED_HEX = "#DC2626"  # unconnected pins in the editor (COLORS.pin)
 NAVY = (15, 23, 42)
 BLUE = (37, 99, 235)
+RED = (220, 38, 38)
+PIN_FILL = (250, 222, 222)  # red at 15 % over white, as in the editor
+PIN_FILL_HEX = "#FADEDE"
+PIN_WIDTH = 6  # outline of the pin (thicker than in the editor, to stay visible)
 WHITE = (255, 255, 255)
 GRID = (226, 232, 240)
 FONT = "C:/Windows/Fonts/seguisb.ttf"
@@ -30,7 +36,7 @@ W, H = 1600, 900
 FONT_SIZE = 300
 BASELINE = 575
 STROKE = 36  # close to the stem weight of the font
-LETTER_GAP = 22
+LETTER_GAP = -12  # P close to "sice": same spacing as inside the word
 WORD = "sice"
 
 
@@ -93,81 +99,129 @@ def background(s):
     return img
 
 
-def draw_stroke(d, pts, s):
-    rad = STROKE / 2 * s
+def _layer(s):
+    return Image.new("RGBA", (int(W * s), int(H * s)), (0, 0, 0, 0))
+
+
+def _put(base, lay, alpha=1.0):
+    """Composite an RGBA layer onto base with an extra opacity."""
+    if alpha <= 0:
+        return
+    if alpha < 1:
+        lay.putalpha(lay.getchannel("A").point(lambda v: int(v * alpha)))
+    base.alpha_composite(lay)
+
+
+def _circle(d, x, y, r, s, fill, **kw):
+    d.ellipse([(x - r) * s, (y - r) * s, (x + r) * s, (y + r) * s], fill=fill, **kw)
+
+
+def p_layer(pts, s):
+    lay = _layer(s)
+    d = ImageDraw.Draw(lay)
     for x, y in pts:
-        d.ellipse([x * s - rad, y * s - rad, x * s + rad, y * s + rad], fill=NAVY)
+        _circle(d, x, y, STROKE / 2, s, NAVY)
+    return lay
 
 
-def draw_dot(d, L, s, k=1.0):
-    rad = 26 * k * s
-    x, y = L["stem_x"] * s, L["bowl_bottom"] * s
-    d.ellipse([x - rad, y - rad, x + rad, y + rad], fill=BLUE)
+def dot_layer(L, s, k=1.0):
+    lay = _layer(s)
+    if k > 0:
+        _circle(ImageDraw.Draw(lay), L["stem_x"], L["bowl_bottom"], 26 * k, s, BLUE)
+    return lay
 
 
-def draw_ring(d, L, s, k=1.0):
-    ro, ri = 30 * k * s, 14 * k * s
-    x, y = L["stem_x"] * s, (BASELINE + 4) * s
-    d.ellipse([x - ro, y - ro, x + ro, y + ro], fill=BLUE)
-    if ri > 0:
-        d.ellipse([x - ri, y - ri, x + ri, y + ri], fill=WHITE)
+def ring_layer(L, s, k=1.0):
+    lay = _layer(s)
+    if k > 0:
+        d = ImageDraw.Draw(lay)
+        _circle(d, L["stem_x"], BASELINE + 4, 30 * k, s, BLUE)
+        _circle(d, L["stem_x"], BASELINE + 4, 14 * k, s, WHITE)
+    return lay
 
 
-def letter_spans(L):
+def dot_top_limit():
+    """Height (logo units) above which a glyph part is the dot of the i."""
+    return BASELINE + font(1).getbbox("x", anchor="ls")[1] - 8
+
+
+def pin_geometry(L):
+    """Centre and radius (logo units) of the pin that replaces the dot of the i."""
     f = font(1)
-    spans = []
-    for i, ch in enumerate(WORD):
-        x_start = L["text_x"] + f.getlength(WORD[:i])
-        bb = f.getbbox(ch, anchor="ls")
-        spans.append((x_start + bb[0] - 4, x_start + bb[2] + 4))
-    return spans
+    i = WORD.index("i")
+    x = L["text_x"] + f.getlength(WORD[:i])
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).text((x, BASELINE), "i", font=f, fill=255, anchor="ls")
+    x0, y0, x1, y1 = mask.crop((0, 0, W, int(dot_top_limit()))).getbbox()
+    return (x0 + x1) / 2, (y0 + y1) / 2, max(x1 - x0, y1 - y0) / 2 * 1.1
 
 
-def text_layer(L, s):
-    layer = Image.new("L", (int(W * s), int(H * s)), 0)
-    ImageDraw.Draw(layer).text(
-        (L["text_x"] * s, BASELINE * s), WORD, font=font(s), fill=255, anchor="ls"
-    )
-    return layer
+def letter_layer(L, s, i, dy=0.0):
+    lay = _layer(s)
+    x = L["text_x"] + font(1).getlength(WORD[:i])
+    ch = "\u0131" if WORD[i] == "i" else WORD[i]  # dotless i: the dot is drawn as a pin
+    ImageDraw.Draw(lay).text((x * s, (BASELINE + dy) * s), ch, font=font(s), fill=NAVY, anchor="ls")
+    return lay
 
 
-def render(L, s, p_frac=1.0, dot=1.0, ring=1.0, text_until=None, cursor=None):
-    img = background(s)
-    d = ImageDraw.Draw(img)
-    pts = p_path(L)
-    if p_frac > 0:
-        draw_stroke(d, pts[: max(1, int(len(pts) * p_frac))], s)
-    if dot > 0:
-        draw_dot(d, L, s, dot)
-    if ring > 0:
-        draw_ring(d, L, s, ring)
-    if text_until is None:
-        text_until = W
-    if text_until > L["text_x"] - 10:
-        mask = text_layer(L, s)
-        clip = Image.new("L", mask.size, 0)
-        ImageDraw.Draw(clip).rectangle([0, 0, text_until * s, H * s], fill=255)
-        img.paste(Image.new("RGB", img.size, NAVY), (0, 0), ImageChops.multiply(mask, clip))
-    if cursor is not None:
-        cx, cy = cursor
-        h = 11 * s
-        d.rectangle(
-            [cx * s - h, cy * s - h, cx * s + h, cy * s + h], outline=BLUE, width=int(3 * s)
-        )
+def pin_layer(L, s, k=1.0, pulse=None):
+    """The dot of the i, drawn like an unconnected pin in the editor: red outline, light fill.
+
+    `pulse` (0 to 1) adds a red ring that grows and fades, like a warning.
+    """
+    lay = _layer(s)
+    cx, cy, r = pin_geometry(L)
+    d = ImageDraw.Draw(lay)
+    if k > 0:
+        rk = r * k
+        _circle(d, cx, cy, rk, s, PIN_FILL, outline=RED, width=max(1, int(PIN_WIDTH * s)))
+    if pulse is not None and 0 < pulse < 1:
+        rp = r * (1 + 1.6 * pulse)
+        a = int(255 * (1 - pulse))
+        _circle(d, cx, cy, rp, s, None, outline=RED + (a,), width=max(1, int(4 * s)))
+    return lay
+
+
+def glow_layer(x, y, r, s, strength=1.0):
+    lay = _layer(s)
+    _circle(ImageDraw.Draw(lay), x, y, r, s, BLUE + (int(170 * strength),))
+    return lay.filter(ImageFilter.GaussianBlur(r * s * 0.45))
+
+
+def spark_layer(x, y, s):
+    lay = _layer(s)
+    _circle(ImageDraw.Draw(lay), x, y, 11, s, WHITE, outline=BLUE, width=int(5 * s))
+    return lay
+
+
+def frame(L, s, p=None, dot=0.0, ring=0.0, letters=(), pin=0.0, pulse=None, extras=()):
+    """One image: grid, P (points), dot, ring, letters [(alpha, dy)], pin and extra layers."""
+    img = background(s).convert("RGBA")
+    if p:
+        _put(img, p_layer(p, s))
+    if dot:
+        _put(img, dot_layer(L, s, dot))
+    if ring:
+        _put(img, ring_layer(L, s, ring))
+    for i, (alpha, dy) in enumerate(letters):
+        _put(img, letter_layer(L, s, i, dy), alpha)
+    if pin or pulse is not None:
+        _put(img, pin_layer(L, s, pin, pulse))
+    for lay in extras:
+        _put(img, lay)
     return img
 
 
 def ease(t):
+    t = min(1.0, max(0.0, t))
     return 1 - (1 - t) ** 3
 
 
-def pop(t):
-    """0 -> overshoot -> 1."""
-    if t <= 0:
-        return 0.0
-    if t >= 1:
-        return 1.0
-    return ease(t) * (1 + 0.25 * math.sin(math.pi * t))
+def ease_back(t):
+    """Ease out with a small overshoot, for parts that snap into place."""
+    t = min(1.0, max(0.0, t))
+    c = 1.7
+    return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2
 
 
 def make_logo_and_animation(out):
@@ -175,50 +229,53 @@ def make_logo_and_animation(out):
 
     # Static logo, 1600 x 900, supersampled.
     ss = 3
-    big = render(L, ss)
-    big.resize((W, H), Image.LANCZOS).save(f"{out}/psice-logo.png", optimize=True)
+    img = frame(L, ss, p=p_path(L), dot=1, ring=1, letters=[(1.0, 0.0)] * len(WORD), pin=1)
+    img.convert("RGB").resize((W, H), Image.LANCZOS).save(f"{out}/psice-logo.png", optimize=True)
 
-    # Animation, 800 x 450.
-    s_out, ss = 0.5, 2
-    pts = p_path(L)
-    spans = letter_spans(L)
-    frames, durations = [], []
-
-    def add(img, ms):
-        frames.append(img.resize((int(W * s_out), int(H * s_out)), Image.LANCZOS))
-        durations.append(ms)
-
-    s = s_out * ss
-    add(render(L, s, p_frac=0, dot=0, ring=0, text_until=0), 300)
-    n_p = 24
-    for i in range(1, n_p + 1):
-        t = ease(i / n_p)
-        k = max(1, int(len(pts) * t))
-        add(
-            render(
-                L, s, p_frac=t, dot=0, ring=0, text_until=0, cursor=pts[k - 1] if i < n_p else None
-            ),
-            35,
-        )
+    # Animation, 800 x 450 ("Vague", chosen by the team): the terminal appears, a spark draws
+    # the P, the junction dot lights up, then the letters of "sice" rise one after the other;
+    # last, the dot of the i appears as an unconnected pin and sends a warning pulse.
+    s = 1.0
+    pts = p_path(L, step=1.0)
+    frames = []
     for i in range(1, 7):
-        add(render(L, s, dot=pop(i / 6), ring=pop(i / 6 - 0.3) if i > 2 else 0, text_until=0), 35)
-    for a, b in spans:
-        n_l = 7
-        for i in range(1, n_l + 1):
-            x = a + (b - a) * ease(i / n_l)
-            add(render(L, s, text_until=x, cursor=(x, BASELINE - 60) if i < n_l else None), 35)
-    add(render(L, s), 2200)
-    full = frames[-1]
-    blank = render(L, s, p_frac=0, dot=0, ring=0, text_until=0).resize(full.size, Image.LANCZOS)
+        frames.append(frame(L, s, ring=ease_back(i / 6)))
+    n = 21
+    for i in range(1, n + 1):
+        k = max(1, int(len(pts) * ease(i / n)))
+        tip = pts[k - 1]
+        spark = [glow_layer(*tip, 34, s, 0.9), spark_layer(*tip, s)] if i < n else []
+        frames.append(frame(L, s, p=pts[:k], ring=1, extras=spark))
+    for i in range(1, 7):
+        glow = glow_layer(L["stem_x"], L["bowl_bottom"], 70, s, 1 - i / 7)
+        frames.append(frame(L, s, p=pts, ring=1, dot=ease_back(i / 6), extras=[glow]))
+    gap, dur = 3, 11
+    for f in range(1, gap * (len(WORD) - 1) + dur + 1):
+        letters = []
+        for j in range(len(WORD)):
+            t = min(1.0, max(0.0, (f - gap * j) / dur))
+            letters.append((min(1.0, t * 1.6), 50 * (1 - ease(t))))
+        frames.append(frame(L, s, p=pts, ring=1, dot=1, letters=letters))
+    full = [(1.0, 0.0)] * len(WORD)
     for i in range(1, 9):
-        frames.append(Image.blend(full, blank, i / 8))
-        durations.append(40)
+        frames.append(frame(L, s, p=pts, ring=1, dot=1, letters=full, pin=ease_back(i / 8)))
+    for i in range(1, 19):
+        frames.append(frame(L, s, p=pts, ring=1, dot=1, letters=full, pin=1, pulse=i / 19))
+    frames.append(frame(L, s, p=pts, ring=1, dot=1, letters=full, pin=1))
+    durations = [20] * len(frames)  # 50 images/s; GIF players slow down anything shorter
+    durations[-1] = 2000
+    last = frames[-1]
+    blank = background(s).convert("RGBA")
+    for i in range(1, 11):
+        frames.append(Image.blend(last, blank, i / 10))
+        durations.append(20)
     durations[-1] = 400
 
-    frames[0].save(
+    small = [f.convert("RGB").resize((W // 2, H // 2), Image.LANCZOS) for f in frames]
+    small[0].save(
         f"{out}/psice-logo-animation.gif",
         save_all=True,
-        append_images=frames[1:],
+        append_images=small[1:],
         duration=durations,
         loop=0,
         optimize=True,
@@ -250,23 +307,45 @@ def p_svg(L, stroke, dot=True, ring=True, hole=True):
     return parts
 
 
+def _contours(glyph, glyphs):
+    """Split a glyph into contours: [(lowest y in font units, recording)]."""
+    rec = DecomposingRecordingPen(glyphs)
+    glyph.draw(rec)
+    contours, current = [], []
+    for op, args in rec.value:
+        current.append((op, args))
+        if op in ("closePath", "endPath"):
+            ys = [pt[1] for _, a in current for pt in a]
+            contours.append((min(ys) if ys else 0, current))
+            current = []
+    return contours
+
+
 def word_svg(L):
     """'sice' as outlines, so the SVG does not need the font installed."""
     tt = TTFont(FONT)
     glyphs = tt.getGlyphSet()
     cmap = tt.getBestCmap()
     scale = FONT_SIZE / tt["head"].unitsPerEm
+    limit = (BASELINE - dot_top_limit()) / scale  # in font units, above the baseline
     f = font(1)
     paths = []
     for i, ch in enumerate(WORD):
-        pen = SVGPathPen(glyphs)
-        glyphs[cmap[ord(ch)]].draw(pen)
         x = L["text_x"] + f.getlength(WORD[:i])
-        paths.append(
-            f'<path transform="translate({x:.2f} {BASELINE}) scale({scale:.6f} {-scale:.6f})" '
-            f'd="{pen.getCommands()}"/>'
-        )
-    return f'<g fill="{NAVY_HEX}">' + "".join(paths) + "</g>"
+        transform = f"translate({x:.2f} {BASELINE}) scale({scale:.6f} {-scale:.6f})"
+        body = SVGPathPen(glyphs)
+        for bottom, contour in _contours(glyphs[cmap[ord(ch)]], glyphs):
+            if ch == "i" and bottom > limit:
+                continue  # the dot of the i is drawn as a pin
+            for op, args in contour:
+                getattr(body, op)(*args)
+        paths.append(f'<path transform="{transform}" d="{body.getCommands()}"/>')
+    cx, cy, r = pin_geometry(L)
+    pin = (
+        f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r - PIN_WIDTH / 2:.2f}" '
+        f'fill="{PIN_FILL_HEX}" stroke="{RED_HEX}" stroke-width="{PIN_WIDTH}"/>'
+    )
+    return f'<g fill="{NAVY_HEX}">' + "".join(paths) + "</g>" + pin
 
 
 def svg(view, body, title):
