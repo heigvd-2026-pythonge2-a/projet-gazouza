@@ -25,6 +25,10 @@ export type Layout = {
   sideWidth: number;
   inspectorFraction: number;
   resultsFraction: number;
+  /** The results panel is shown: hidden until the first simulation (#96). */
+  resultsVisible: boolean;
+  /** The properties panel is shown: it can be closed to give its room to the others (#164). */
+  inspectorVisible: boolean;
 };
 
 export const DEFAULT_LAYOUT: Layout = {
@@ -33,6 +37,8 @@ export const DEFAULT_LAYOUT: Layout = {
   sideWidth: SIDE_WIDTH.default,
   inspectorFraction: INSPECTOR_FRACTION.default,
   resultsFraction: RESULTS_FRACTION.default,
+  resultsVisible: false,
+  inspectorVisible: true,
 };
 
 /** Clamps `value` to [min, max]; when the range is empty, `min` wins. */
