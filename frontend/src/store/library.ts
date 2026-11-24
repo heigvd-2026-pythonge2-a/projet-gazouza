@@ -287,6 +287,15 @@ export function visibleParams(def: ComponentDef, params: Record<string, string>)
   );
 }
 
+/**
+ * The parameter edited by a double-click on the component (#197): its main value (resistance,
+ * capacitance, voltage…), else its first text (the node name of a label). Null when it has none.
+ */
+export function mainParam(def: ComponentDef, params: Record<string, string>): ParamDef | null {
+  const shown = visibleParams(def, params);
+  return shown.find((p) => p.kind === "value") ?? shown.find((p) => p.kind === "text") ?? null;
+}
+
 export interface Bounds {
   min: GridPoint;
   max: GridPoint;
