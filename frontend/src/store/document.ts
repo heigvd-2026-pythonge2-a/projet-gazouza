@@ -262,6 +262,92 @@ export function docBounds(doc: EditorDoc): GridRect | null {
   };
 }
 
+// --- Overlapping components -----------------------------------------------------------------
+
+/** Box of a component's symbol and pins, on the grid (rotation and mirror applied). */
+export function componentBox(c: PlacedComponent): GridRect {
+  const { min, max } = symbolBounds(getDef(c.type));
+  return rectFrom(toWorld(min, c), toWorld(max, c));
+}
+
+const pinPoints = (c: PlacedComponent): GridPoint[] =>
+  getDef(c.type).pins.map((pin) => toWorld(pin, c));
+
+/**
+ * True if the symbols of two components overlap, even partly (boxes that only touch do not).
+ * The one exception: two components with exactly one pin at the same point are connected
+ * directly, without a wire, so their boxes may meet around that pin.
+ */
+export function componentsOverlap(a: PlacedComponent, b: PlacedComponent): boolean {
+  const ra = componentBox(a);
+  const rb = componentBox(b);
+  const width = Math.min(ra.max.x, rb.max.x) - Math.max(ra.min.x, rb.min.x);
+  const height = Math.min(ra.max.y, rb.max.y) - Math.max(ra.min.y, rb.min.y);
+  if (width <= 0 || height <= 0) return false;
+  const pa = pinPoints(a);
+  const shared = pinPoints(b).filter((p) => pa.some((q) => samePoint(p, q))).length;
+  return shared !== 1;
+}
+
+/** Pairs ("a|b") of a component of `ids` and another component, not in `ids`, that overlap. */
+export function overlappingPairs(doc: EditorDoc, ids: ReadonlySet<string>): Set<string> {
+  const pairs = new Set<string>();
+  const moved = doc.components.filter((c) => ids.has(c.id));
+  const others = doc.components.filter((c) => !ids.has(c.id));
+  for (const a of moved) {
+    for (const b of others) if (componentsOverlap(a, b)) pairs.add(`${a.id}|${b.id}`);
+  }
+  return pairs;
+}
+
+/** How far (grid steps, both axes added) `freeMove` looks for a free place around the target. */
+const FREE_SEARCH_RADIUS = 8;
+/** How many times `nudgeFree` shifts a new component before giving up. */
+const MAX_NUDGES = 50;
+
+/**
+ * Moves `ids` by `delta` (see `moveItems`), or by the nearest delta that puts no component of
+ * `ids` on top of another one. Overlaps listed in `allowed` (by default those already there
+ * before the move) are tolerated, so an old file with overlapping symbols can still be edited.
+ * If nothing is free nearby, `doc` is returned unchanged.
+ */
+export function freeMove(
+  doc: EditorDoc,
+  ids: ReadonlySet<string>,
+  delta: GridPoint,
+  allowed: ReadonlySet<string> = overlappingPairs(doc, ids),
+): EditorDoc {
+  const fits = (d: GridPoint): EditorDoc | null => {
+    const moved = moveItems(doc, ids, d);
+    for (const pair of overlappingPairs(moved, ids)) if (!allowed.has(pair)) return null;
+    return moved;
+  };
+  for (let r = 0; r <= FREE_SEARCH_RADIUS; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const dy = r - Math.abs(dx);
+      for (const sy of dy === 0 ? [0] : [-dy, dy]) {
+        const moved = fits({ x: delta.x + dx, y: delta.y + sy });
+        if (moved) return moved;
+      }
+    }
+  }
+  return doc;
+}
+
+/**
+ * Shifts the new components `ids` by `step` again and again until they lie on no other
+ * component: placing several components at the same point spreads them out. Gives up (and
+ * leaves them where they are) after `MAX_NUDGES` steps.
+ */
+export function nudgeFree(doc: EditorDoc, ids: ReadonlySet<string>, step: GridPoint): EditorDoc {
+  let out = doc;
+  for (let i = 0; i < MAX_NUDGES; i++) {
+    if (overlappingPairs(out, ids).size === 0) return out;
+    out = moveItems(out, ids, step);
+  }
+  return doc;
+}
+
 // --- Ids and names --------------------------------------------------------------------------
 
 /** Next value of the form `${prefix}${n}`, one above the highest existing n (case-insensitive). */

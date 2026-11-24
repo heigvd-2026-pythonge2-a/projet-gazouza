@@ -11,11 +11,13 @@ import {
   copyItems,
   deleteItems,
   deleteSegment,
+  docBounds,
   emptyDoc,
+  freeMove,
   mirrorComponents,
   moveComponent,
-  moveItems,
   moveWirePart,
+  nudgeFree,
   pasteClip,
   renameComponent,
   rotateComponents,
@@ -31,13 +33,31 @@ import {
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
 
-/** Grid units between a copied (or pasted) group and the next paste. */
+/** Grid units a component placed on top of another one is shifted by, until it is free. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
 
 export type Tool =
   | { kind: "select" }
   | { kind: "place"; type: string; rotation: Rotation; mirror: boolean }
-  | { kind: "wire" };
+  | { kind: "wire" }
+  /** Pasted or duplicated items follow the mouse until a click drops them (#166). */
+  | { kind: "paste"; clip: Clip };
+
+/**
+ * Grid point of a clip that follows the mouse while pasting: the middle of its items, rounded,
+ * so the copy is centred on the pointer.
+ */
+export function clipAnchor(clip: Clip): GridPoint {
+  const bounds = docBounds(clip);
+  if (!bounds) return { x: 0, y: 0 };
+  return {
+    x: Math.round((bounds.min.x + bounds.max.x) / 2),
+    y: Math.round((bounds.min.y + bounds.max.y) / 2),
+  };
+}
+
+const hasItems = (clip: Clip | null): clip is Clip =>
+  clip !== null && clip.components.length + clip.wires.length > 0;
 
 /** Wire being drawn: not part of the document until it is finished. */
 export interface WireDraft {
@@ -91,14 +111,18 @@ interface EditorState {
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
   startPlacing: (type: string) => void;
-  /** Places the component of the active "place" tool at this grid position. */
+  /**
+   * Places the component of the active "place" tool at this grid position, or a bit further
+   * if another component is already there (see `nudgeFree`).
+   */
   placeAt: (position: GridPoint) => void;
   /** Adds a component dropped from the palette, selects it and goes back to the select tool. */
   dropComponent: (type: string, position: GridPoint) => void;
   moveComponent: (id: string, position: GridPoint) => void;
   /**
-   * Moves the selected items by `delta` (grid units). `merge` makes consecutive moves one undo
-   * step (arrow keys held down).
+   * Moves the selected items by `delta` (grid units), or to the nearest place where no component
+   * lies on another one (see `freeMove`). `merge` makes consecutive moves one undo step (arrow
+   * keys held down).
    */
   moveSelection: (delta: GridPoint, merge?: boolean) => void;
   renameComponent: (id: string, name: string) => void;
@@ -139,13 +163,19 @@ interface EditorState {
   selectAll: () => void;
   /** Ctrl+C: copies the selection (and the wires between selected items) to the clipboard. */
   copy: () => void;
-  /**
-   * Ctrl+V: pastes the clipboard a few grid units further, and selects the pasted items. Pasting
-   * again goes further again.
-   */
+  /** Ctrl+V: the clipboard follows the mouse (tool "paste") until `pasteAt`. */
   paste: () => void;
-  /** Ctrl+D: copies and pastes the selection in one go (the clipboard is left as it is). */
+  /**
+   * Ctrl+D: a copy of the selection follows the mouse (tool "paste") until `pasteAt`. The
+   * clipboard is left as it is.
+   */
   duplicate: () => void;
+  /**
+   * Click with the "paste" tool: drops the copy centred on `position` (or on the nearest place
+   * where it covers no component), selects it and goes back to the select tool. Escape or a
+   * right click (`cancel`) drops nothing.
+   */
+  pasteAt: (position: GridPoint) => void;
   /** Ctrl+Z: goes back to the document before the last change. */
   undo: () => void;
   /** Ctrl+Y / Ctrl+Shift+Z: re-applies the last undone change. */
@@ -241,15 +271,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => {
       if (s.tool.kind !== "place") return {};
       const { type, rotation, mirror } = s.tool;
-      const { doc } = addComponent(s.doc, { type, position, rotation, mirror });
-      return change(s, doc);
+      const added = addComponent(s.doc, { type, position, rotation, mirror });
+      return change(s, nudgeFree(added.doc, new Set([added.id]), PASTE_OFFSET));
     }),
 
   dropComponent: (type, position) =>
     set((s) => {
       const added = addComponent(s.doc, { type, position, rotation: 0, mirror: false });
       return {
-        ...change(s, added.doc),
+        ...change(s, nudgeFree(added.doc, new Set([added.id]), PASTE_OFFSET)),
         selection: [added.id],
         wirePart: null,
         tool: { kind: "select" },
@@ -266,7 +296,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   moveSelection: (delta, merge = false) =>
     set((s) => {
-      const doc = moveItems(s.doc, new Set(s.selection), delta);
+      const doc = freeMove(s.doc, new Set(s.selection), delta);
       return change(s, doc, merge ? `move:${s.selection.join(",")}` : null);
     }),
 
@@ -418,27 +448,36 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     ),
 
   paste: () =>
-    set((s) => {
-      if (!s.clipboard || s.clipboard.components.length + s.clipboard.wires.length === 0) return {};
-      const pasted = pasteClip(s.doc, s.clipboard, PASTE_OFFSET);
-      return {
-        ...change(s, pasted.doc),
-        selection: pasted.ids,
-        wirePart: null,
-        tool: { kind: "select" },
-        draft: null,
-        // The next paste lands next to this one, not on top of it.
-        clipboard: copyItems(pasted.doc, new Set(pasted.ids)),
-      };
-    }),
+    set((s) =>
+      hasItems(s.clipboard)
+        ? { tool: { kind: "paste", clip: s.clipboard }, selection: [], wirePart: null, draft: null }
+        : {},
+    ),
 
   duplicate: () =>
     set((s) => {
       if (s.selection.length === 0) return {};
       const clip = copyItems(s.doc, new Set(s.selection));
-      if (clip.components.length + clip.wires.length === 0) return {};
-      const pasted = pasteClip(s.doc, clip, PASTE_OFFSET);
-      return { ...change(s, pasted.doc), selection: pasted.ids, wirePart: null };
+      return hasItems(clip)
+        ? { tool: { kind: "paste", clip }, selection: [], wirePart: null, draft: null }
+        : {};
+    }),
+
+  pasteAt: (position) =>
+    set((s) => {
+      if (s.tool.kind !== "paste") return {};
+      const anchor = clipAnchor(s.tool.clip);
+      const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
+      const pasted = pasteClip(s.doc, s.tool.clip, offset);
+      // Every overlap is new: the pasted items were not there before.
+      const doc = freeMove(pasted.doc, new Set(pasted.ids), { x: 0, y: 0 }, new Set());
+      return {
+        ...change(s, doc),
+        selection: pasted.ids,
+        wirePart: null,
+        tool: { kind: "select" },
+        draft: null,
+      };
     }),
 
   undo: () =>
