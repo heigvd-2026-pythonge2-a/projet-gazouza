@@ -431,9 +431,11 @@ def _ac(args: list[str], result: AscImport) -> Analysis | None:
         result.warnings.append("Analyse .ac : aucune source n'a d'amplitude « AC ».")
         return None
     if len(result.ac_sources) > 1:
+        names = {c.id: c.name for c in result.schematic.components}
+        sources = ", ".join(str(names[i]) for i in result.ac_sources)
         result.warnings.append(
-            "Analyse .ac : plusieurs sources ont une amplitude « AC » ; Psice n'en utilise "
-            "qu'une, la première."
+            f"Analyse .ac : plusieurs sources ont une amplitude « AC » ({sources}) ; Psice "
+            f"n'en utilise qu'une : {names[result.ac_sources[0]]} sert d'entrée."
         )
     return AcAnalysis(
         input_source_id=result.ac_sources[0],

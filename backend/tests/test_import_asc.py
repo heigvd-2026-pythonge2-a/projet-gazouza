@@ -453,7 +453,8 @@ def test_real_bode_file() -> None:
     )
     v1 = next(c for c in result.schematic.components if c.name == "V1")
     assert v1.params["dc"] == "0"  # Value "" in the file
-    assert any("plusieurs sources" in w for w in result.warnings)  # V1, V2, V3 have AC 1
+    # V1, V2 and V3 have "AC 1": the warning says which one is the input.
+    assert any("(V1, V2, V3)" in w and "V1 sert d'entrée" in w for w in result.warnings)
 
 
 @pytest.mark.ngspice
