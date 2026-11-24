@@ -10,10 +10,19 @@
       "Bash(pnpm lint:*)",
       "Bash(pnpm format:*)",
       "Bash(pnpm build:*)",
+      "Bash(pnpm test:*)",
       "Bash(pnpm gen:api:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr diff:*)"
     ],
     "deny": [
       "Edit(shared/openapi.json)",
