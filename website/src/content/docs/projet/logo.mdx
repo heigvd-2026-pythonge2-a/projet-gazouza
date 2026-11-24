@@ -1,0 +1,61 @@
+---
+title: Logo
+description: Le logo de Psice, son dessin, ses couleurs et ses fichiers sources.
+---
+
+import { Image } from 'astro:assets';
+import logoLight from '../../../assets/psice-logo.svg';
+import logoDark from '../../../assets/psice-logo-dark.svg';
+
+<div class="psice-logo-frame not-content">
+	<Image src={logoLight} alt="Logo Psice" class="dark:sl-hidden" width={480} />
+	<Image src={logoDark} alt="Logo Psice" class="light:sl-hidden" width={480} />
+</div>
+
+Le logo a été choisi par l'équipe (issue #4, proposition « Monogramme circuit »). Il reprend
+les symboles de l'éditeur de schéma :
+
+- un grand **P** dont la patte se termine par une **borne de circuit** bleue : un point de
+  connexion plein et une borne ouverte ;
+- le point du **i**, dessiné comme une **broche non connectée** de l'éditeur : un cercle rouge
+  avec un intérieur rouge très clair.
+
+Le grand **P** est la première lettre du nom : il est collé à « sice », pour qu'on lise
+directement **Psice**.
+
+## Couleurs
+
+| Couleur | Code | Où |
+|---|---|---|
+| <span style="color:#0F172A">■</span> Bleu nuit | `#0F172A` | Lettre P et texte « sice » |
+| <span style="color:#2563EB">■</span> Bleu | `#2563EB` | Point de connexion et borne ; couleur principale de ce site |
+| <span style="color:#DC2626">■</span> Rouge | `#DC2626` | Contour du point du « i » |
+| <span style="color:#FADEDE">■</span> Rouge très clair | `#FADEDE` | Intérieur du point du « i » |
+| Blanc | `#FFFFFF` | Fond |
+
+En mode sombre, ce site affiche une variante où le bleu nuit est remplacé par un blanc cassé
+(`#F1F5F9`), pour que les lettres restent lisibles.
+
+## Animation
+
+Pour la démonstration et l'écran de démarrage, une animation d'environ une seconde et demie :
+la borne apparaît, une étincelle trace le grand P, le point de connexion s'allume, les lettres
+de « sice » montent l'une après l'autre comme une vague, puis le point du « i » lance une onde
+rouge, comme une alerte.
+
+## Fichiers
+
+Les sources sont dans
+[`assets/brand/`](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/tree/main/assets/brand),
+générées par le script `make_brand.py` :
+
+| Fichier | Usage |
+|---|---|
+| `psice-logo.svg` | Logo complet, vectoriel, fond transparent |
+| `psice-icon.svg` | Icône carrée (le P seul sur une tuile blanche) — favicon de ce site |
+| `psice-icon-small.svg` | Icône simplifiée pour 16 à 32 px |
+| `psice.ico` | Icône Windows multi-tailles de l'application |
+| `docs/images/psice-logo-animation.gif` | Animation du logo |
+
+Voir aussi [`docs/logo.md`](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/blob/main/docs/logo.md)
+et les conditions d'utilisation des lettres dans [Licences](/projet-gazouza/projet/licences/).
