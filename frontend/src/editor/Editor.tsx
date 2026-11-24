@@ -8,6 +8,8 @@ import {
   clipAnchor,
   docBounds,
   freshSimulation,
+  getDef,
+  mainParam,
   moveItems,
   moveWirePart,
   pinPosition,
@@ -35,6 +37,7 @@ import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
+import { ValuePopover } from "./ValuePopover";
 import { registerViewCommands } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
@@ -209,6 +212,8 @@ export function SchematicCanvas() {
   } | null>(null);
   /** Where the selected wire part is being dragged (grid point), before the store changes. */
   const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
+  /** Component whose main value is being edited in the menu over it (double-click). */
+  const [editing, setEditing] = useState<string | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
   const endPress = useRef<(() => void) | null>(null);
 
@@ -559,6 +564,7 @@ export function SchematicCanvas() {
     storeDoc.components.find((x) => x.id === c.id) ?? c;
 
   const closeMenu = useCallback(() => setMenu(null), []);
+  const closeEditing = useCallback(() => setEditing(null), []);
 
   const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
     if (tool.kind !== "select") return;
@@ -675,7 +681,9 @@ export function SchematicCanvas() {
                 tool.kind === "select"
                   ? () => {
                       select([c.id]);
-                      focusInspector({ value: true });
+                      // A component with no value to type (ground) goes to the panel instead.
+                      if (mainParam(getDef(c.type), c.params)) setEditing(c.id);
+                      else focusInspector();
                     }
                   : undefined
               }
@@ -774,6 +782,7 @@ export function SchematicCanvas() {
         </button>
         <span>{Math.round(viewport.scale * 100)} %</span>
       </div>
+      {editing && <ValuePopover componentId={editing} viewport={viewport} onClose={closeEditing} />}
       {menu && (
         <ContextMenu
           x={menu.x}

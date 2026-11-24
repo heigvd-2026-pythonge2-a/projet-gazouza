@@ -3,7 +3,7 @@
 // MILLI_SUFFIX) at simulation time: these checks only warn the user earlier. Texts in French.
 
 import { nameProblem, netNameProblem, type EditorDoc } from "./document";
-import { getDef, visibleParams } from "./library";
+import { getDef, visibleParams, type ParamDef } from "./library";
 
 /** Units allowed after the suffix, ignored like in SPICE ("1kOhm", "10uF"). */
 const UNITS = ["ohm", "Ω", "hz", "v", "a", "s", "h", "f"];
@@ -87,6 +87,18 @@ export function invalidValues(doc: EditorDoc): InvalidValue[] {
   });
 }
 
+/**
+ * What is wrong with `value` typed for the parameter `p` of a component of type `type`, or null:
+ * the node name of a label, or a SPICE number. Other parameters (choices) are never wrong.
+ */
+export function paramProblem(type: string, p: ParamDef, value: string): ValueProblem | null {
+  if (type === "label" && p.name === "net") {
+    const message = netNameProblem(value);
+    return message ? { level: "error", message } : null;
+  }
+  return p.kind === "value" ? valueProblem(value, p.unit) : null;
+}
+
 /** What is wrong with one field of a component, as shown next to it on the schematic (#196). */
 export interface ComponentProblem extends ValueProblem {
   comp: string;
@@ -108,14 +120,8 @@ export function componentProblems(doc: EditorDoc): ComponentProblem[] {
       if (message) found.push({ comp: c.id, param: null, level: "error", message });
     }
     for (const p of visibleParams(def, c.params)) {
-      const value = c.params[p.name] ?? "";
-      if (c.type === "label" && p.name === "net") {
-        const message = netNameProblem(value);
-        if (message) found.push({ comp: c.id, param: p.name, level: "error", message });
-      } else if (p.kind === "value") {
-        const problem = valueProblem(value, p.unit);
-        if (problem) found.push({ comp: c.id, param: p.name, ...problem });
-      }
+      const problem = paramProblem(c.type, p, c.params[p.name] ?? "");
+      if (problem) found.push({ comp: c.id, param: p.name, ...problem });
     }
     const first = found.find((f) => f.level === "error") ?? found[0];
     return first ? [first] : [];

@@ -39,6 +39,7 @@ afficher cette liste à tout moment.
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
 | Clic (après coller ou dupliquer) | Poser la copie qui suit la souris |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
+| Double-clic sur un composant | Changer sa valeur sur le schéma |
 | Clic droit sur un composant | Menu des actions |
 
 ## Composants
