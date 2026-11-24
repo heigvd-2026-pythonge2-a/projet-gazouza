@@ -31,6 +31,10 @@ Les séparateurs entre panneaux se déplacent à la souris, et chaque panneau pe
 Les composants se placent sur la **grille** : leurs broches tombent toujours sur un point, ce qui
 évite les fils « presque » connectés.
 
+Un composant ne se pose jamais **sur** un autre : s'il y a déjà quelque chose à cet endroit, il
+est décalé jusqu'à une place libre (et un déplacement s'arrête à la place libre la plus proche).
+Deux composants peuvent quand même se toucher par **une** broche : ils sont alors reliés.
+
 ## Tracer des fils
 
 - **Tire un fil depuis une broche**, ou appuie sur <kbd>W</kbd> pour prendre l'outil **Fil**.
@@ -58,8 +62,8 @@ Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
 | Double-clic sur un fil | Sélectionner le fil entier |
 | <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
 | Flèches | Déplacer la sélection d'un pas de grille |
-| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
-| <kbd>Ctrl+D</kbd> | Dupliquer |
+| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) : la copie suit la souris, un clic la pose |
+| <kbd>Ctrl+D</kbd> | Dupliquer (la copie suit aussi la souris) |
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
