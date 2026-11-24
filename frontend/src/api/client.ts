@@ -70,6 +70,14 @@ async function request<T>(
   { signal, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
 ): Promise<T> {
   const what = `${init.method ?? "GET"} ${path}`;
+  // Online demo on the website: no backend, answers come from the fixtures. Vite replaces
+  // MODE at build time, so this branch and its import are left out of the app's build.
+  if (import.meta.env.MODE === "demo") {
+    const { demoAnswer, DEMO_UNAVAILABLE } = await import("./demoBackend");
+    const answer = demoAnswer(init.method ?? "GET", path);
+    if (answer === undefined) throw new ApiError("unreachable", DEMO_UNAVAILABLE);
+    return answer as T;
+  }
   const timeout = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {

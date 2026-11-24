@@ -1,5 +1,5 @@
-// Development only: loads a circuit of shared/fixtures/ with its simulation result, to try the
-// current animation before the simulation is wired to the backend.
+// Development and online demo (website) only: loads a circuit of shared/fixtures/ with its
+// simulation result, to try the current animation before the simulation is wired to the backend.
 //   - in the browser console: psiceDemo("rc_tran")
 //   - or in the URL: http://localhost:5173/?demo=divider_op
 
