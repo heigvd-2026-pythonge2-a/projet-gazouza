@@ -20,11 +20,24 @@ type Props = {
   onChange: (size: number) => void;
   /** Double-click: back to the default size. */
   onReset: () => void;
+  /**
+   * End of a drag that moved: the size asked for when the pointer was released (not clamped) and
+   * the size at the start of the drag. Lets the caller fold the panel away (#198).
+   */
+  onRelease?: (wanted: number, start: number) => void;
 };
 
 /** Draggable bar between two panels. Also usable with the arrow keys once focused. */
-export function Splitter({ orientation, label, value, direction, onChange, onReset }: Props) {
-  const drag = useRef<{ start: number; value: number } | null>(null);
+export function Splitter({
+  orientation,
+  label,
+  value,
+  direction,
+  onChange,
+  onReset,
+  onRelease,
+}: Props) {
+  const drag = useRef<{ start: number; value: number; wanted: number | null } | null>(null);
   const [active, setActive] = useState(false);
   const [hover, setHover] = useState(false);
   const vertical = orientation === "vertical";
@@ -34,16 +47,20 @@ export function Splitter({ orientation, label, value, direction, onChange, onRes
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { start: position(e), value };
+    drag.current = { start: position(e), value, wanted: null };
     setActive(true);
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
-    onChange(drag.current.value + direction * (position(e) - drag.current.start));
+    const wanted = drag.current.value + direction * (position(e) - drag.current.start);
+    drag.current.wanted = wanted;
+    onChange(wanted);
   };
-  const endDrag = () => {
+  const endDrag = (released: boolean) => {
+    const ended = drag.current;
     drag.current = null;
     setActive(false);
+    if (released && ended?.wanted != null) onRelease?.(ended.wanted, ended.value);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const [less, more] = vertical ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
@@ -62,8 +79,8 @@ export function Splitter({ orientation, label, value, direction, onChange, onRes
       title="Glisser pour redimensionner · Double-clic : taille par défaut"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onPointerUp={() => endDrag(true)}
+      onPointerCancel={() => endDrag(false)}
       onDoubleClick={onReset}
       onKeyDown={onKeyDown}
       style={{

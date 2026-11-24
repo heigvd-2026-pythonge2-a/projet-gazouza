@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MaximizeButton } from "./MaximizeButton";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
+import { PanelHandle } from "./PanelHandle";
 import { Splitter } from "./Splitter";
 
 describe("Splitter", () => {
@@ -16,6 +17,7 @@ describe("Splitter", () => {
   const setup = (direction: 1 | -1, orientation: "vertical" | "horizontal" = "vertical") => {
     const onChange = vi.fn();
     const onReset = vi.fn();
+    const onRelease = vi.fn();
     render(
       <Splitter
         orientation={orientation}
@@ -24,9 +26,15 @@ describe("Splitter", () => {
         direction={direction}
         onChange={onChange}
         onReset={onReset}
+        onRelease={onRelease}
       />,
     );
-    return { onChange, onReset, bar: screen.getByRole("separator", { name: "Redimensionner" }) };
+    return {
+      onChange,
+      onReset,
+      onRelease,
+      bar: screen.getByRole("separator", { name: "Redimensionner" }),
+    };
   };
 
   it("resizes with the arrow keys, in the panel's direction", async () => {
@@ -135,5 +143,59 @@ describe("PanelErrorBoundary", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveAttribute("title", "Boum");
     expect(alert.querySelectorAll("p")).toHaveLength(0);
+  });
+});
+
+describe("Splitter release", () => {
+  beforeEach(() => {
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+  });
+
+  it("gives the size asked for and the starting size, after a drag only", () => {
+    const onRelease = vi.fn();
+    render(
+      <Splitter
+        orientation="vertical"
+        label="Redimensionner"
+        value={300}
+        direction={-1}
+        onChange={() => {}}
+        onReset={() => {}}
+        onRelease={onRelease}
+      />,
+    );
+    const bar = screen.getByRole("separator");
+    // A press without moving is not a drag (a double-click starts with one).
+    fireEvent.pointerDown(bar, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(bar, { pointerId: 1 });
+    expect(onRelease).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(bar, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(bar, { clientX: 350, pointerId: 1 });
+    fireEvent.pointerUp(bar, { pointerId: 1 });
+    expect(onRelease).toHaveBeenCalledExactlyOnceWith(50, 300);
+
+    // A cancelled drag (the window lost the pointer) does not fold anything.
+    fireEvent.pointerDown(bar, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(bar, { clientX: 350, pointerId: 1 });
+    fireEvent.pointerCancel(bar, { pointerId: 1 });
+    expect(onRelease).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PanelHandle", () => {
+  it("names the panel, and opens it on a click or a drag", async () => {
+    const onOpen = vi.fn();
+    render(<PanelHandle panel="Propriétés" opens="left" onOpen={onOpen} />);
+    const handle = screen.getByRole("button", { name: "Afficher le panneau Propriétés" });
+    expect(handle).toHaveTextContent("◀Propriétés");
+    await userEvent.click(handle);
+    expect(onOpen).toHaveBeenCalledOnce();
+
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100, clientY: 0 });
+    fireEvent.pointerMove(handle, { clientX: 102, clientY: 0 });
+    expect(onOpen).toHaveBeenCalledOnce();
+    fireEvent.pointerMove(handle, { clientX: 80, clientY: 0 });
+    expect(onOpen).toHaveBeenCalledTimes(2);
   });
 });
