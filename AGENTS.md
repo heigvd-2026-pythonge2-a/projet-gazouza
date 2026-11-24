@@ -100,10 +100,13 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
 - **Statut des issues** : les issues ont un statut GitHub (`Todo`, `In progress`, `In review`,
   `Done`…, onglet « Active » de la liste). Dès qu'une session commence à travailler sur une
   branche qui traite une ou plusieurs issues, passe chacune en `In progress`, avant le premier
-  commit, pour que l'équipe voie ce qui est pris. À l'ouverture de la PR, passe-les en
-  `In review`. Si la branche est abandonnée, remets-les en `Todo`. La fusion d'une PR avec
-  `Closes #N` ferme l'issue ; avec `Refs #N`, remets l'issue en `Todo` si personne ne continue
-  la suite. `gh issue edit` ne sait pas changer ce statut, il faut passer par l'API :
+  commit, pour que l'équipe voie ce qui est pris. Ensuite, le workflow
+  [`issue-status.yml`](.github/workflows/issue-status.yml) s'occupe des issues fermées par la
+  PR (`Closes #N`) : `In review` quand la PR est ouverte, `In progress` si elle repasse en
+  brouillon, `Todo` si elle est fermée sans fusion ; la fusion ferme l'issue et la passe en
+  `Done`. Il ne voit pas les issues seulement citées (`Refs #N`) : remets-les en `Todo` toi-même
+  si personne ne continue la suite, ou si tu abandonnes la branche avant d'ouvrir une PR.
+  `gh issue edit` ne sait pas changer ce statut, il faut passer par l'API :
 
   ```powershell
   gh api graphql -f query='mutation($i:ID!,$s:ID!){setIssueStatus(input:{issueId:$i,statusId:$s}){clientMutationId}}' -f i=$(gh issue view <N> --json id -q .id) -f s=<statut>
