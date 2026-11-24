@@ -22,7 +22,7 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
 | `backend/app/models/`, `netlist/`, `importers/`, `api/` | Damien Bignens |
 | `backend/app/engines/`, `backend/vendor/ngspice/`, `launcher.py`, `build.ps1` | Antoine Bezençon |
 | `shared/fixtures/` | Tous (chaque fichier a un producteur, voir `shared/fixtures/README.md`) |
-| `frontend/src/api/client.ts`, `frontend/src/App.tsx`, CI, configs racine | À coordonner en équipe |
+| `website/`, `frontend/src/api/client.ts`, `frontend/src/App.tsx`, CI, configs racine | À coordonner en équipe |
 
 ## Règles importantes
 
@@ -96,6 +96,11 @@ pnpm test                                     # tests unitaires (vitest)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
 pnpm gen:api                                  # régénérer les types depuis shared/openapi.json
+
+# Site web et documentation (dans website/)
+pnpm install
+pnpm dev                                      # http://localhost:4321/projet-gazouza/
+pnpm build                                    # build du site statique (Astro)
 ```
 
 Avant de considérer une tâche terminée : tests, lint et formatage doivent passer pour la partie
