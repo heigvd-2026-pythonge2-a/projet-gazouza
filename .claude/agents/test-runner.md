@@ -1,7 +1,7 @@
 ---
 name: test-runner
 description: Runs the project's checks (tests, lint, format, build) for the backend, frontend or website and reports a short pass/fail summary. Use it to run checks whose output is long, so the main session does not read the full logs. It does not fix anything.
-tools: Bash, Read, Grep, Glob
+tools: Bash, PowerShell, Read, Grep, Glob
 model: haiku
 ---
 
