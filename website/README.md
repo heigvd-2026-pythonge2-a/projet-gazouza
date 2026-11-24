@@ -27,6 +27,7 @@ website/
 │   └── content/
 │       └── docs/        pages de documentation (Markdown / MDX)
 │           ├── guides/  guides d'utilisation
+│           ├── reference/ pages de référence
 │           └── index.mdx page d'accueil
 ├── astro.config.mjs     configuration du thème Starlight et du chemin de base
 ├── package.json
