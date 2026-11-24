@@ -13,6 +13,7 @@ afficher cette liste à tout moment.
 | <kbd>Ctrl+N</kbd> | Nouveau schéma |
 | <kbd>Ctrl+O</kbd> | Ouvrir un schéma |
 | <kbd>Ctrl+S</kbd> | Enregistrer le schéma |
+| <kbd>Ctrl+Maj+S</kbd> | Enregistrer le schéma sous un autre nom |
 
 ## Sélection
 

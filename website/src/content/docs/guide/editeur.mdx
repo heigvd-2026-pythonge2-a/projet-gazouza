@@ -104,9 +104,16 @@ Les valeurs se tapent avec les suffixes SPICE (`4.7k`, `100n`) : voir
 | <kbd>Ctrl+N</kbd> | Nouveau schéma |
 | <kbd>Ctrl+O</kbd> | Ouvrir un schéma |
 | <kbd>Ctrl+S</kbd> | Enregistrer |
+| <kbd>Ctrl+Maj+S</kbd> | Enregistrer sous (un autre fichier) |
 
 Les schémas sont enregistrés dans des fichiers **`.psice.json`** : du JSON lisible, décrit dans
 [Format de schéma](/projet-gazouza/developpeurs/format-schema/).
+
+<kbd>Ctrl+S</kbd> enregistre toujours, même sans modification. Si le fichier a été supprimé ou
+déplacé entre-temps, Psice te demande où l'enregistrer.
+
+Pour mettre le schéma dans un rapport, le bouton **Exporter** de la barre d'outils l'enregistre en
+image **PNG** : tout le circuit, sans la grille ni la sélection, sur fond blanc.
 
 Psice te demande confirmation avant de fermer ou d'ouvrir un autre schéma si tu as des
 modifications non enregistrées. Et si un panneau rencontre une erreur inattendue, il te propose
