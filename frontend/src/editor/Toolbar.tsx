@@ -1,7 +1,15 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { isUnsaved, useEditorStore } from "../store";
-import { exportImage, newFile, openFile, saveFile, saveFileAs } from "./fileActions";
+import {
+  exportImage,
+  exportTransparent,
+  newFile,
+  openFile,
+  saveFile,
+  saveFileAs,
+  setExportTransparent,
+} from "./fileActions";
 import { exportNetlist } from "./simulationActions";
 import { UI } from "./theme";
 import { fitView, zoomIn, zoomOut } from "./viewCommands";
@@ -58,9 +66,11 @@ function ToolButton(props: {
   badge?: boolean;
   /** A tool button that is the active tool (shown pressed). */
   pressed?: boolean;
+  /** Set for a button that opens a panel: whether it is open. */
+  expanded?: boolean;
   onClick?: () => void;
 }) {
-  const { label, icon, disabled = false, badge = false, pressed, onClick } = props;
+  const { label, icon, disabled = false, badge = false, pressed, expanded, onClick } = props;
   return (
     // The wrapper shows the tooltip even when the button is disabled (no mouse events then).
     <span title={label} style={{ display: "inline-flex", position: "relative" }}>
@@ -69,6 +79,8 @@ function ToolButton(props: {
         aria-label={label}
         aria-pressed={pressed}
         disabled={disabled}
+        aria-haspopup={expanded === undefined ? undefined : "dialog"}
+        aria-expanded={expanded}
         onClick={onClick}
         style={{
           display: "inline-flex",
@@ -79,7 +91,7 @@ function ToolButton(props: {
           padding: 0,
           border: `1px solid ${UI.border}`,
           borderRadius: 5,
-          background: pressed ? "#dbeafe" : "#ffffff",
+          background: pressed ? "#dbeafe" : expanded ? UI.activeBackground : "#ffffff",
           color: "#374151",
           opacity: disabled ? 0.4 : 1,
           cursor: disabled ? "default" : "pointer",
@@ -101,6 +113,108 @@ function ToolButton(props: {
             pointerEvents: "none",
           }}
         />
+      )}
+    </span>
+  );
+}
+
+/**
+ * "Exporter" button: opens a small panel with the export options (transparent background, #195)
+ * and the button that asks where to save the PNG. Closes on Escape or a press outside it.
+ */
+function ExportButton() {
+  const [open, setOpen] = useState(false);
+  const [transparent, setTransparent] = useState(exportTransparent);
+  const ref = useRef<HTMLSpanElement>(null);
+  const checkbox = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    checkbox.current?.focus();
+    const outside = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", outside, true);
+    return () => window.removeEventListener("pointerdown", outside, true);
+  }, [open]);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // The editor's shortcuts must not also see the keys typed in the panel.
+    e.stopPropagation();
+    if (e.key === "Escape") setOpen(false);
+  };
+
+  const run = () => {
+    setOpen(false);
+    void exportImage({ transparent });
+  };
+
+  return (
+    <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+      <ToolButton
+        label="Exporter le schéma en image PNG…"
+        icon="export"
+        expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && (
+        <div
+          role="dialog"
+          aria-label="Exporter en image PNG"
+          onKeyDown={onKeyDown}
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            zIndex: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            width: 230,
+            padding: 10,
+            background: "#ffffff",
+            border: `1px solid ${UI.border}`,
+            borderRadius: 6,
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+            fontSize: 13,
+            color: "#1f2937",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
+            <input
+              ref={checkbox}
+              type="checkbox"
+              checked={transparent}
+              onChange={(e) => {
+                setTransparent(e.target.checked);
+                setExportTransparent(e.target.checked);
+              }}
+              style={{ margin: "2px 0 0" }}
+            />
+            <span>
+              Fond transparent
+              <span style={{ display: "block", fontSize: 12, color: UI.muted }}>
+                Pour poser le schéma sur n'importe quel fond, dans un rapport. Sinon, fond blanc.
+              </span>
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={run}
+            style={{
+              alignSelf: "flex-end",
+              padding: "4px 10px",
+              border: "1px solid #2563eb",
+              borderRadius: 5,
+              background: "#2563eb",
+              color: "#ffffff",
+              font: "inherit",
+              cursor: "pointer",
+            }}
+          >
+            Exporter…
+          </button>
+        </div>
       )}
     </span>
   );
@@ -134,7 +248,9 @@ export function EditorToolbar() {
   const canUndo = useEditorStore((s) => s.history.past.length > 0);
   const canRedo = useEditorStore((s) => s.history.future.length > 0);
   const hasSelection = useEditorStore((s) => s.selection.length > 0);
-  const canDelete = useEditorStore((s) => s.selection.length > 0 || s.wirePart !== null);
+  const canDelete = useEditorStore(
+    (s) => s.selection.length > 0 || s.wirePart !== null || s.segments.length > 0,
+  );
   // Turning applies to the selected components, or to the one about to be placed.
   const canTurn = useEditorStore(
     (s) =>
@@ -162,11 +278,7 @@ export function EditorToolbar() {
         />
         <ToolButton label="Enregistrer sous… (Ctrl+Maj+S)" icon="saveAs" onClick={saveFileAs} />
         <ToolButton label={`Importer un fichier LTspice (.asc) — ${SOON}`} icon="import" disabled />
-        <ToolButton
-          label="Exporter le schéma en image PNG"
-          icon="export"
-          onClick={() => void exportImage()}
-        />
+        <ExportButton />
         <ToolButton
           label="Exporter la netlist SPICE (.cir), avec l'analyse choisie"
           icon="netlist"

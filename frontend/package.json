@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "vite build --mode demo --base ./ --outDir ../website/public/demo --emptyOutDir",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",

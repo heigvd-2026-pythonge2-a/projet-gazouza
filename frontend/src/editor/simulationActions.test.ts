@@ -90,6 +90,30 @@ describe("runSimulation (#100)", () => {
     expect(editorState().simulationError).toBeNull();
     expect(editorState().simulation).toBeNull();
   });
+
+  it("also stops while the nodes of an operating point are fetched", async () => {
+    // The simulation answers at once; the netlist (for the nodes) only when it is aborted.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init: RequestInit) =>
+        url === "/api/simulate"
+          ? Promise.resolve(Response.json(fixtureResult("divider_op")))
+          : new Promise((_, reject) =>
+              init.signal?.addEventListener("abort", () =>
+                reject(new DOMException("", "AbortError")),
+              ),
+            ),
+      ),
+    );
+    editorState().openDocument(fixtureDoc("divider_op"));
+    const first = runSimulation();
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2));
+    await runSimulation();
+    await first;
+    expect(editorState().simulating).toBe(false);
+    expect(editorState().simulationError).toBeNull();
+    expect(editorState().simulation).toBeNull();
+  });
 });
 
 describe("exportNetlist (#114)", () => {

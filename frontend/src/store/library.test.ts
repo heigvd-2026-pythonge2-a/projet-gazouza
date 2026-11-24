@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LibraryComponent } from "../api/client";
-import { getDef, isLibraryLoaded, loadLibrary, paletteGroups, setLibrary } from "./library";
+import {
+  getDef,
+  isLibraryLoaded,
+  loadLibrary,
+  mainParam,
+  paletteGroups,
+  setLibrary,
+} from "./library";
 import { fixtureLibrary } from "./testFixtures";
 
 // The setup file loads the fixture library before each test file: put it back after each test.
@@ -190,5 +197,20 @@ describe("loadLibrary", () => {
     expect(working).toHaveBeenCalledTimes(1);
     expect(isLibraryLoaded()).toBe(true);
     expect(getDef("capacitor").label).toBe("Condensateur");
+  });
+});
+
+describe("mainParam", () => {
+  it("is the main value, the node name of a label, or nothing", () => {
+    expect(mainParam(getDef("resistor"), {})?.name).toBe("resistance");
+    expect(mainParam(getDef("label"), { net: "out" })?.name).toBe("net");
+    expect(mainParam(getDef("ground"), {})).toBeNull();
+  });
+
+  it("follows the waveform of a source", () => {
+    const source = getDef("voltage_source");
+    expect(mainParam(source, { waveform: "dc" })?.name).toBe("dc");
+    expect(mainParam(source, { waveform: "pulse" })?.name).toBe("v1");
+    expect(mainParam(source, { waveform: "sin" })?.name).toBe("delay");
   });
 });

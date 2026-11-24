@@ -35,6 +35,7 @@ export default defineConfig({
             { label: 'Pourquoi Psice ?', slug: 'demarrer/presentation' },
             { label: 'Installation', slug: 'demarrer/installation' },
             { label: 'Premier circuit', slug: 'demarrer/premier-circuit' },
+            { label: 'Essayer en ligne', slug: 'demarrer/essayer' },
           ],
         },
         {

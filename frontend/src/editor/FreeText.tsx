@@ -23,10 +23,13 @@ interface FreeTextProps {
   onSelect?: (e: KonvaEventObject<MouseEvent>) => void;
   /** Right press on the text (the canvas decides on release what it means). */
   onContextPress?: () => void;
-  /** While dragging: the grid position the text would be dropped at. */
-  onDrag?: (position: GridPoint) => void;
-  /** End of a drag, with the grid position the text was dropped at. */
-  onMove?: (position: GridPoint) => void;
+  /**
+   * While dragging: the grid position the text would be dropped at, and whether Ctrl is held
+   * (the wires of the other selected items stay where they are).
+   */
+  onDrag?: (position: GridPoint, detach: boolean) => void;
+  /** End of a drag, with the grid position the text was dropped at (and Ctrl, as above). */
+  onMove?: (position: GridPoint, detach: boolean) => void;
   onDoubleClick?: () => void;
 }
 
@@ -65,14 +68,14 @@ export function FreeText({
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: toGrid(node.x()) * GRID, y: toGrid(node.y()) * GRID });
-        onDrag?.({ x: toGrid(node.x()), y: toGrid(node.y()) });
+        onDrag?.({ x: toGrid(node.x()), y: toGrid(node.y()) }, e.evt.ctrlKey || e.evt.metaKey);
       }}
       onDragEnd={(e) => {
         const node = e.target;
         const position = { x: toGrid(node.x()), y: toGrid(node.y()) };
         // Force the node onto the grid even if the store value does not change.
         node.position({ x: position.x * GRID, y: position.y * GRID });
-        onMove?.(position);
+        onMove?.(position, e.evt.ctrlKey || e.evt.metaKey);
       }}
     >
       {/* Clickable area (the letters alone are hard to hit), and the selection box. */}

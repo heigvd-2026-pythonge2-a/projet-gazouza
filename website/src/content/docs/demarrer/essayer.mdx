@@ -1,0 +1,43 @@
+---
+title: Essayer en ligne
+description: L'interface de Psice dans le navigateur, sans rien installer, avec les circuits d'exemple.
+tableOfContents: false
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Voici l'éditeur de Psice, directement dans ton navigateur : c'est la même interface que
+l'application, reconstruite à chaque modification du code. Pose des composants, tire des fils,
+règle les valeurs, annule, enregistre : tout fonctionne comme dans l'application.
+
+<Aside type="note" title="La démo ne simule que les circuits d'exemple">
+	La simulation a besoin de ngspice, qui tourne sur ton ordinateur avec
+	l'[application Windows](/projet-gazouza/demarrer/installation/). La démo connaît à la place les
+	**circuits d'exemple** ci-dessous et leurs vrais résultats ngspice : **Simuler** les redonne
+	tant que tu ne changes ni les composants, ni leurs valeurs, ni les fils (les déplacer ne
+	compte pas). Le courant y circule déjà sur le schéma (bouton **Arrêter l'animation** pour le
+	figer).
+</Aside>
+
+<div class="psice-demo-links">
+	Ouvrir un exemple :
+	<a href="/projet-gazouza/demo/index.html?demo=divider_op" target="psice-demo">Diviseur de tension</a>
+	<a href="/projet-gazouza/demo/index.html?demo=loaded_divider_dc" target="psice-demo">Diviseur chargé</a>
+	<a href="/projet-gazouza/demo/index.html?demo=rc_tran" target="psice-demo">Circuit RC</a>
+	<a href="/projet-gazouza/demo/index.html?demo=lowpass_ac" target="psice-demo">Filtre passe-bas</a>
+	<a href="/projet-gazouza/demo/index.html" target="psice-demo">Schéma vide</a>
+</div>
+
+<iframe
+	class="psice-demo"
+	name="psice-demo"
+	src="/projet-gazouza/demo/index.html?demo=divider_op"
+	title="Démo de l'éditeur de Psice"
+></iframe>
+
+<p class="psice-demo-fullscreen">
+	<a href="/projet-gazouza/demo/index.html?demo=divider_op" target="_blank">Ouvrir la démo en plein écran ↗</a>
+</p>
+
+Rien n'est envoyé sur Internet : ton schéma reste dans ce navigateur. **Enregistrer** (<kbd>Ctrl+S</kbd>)
+crée un fichier `.psice.json` sur ton ordinateur, que tu pourras rouvrir dans l'application.

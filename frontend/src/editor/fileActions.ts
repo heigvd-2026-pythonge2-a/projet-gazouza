@@ -14,7 +14,7 @@ import {
   serializeDoc,
   useEditorStore,
 } from "../store";
-import { exportImage as renderImage } from "./viewCommands";
+import { exportImage as renderImage, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
 export interface PickerType {
@@ -232,16 +232,37 @@ export async function saveNewFile(name: string, content: Blob, types: PickerType
   }
 }
 
+/** localStorage key of the last "transparent background" choice of the image export. */
+export const TRANSPARENT_EXPORT_KEY = "psice.export.transparent";
+
+/** Last "transparent background" choice of the image export (white by default). */
+export function exportTransparent(): boolean {
+  try {
+    return window.localStorage.getItem(TRANSPARENT_EXPORT_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Remembers the "transparent background" choice for the next exports. */
+export function setExportTransparent(transparent: boolean) {
+  try {
+    window.localStorage.setItem(TRANSPARENT_EXPORT_KEY, String(transparent));
+  } catch {
+    // Storage blocked: the choice is simply not kept.
+  }
+}
+
 /**
  * Exports the schematic as a PNG image, to put in a report (#112): the whole circuit, without the
- * grid nor the selection, on a white background.
+ * grid nor the selection, on a white background, or a transparent one if asked (#195).
  */
-export async function exportImage() {
+export async function exportImage(options: ImageOptions = { transparent: false }) {
   if (useEditorStore.getState().doc.components.length === 0) {
     window.alert("Le schéma est vide : il n'y a rien à exporter.");
     return;
   }
-  const image = await renderImage();
+  const image = await renderImage(options);
   if (!image) {
     window.alert("Impossible de créer l'image du schéma.");
     return;

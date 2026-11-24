@@ -15,11 +15,17 @@ import {
 } from "./editor";
 import {
   DEFAULT_LAYOUT,
+  MIN_INSPECTOR_HEIGHT,
+  MIN_RESULTS_HEIGHT,
   MaximizeButton,
+  PanelHandle,
+  SIDE_WIDTH,
+  SPLITTER_SIZE,
   PanelErrorBoundary,
   Splitter,
   clampPaletteWidth,
   clampSideWidth,
+  foldOnRelease,
   inspectorHeight,
   loadLayout,
   resultsHeight,
@@ -31,6 +37,12 @@ import { useEditorStore } from "./store";
 
 /** Panel shown in full screen; the schematic keeps the palette beside it to stay editable. */
 type Maximized = "schematic" | "results" | null;
+
+/** What folds away if the splitter being dragged is released now (#198): shown faded. */
+type Folding = "side" | "inspector" | "results" | null;
+
+/** Look of a panel that will fold away when the splitter is released. */
+const FOLDING: CSSProperties = { opacity: 0.35, transition: "opacity 0.1s" };
 
 const BORDER = "1px solid #e5e7eb";
 
@@ -53,7 +65,8 @@ const FULL_SCREEN_RETURN_MS = 3000;
 // results only show once there is something to show (#96), the properties can be closed (#164).
 export default function App() {
   const [backend, setBackend] = useState("connexion…");
-  const [layout, setLayout] = useState<Layout>(loadLayout);
+  // The results start hidden, even if they were shown when the app was closed (#96).
+  const [layout, setLayout] = useState<Layout>(() => ({ ...loadLayout(), resultsVisible: false }));
   const [rowRef, row] = useElementSize<HTMLDivElement>();
   const [centerRef, center] = useElementSize<HTMLDivElement>();
   const [sideRef, side] = useElementSize<HTMLDivElement>();
@@ -67,6 +80,10 @@ export default function App() {
   const inspector = inspectorHeight(layout.inspectorFraction, side.height);
   const results = resultsHeight(layout.resultsFraction, center.height);
   const update = (patch: Partial<Layout>) => setLayout((l) => ({ ...l, ...patch }));
+  const [folding, setFolding] = useState<Folding>(null);
+  const fade = (panel: Exclude<Folding, null>) => (folding === panel ? FOLDING : {});
+  /** Largest inspector height when the results are above it: theirs would go under the minimum. */
+  const maxInspector = side.height - MIN_RESULTS_HEIGHT - SPLITTER_SIZE;
 
   const [maximized, setMaximized] = useState<Maximized>(null);
   /**
@@ -328,6 +345,13 @@ export default function App() {
               />
             </div>
           </div>
+          {!right && normal && !resultsShown && (
+            <PanelHandle
+              panel="Résultats"
+              opens="up"
+              onOpen={() => update({ resultsVisible: true })}
+            />
+          )}
           {!right && normal && resultsShown && (
             <Splitter
               orientation="horizontal"
@@ -336,14 +360,22 @@ export default function App() {
               direction={-1}
               onChange={(h) => {
                 if (center.height <= 0) return;
+                setFolding(foldOnRelease(h, MIN_RESULTS_HEIGHT) ? "results" : null);
                 const clamped = resultsHeight(h / center.height, center.height);
                 update({ resultsFraction: clamped / center.height });
               }}
               onReset={() => update({ resultsFraction: DEFAULT_LAYOUT.resultsFraction })}
+              onRelease={(h, start) => {
+                setFolding(null);
+                if (center.height > 0 && foldOnRelease(h, MIN_RESULTS_HEIGHT)) {
+                  update({ resultsVisible: false, resultsFraction: start / center.height });
+                }
+              }}
             />
           )}
           {!right &&
             resultsPanel({
+              ...fade("results"),
               display: resultsShown ? "block" : "none",
               ...(normal ? { height: results, flex: "none" } : { flex: 1, minHeight: 0 }),
             })}
@@ -354,14 +386,25 @@ export default function App() {
             label="Redimensionner le panneau de droite"
             value={sideWidth}
             direction={-1}
-            onChange={(w) => update({ sideWidth: clampSideWidth(w, row.width, paletteWidth) })}
+            onChange={(w) => {
+              setFolding(foldOnRelease(w, SIDE_WIDTH.min) ? "side" : null);
+              update({ sideWidth: clampSideWidth(w, row.width, paletteWidth) });
+            }}
             onReset={() => update({ sideWidth: DEFAULT_LAYOUT.sideWidth })}
+            onRelease={(w, start) => {
+              setFolding(null);
+              // Folded: the whole side column, back at its size from before the drag.
+              if (foldOnRelease(w, SIDE_WIDTH.min)) {
+                update({ sideWidth: start, inspectorVisible: false, resultsVisible: false });
+              }
+            }}
           />
         )}
         {/* Side column. The inspector stays its last child, so it is never remounted. */}
         <div
           ref={sideRef}
           style={{
+            ...fade("side"),
             display: shown(sideShown),
             flexDirection: "column",
             ...(maximized === "results"
@@ -369,8 +412,20 @@ export default function App() {
               : { width: sideWidth, flex: "none" }),
           }}
         >
+          {right && normal && !resultsShown && (
+            <PanelHandle
+              panel="Résultats"
+              opens="down"
+              onOpen={() => update({ resultsVisible: true })}
+            />
+          )}
           {right &&
-            resultsPanel({ display: resultsShown ? "block" : "none", flex: 1, minHeight: 0 })}
+            resultsPanel({
+              ...fade("results"),
+              display: resultsShown ? "block" : "none",
+              flex: 1,
+              minHeight: 0,
+            })}
           {right && resultsShown && inspectorShown && (
             <Splitter
               orientation="horizontal"
@@ -379,10 +434,22 @@ export default function App() {
               direction={-1}
               onChange={(h) => {
                 if (side.height <= 0) return;
+                const fold = foldOnRelease(h, MIN_INSPECTOR_HEIGHT, maxInspector);
+                setFolding(fold === "panel" ? "inspector" : fold === "other" ? "results" : null);
                 const clamped = inspectorHeight(h / side.height, side.height);
                 update({ inspectorFraction: clamped / side.height });
               }}
               onReset={() => update({ inspectorFraction: DEFAULT_LAYOUT.inspectorFraction })}
+              onRelease={(h, start) => {
+                setFolding(null);
+                if (side.height <= 0) return;
+                const fold = foldOnRelease(h, MIN_INSPECTOR_HEIGHT, maxInspector);
+                if (fold === null) return;
+                update({
+                  inspectorFraction: start / side.height,
+                  ...(fold === "panel" ? { inspectorVisible: false } : { resultsVisible: false }),
+                });
+              }}
             />
           )}
           <div
@@ -398,6 +465,7 @@ export default function App() {
               if (e.key === "Escape" && returnPending) window.setTimeout(returnToFullScreen);
             }}
             style={{
+              ...fade("inspector"),
               display: shown(inspectorShown),
               position: "relative",
               ...(right && resultsShown
@@ -415,7 +483,31 @@ export default function App() {
               />
             </div>
           </div>
+          {right && normal && !inspectorShown && (
+            <PanelHandle
+              panel="Propriétés"
+              opens="up"
+              onOpen={() => update({ inspectorVisible: true })}
+            />
+          )}
         </div>
+        {/* Everything on the right is hidden: handles at the window edge to bring it back. */}
+        {normal && !sideShown && (
+          <div style={{ display: "flex", flexDirection: "column", flex: "none" }}>
+            {right && (
+              <PanelHandle
+                panel="Résultats"
+                opens="left"
+                onOpen={() => update({ resultsVisible: true })}
+              />
+            )}
+            <PanelHandle
+              panel="Propriétés"
+              opens="left"
+              onOpen={() => update({ inspectorVisible: true })}
+            />
+          </div>
+        )}
       </div>
 
       <PanelErrorBoundary panel="la barre d'état" compact>

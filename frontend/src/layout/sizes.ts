@@ -68,3 +68,23 @@ export function resultsHeight(fraction: number, columnHeight: number): number {
   const max = columnHeight - MIN_SCHEMATIC_HEIGHT - SPLITTER_SIZE;
   return Math.round(clamp(fraction * columnHeight, MIN_RESULTS_HEIGHT, max));
 }
+
+/** How far past its smallest size a panel must be dragged to fold away when released (#198). */
+export const FOLD_DISTANCE = 40;
+
+/**
+ * Which panel folds away when a splitter is released with `wanted` as the size of the panel it
+ * resizes: "panel" when that panel was dragged `FOLD_DISTANCE` under its smallest size `min`;
+ * "other" when it was dragged that far past its largest size `max`, which squeezes the panel on
+ * the other side of the splitter under its own smallest size; null when nothing folds. Leave
+ * `max` out when the other side cannot fold (the schematic).
+ */
+export function foldOnRelease(
+  wanted: number,
+  min: number,
+  max = Number.POSITIVE_INFINITY,
+): "panel" | "other" | null {
+  if (wanted <= min - FOLD_DISTANCE) return "panel";
+  if (wanted >= max + FOLD_DISTANCE) return "other";
+  return null;
+}

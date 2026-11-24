@@ -7,6 +7,8 @@ import {
   SIDE_WIDTH,
   clampPaletteWidth,
   clampSideWidth,
+  FOLD_DISTANCE,
+  foldOnRelease,
   inspectorHeight,
 } from "./sizes";
 import { parseLayout } from "./storage";
@@ -55,5 +57,21 @@ describe("sizes", () => {
 
   it("keeps the inspector at least its minimum height", () => {
     expect(inspectorHeight(0.01, 800)).toBe(MIN_INSPECTOR_HEIGHT);
+  });
+});
+
+describe("foldOnRelease", () => {
+  it("folds the panel dragged well under its smallest size", () => {
+    expect(foldOnRelease(120, 120)).toBeNull();
+    expect(foldOnRelease(120 - FOLD_DISTANCE + 1, 120)).toBeNull();
+    expect(foldOnRelease(120 - FOLD_DISTANCE, 120)).toBe("panel");
+    expect(foldOnRelease(-50, 120)).toBe("panel");
+  });
+
+  it("folds the other panel when this one is dragged well past its largest size", () => {
+    expect(foldOnRelease(400, 120, 400)).toBeNull();
+    expect(foldOnRelease(400 + FOLD_DISTANCE, 120, 400)).toBe("other");
+    // Without a largest size, the other side never folds (the schematic).
+    expect(foldOnRelease(10_000, 120)).toBeNull();
   });
 });

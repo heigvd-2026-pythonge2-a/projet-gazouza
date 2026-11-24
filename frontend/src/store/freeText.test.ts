@@ -11,12 +11,13 @@ import {
   docBounds,
   emptyDoc,
   itemsInRect,
+  itemsTouchingRect,
   moveItems,
   pasteClip,
   setTextContent,
   textBounds,
 } from "./document";
-import { NEW_TEXT, PASTE_OFFSET, useEditorStore } from "./editorStore";
+import { NEW_TEXT, clipAnchor, useEditorStore } from "./editorStore";
 import { FileFormatError, parseDoc, serializeDoc } from "./fileFormat";
 import { fixtureDoc } from "./testFixtures";
 
@@ -87,8 +88,10 @@ describe("document operations", () => {
   it("takes texts into the selection rectangle and the view to fit", () => {
     const { doc, id } = docWithText();
     expect(itemsInRect(doc, { min: { x: 3, y: -4 }, max: { x: 10, y: 0 } })).toEqual([id]);
-    // Only partly inside: not selected.
+    // Only partly inside: not selected, but it touches the rectangle (Shift + drag, #93).
     expect(itemsInRect(doc, { min: { x: 3, y: -4 }, max: { x: 5, y: 0 } })).toEqual([]);
+    expect(itemsTouchingRect(doc, { min: { x: 3, y: -4 }, max: { x: 5, y: 0 } })).toEqual([id]);
+    expect(itemsTouchingRect(doc, { min: { x: 20, y: -4 }, max: { x: 25, y: 0 } })).toEqual([]);
     expect(docBounds(doc)?.min.y).toBe(-3);
     expect(docBounds(addText(emptyDoc(), { x: 2, y: 1 }, "x").doc)?.min).toEqual({ x: 2, y: 1 });
   });
@@ -127,11 +130,16 @@ describe("store actions", () => {
     expect(store().selection).toEqual(["t1"]);
 
     store().copy();
+    // The copy follows the mouse (#166), centred on it, until a click drops it.
     store().paste();
-    expect(store().doc.texts[1]?.position).toEqual(PASTE_OFFSET);
+    expect(store().tool.kind).toBe("paste");
+    const anchor = clipAnchor(store().clipboard!);
+    store().pasteAt({ x: 10, y: 5 });
+    expect(store().doc.texts[1]?.position).toEqual({ x: 10 - anchor.x, y: 5 - anchor.y });
     expect(store().selection).toEqual(["t2"]);
 
     store().duplicate();
+    store().pasteAt({ x: 20, y: 5 });
     expect(store().doc.texts).toHaveLength(3);
     store().deleteSelection();
     expect(store().doc.texts.map((t) => t.id)).toEqual(["t1", "t2"]);
