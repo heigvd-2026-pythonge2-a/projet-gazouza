@@ -28,13 +28,15 @@ afficher cette liste à tout moment.
 
 | Geste | Action |
 |---|---|
-| Glisser | Déplacer la sélection |
+| Glisser | Déplacer la sélection (les fils suivent) |
+| <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | Flèches | Déplacer la sélection d'un pas |
 | <kbd>R</kbd> | Tourner |
 | <kbd>M</kbd> | Miroir |
 | <kbd>Suppr</kbd> | Supprimer |
-| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (décalé, avec de nouveaux noms) |
+| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
+| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions |
 

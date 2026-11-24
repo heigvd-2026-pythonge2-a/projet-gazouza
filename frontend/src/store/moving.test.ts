@@ -14,6 +14,7 @@ import {
   wirePath,
   type EditorDoc,
   type GridPoint,
+  type WireEnd,
 } from "./document";
 import { useEditorStore } from "./editorStore";
 import { pathBlocked, routeAround } from "./routing";
@@ -151,6 +152,44 @@ describe("pins on wires (#89)", () => {
     const c = doc.components[0]!;
     const after = connectPinsOnWires(doc);
     expect(after.wires[0]!.to).toEqual({ comp: c.id, pin: "2" });
+  });
+
+  describe("a component laid on a wire over both pins is inserted in it", () => {
+    /** The wire's two pieces each end on a pin, and no wire joins the two pins. */
+    function expectInSeries(doc: EditorDoc) {
+      const c = doc.components[0]!;
+      const onC = (e: WireEnd) => "comp" in e && e.comp === c.id;
+      expect(doc.wires).toHaveLength(2);
+      expect(doc.wires.filter((w) => onC(w.from) && onC(w.to))).toEqual([]);
+      const pins = doc.wires.flatMap((w) => [w.from, w.to]).filter(onC);
+      expect(pins.map((e) => ("pin" in e ? e.pin : "")).sort()).toEqual(["1", "2"]);
+      expect(unconnectedPins(doc)).toEqual([]);
+    }
+
+    it("when placed on it", () => {
+      store().openDocument(addWire(emptyDoc(), [p(0, -6), p(0, 6)])!.doc);
+      store().startPlacing("resistor");
+      store().placeAt(p(0, 0));
+      expectInSeries(store().doc);
+    });
+
+    it("when moved onto it", () => {
+      let doc = addWire(emptyDoc(), [p(0, -6), p(0, 6)])!.doc;
+      doc = put(doc, "resistor", p(5, 0)).doc;
+      store().openDocument(doc);
+      store().select([store().doc.components[0]!.id]);
+      store().moveSelection(p(-5, 0));
+      expectInSeries(store().doc);
+    });
+
+    it("when the wire is dragged onto it", () => {
+      let doc = put(emptyDoc(), "resistor", p(0, 0)).doc;
+      doc = addWire(doc, [p(5, -6), p(5, 6)])!.doc;
+      store().openDocument(doc);
+      store().selectWirePart({ wire: store().doc.wires[0]!.id, kind: "segment", index: 0 });
+      store().moveWirePart(p(0, 0), null);
+      expectInSeries(store().doc);
+    });
   });
 
   it("never shorts a component a wire is attached to", () => {

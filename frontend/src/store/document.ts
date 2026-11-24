@@ -1067,15 +1067,22 @@ export interface PinsOnWiresScope {
 /**
  * Connects the pins that lie on a wire without being attached to it (#89): a wire passing over a
  * pin is cut there and both pieces are attached to the pin; a free wire end lying on a pin is
- * attached to it. A wire already attached to the component is left alone, so a wire drawn across
- * a component never shorts it. Only the pins of `scope.comps` and the wires of `scope.wires` are
- * looked at (the pieces of a cut wire included).
+ * attached to it. A wire laid over two pins of the same component is cut at both, and the piece
+ * between them removed: the component is inserted in the wire. A wire already attached to the
+ * component is left alone, so a wire drawn across a component never shorts it. Only the pins of
+ * `scope.comps` and the wires of `scope.wires` are looked at (the pieces of a cut wire included).
  */
 export function connectPinsOnWires(doc: EditorDoc, scope: PinsOnWiresScope = {}): EditorDoc {
   const wireIds = scope.wires ? new Set(scope.wires) : null;
   let out = doc;
+  const onComp = (e: WireEnd, comp: string) => "comp" in e && e.comp === comp;
   for (const c of doc.components) {
     if (scope.comps && !scope.comps.has(c.id)) continue;
+    // Wires drawn from this component before: one crossing its own body must not short it. The
+    // pieces cut below are not among them, so a wire laid over two pins is cut at both.
+    const attached = new Set(
+      doc.wires.filter((w) => onComp(w.from, c.id) || onComp(w.to, c.id)).map((w) => w.id),
+    );
     for (const pin of getDef(c.type).pins) {
       const p = toWorld(pin, c);
       const end = { comp: c.id, pin: pin.name };
@@ -1084,8 +1091,7 @@ export function connectPinsOnWires(doc: EditorDoc, scope: PinsOnWiresScope = {})
         changed = false;
         for (const w of out.wires) {
           if (wireIds && !wireIds.has(w.id)) continue;
-          // A wire attached to this component crosses its own body: connecting would short it.
-          if ([w.from, w.to].some((e) => "comp" in e && e.comp === c.id)) continue;
+          if (attached.has(w.id)) continue;
           const isFreeAtP = (e: WireEnd) => !("comp" in e) && !("junction" in e) && samePoint(e, p);
           if (isFreeAtP(w.from) || isFreeAtP(w.to)) {
             const attach = (e: WireEnd) => (isFreeAtP(e) ? end : e);
@@ -1117,6 +1123,11 @@ export function connectPinsOnWires(doc: EditorDoc, scope: PinsOnWiresScope = {})
         }
       }
     }
+    // A piece now joining two pins of the component ran along its body: without it, the component
+    // is inserted in the wire (in series), instead of being shorted by it.
+    const across = (w: EditorWire) =>
+      !attached.has(w.id) && onComp(w.from, c.id) && onComp(w.to, c.id);
+    if (out.wires.some(across)) out = { ...out, wires: out.wires.filter((w) => !across(w)) };
   }
   return out;
 }
