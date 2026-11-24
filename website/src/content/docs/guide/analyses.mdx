@@ -5,8 +5,8 @@ description: Les quatre analyses de Psice — point de fonctionnement, temporell
 
 import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
 
-Une **analyse** dit à ngspice ce qu'il doit calculer. Dans Psice, tu la choisis dans une fenêtre
-guidée : tu n'écris jamais de directive SPICE. L'analyse est enregistrée **à côté** du schéma,
+Une **analyse** dit à ngspice ce qu'il doit calculer. Dans Psice, tu la choisis dans la barre
+d'outils : tu n'écris jamais de directive SPICE. L'analyse est enregistrée **à côté** du schéma,
 pas dedans : le même circuit peut être simulé de plusieurs façons.
 
 | Analyse | Directive | Ce qu'elle calcule | Résultat |
@@ -16,8 +16,26 @@ pas dedans : le même circuit peut être simulé de plusieurs façons.
 | Fréquentielle | `.ac` | La réponse **en fréquence** (Bode) | Gain et phase en fonction de *f* |
 | Balayage DC | `.dc` | Le point de fonctionnement pour **une source qui varie** | Des courbes en fonction de la source |
 
-Le moteur (génération de netlist et ngspice) prend en charge les quatre analyses. La fenêtre de
-réglage et le bouton **Simuler** sont en cours d'intégration dans l'interface.
+Le moteur (génération de netlist et ngspice) prend en charge les quatre analyses. Dans
+l'interface, le menu **Analyse** de la barre d'outils propose pour l'instant `.op` et `.tran` ;
+`.ac` et `.dc` arrivent ensuite.
+
+## Lancer une simulation
+
+1. Choisis l'analyse dans le menu **Analyse** de la barre d'outils. Pour `.tran`, tape la
+   **Durée** et, si tu veux, le **Pas max** (vide : automatique), avec les suffixes habituels
+   (`5m` = 5 ms, `10u` = 10 µs).
+2. Clique sur **▶ Simuler**. Pendant le calcul, le bouton devient **■ Arrêter**.
+3. Le panneau **Résultats** affiche le résultat, ou les erreurs en français. Après un `.op`, les
+   **tensions des nœuds** (en violet) et les **courants** des composants (en orange) s'affichent
+   aussi sur le schéma ; une case du panneau les masque.
+
+Si tu modifies le schéma après une simulation, Psice te le signale : relance-la pour voir des
+résultats à jour.
+
+Le bouton **Exporter la netlist SPICE** de la barre d'outils enregistre la netlist (`.cir`) du
+schéma avec l'analyse choisie : ngspice la simule telle quelle, ou tu peux la comparer avec
+LTspice.
 
 <Tabs>
 <TabItem label=".op">
