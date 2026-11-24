@@ -6,6 +6,7 @@ export { Inspector } from "./Inspector";
 export { LibraryGate } from "./LibraryGate";
 export { SHOW_INSPECTOR_EVENT } from "./inspectorFocus";
 export { Palette } from "./Palette";
+export { SimulationControls, SimulationReport } from "./SimulationControls";
 export { StatusBar } from "./StatusBar";
 export { EditorToolbar } from "./Toolbar";
 

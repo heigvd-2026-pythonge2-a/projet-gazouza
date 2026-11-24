@@ -1,9 +1,11 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import App from "./App";
+import { SHOW_INSPECTOR_EVENT } from "./editor";
 import { LAYOUT_STORAGE_KEY } from "./layout/storage";
+import { fixtureDoc, fixtureResult } from "./store/testFixtures";
 import { editorState, resetEditorStore } from "./test/editorStore";
 
 // The schematic is drawn by Konva on a <canvas>, which jsdom does not have: a placeholder takes
@@ -48,6 +50,7 @@ describe("App", () => {
   it("shows the schematic or the results in full screen, and Escape comes back", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await user.click(button("Résultats"));
     const results = screen.getByRole("region", { name: "Résultats" });
     const properties = screen.getByRole("region", { name: "Propriétés" });
 
@@ -71,8 +74,114 @@ describe("App", () => {
     await user.click(button("Afficher le schéma en plein écran"));
     act(() => editorState().startWiring());
     await user.keyboard("{Escape}");
-    // Still in full screen: the results stay hidden.
-    expect(screen.getByRole("region", { name: "Résultats", hidden: true })).not.toBeVisible();
+    // Still in full screen: the properties stay hidden.
+    expect(screen.getByRole("region", { name: "Propriétés", hidden: true })).not.toBeVisible();
+  });
+
+  it("starts without the results, even if they were shown when the app was closed (#96)", () => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ resultsVisible: true }));
+    render(<App />);
+    expect(document.querySelector('section[aria-label="Résultats"]')).not.toBeVisible();
+  });
+
+  it("shows the results only after a simulation, or on demand (#96)", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    // Hidden itself (display: none), it has no accessible name: found by its label instead.
+    const results = document.querySelector('section[aria-label="Résultats"]')!;
+    expect(results).not.toBeVisible();
+
+    act(() => {
+      editorState().openDocument(fixtureDoc("divider_op"));
+      editorState().setSimulation(fixtureResult("divider_op"));
+    });
+    expect(results).toBeVisible();
+
+    await user.click(button("Masquer les résultats"));
+    expect(results).not.toBeVisible();
+    expect(JSON.parse(window.localStorage.getItem(LAYOUT_STORAGE_KEY) ?? "{}").resultsVisible).toBe(
+      false,
+    );
+    // Every simulation shows them again.
+    act(() => editorState().setSimulation(fixtureResult("divider_op")));
+    expect(results).toBeVisible();
+
+    // A new schematic starts without them.
+    act(() => editorState().newDocument());
+    expect(results).not.toBeVisible();
+    await user.click(button("Résultats"));
+    expect(results).toBeVisible();
+  });
+
+  it("closes the properties and shows them again (#164)", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const properties = screen.getByRole("region", { name: "Propriétés" });
+    await user.click(button("Masquer les propriétés"));
+    expect(properties).not.toBeVisible();
+    await user.click(button("Propriétés"));
+    expect(properties).toBeVisible();
+
+    await user.click(button("Masquer les propriétés"));
+    act(() => void window.dispatchEvent(new Event(SHOW_INSPECTOR_EVENT)));
+    expect(properties).toBeVisible();
+  });
+
+  it("leaves a handle for each hidden panel, which opens it again (#198)", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const properties = screen.getByRole("region", { name: "Propriétés" });
+    const results = document.querySelector('section[aria-label="Résultats"]')!;
+    // Before any simulation the results are hidden: their handle is at the top of the column.
+    await user.click(button("Afficher le panneau Résultats"));
+    expect(results).toBeVisible();
+
+    await user.click(button("Masquer les propriétés"));
+    await user.click(button("Masquer les résultats"));
+    expect(properties).not.toBeVisible();
+    // Both hidden: two handles at the window edge.
+    await user.click(button("Afficher le panneau Propriétés"));
+    expect(properties).toBeVisible();
+    expect(button("Afficher le panneau Résultats")).toBeVisible();
+  });
+
+  it("folds the right column when its splitter is dragged well under its width (#198)", () => {
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    render(<App />);
+    const properties = screen.getByRole("region", { name: "Propriétés" });
+    const bar = screen.getByRole("separator", { name: "Redimensionner le panneau de droite" });
+    fireEvent.pointerDown(bar, { button: 0, clientX: 500, pointerId: 1 });
+    fireEvent.pointerMove(bar, { clientX: 700, pointerId: 1 });
+    // Still open while dragging, only faded.
+    expect(properties).toBeVisible();
+    fireEvent.pointerUp(bar, { pointerId: 1 });
+    expect(properties).not.toBeVisible();
+    // Reopened at the width it had before the drag.
+    const stored = JSON.parse(window.localStorage.getItem(LAYOUT_STORAGE_KEY) ?? "{}");
+    expect(stored).toMatchObject({ inspectorVisible: false, sideWidth: 440 });
+    fireEvent.click(button("Afficher le panneau Propriétés"));
+    expect(properties).toBeVisible();
+  });
+
+  it("goes back to full screen once the properties are done with (#95)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    onTestFinished(() => void vi.useRealTimers());
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+    const properties = screen.getByRole("region", { name: "Propriétés" });
+
+    await user.click(button("Afficher le schéma en plein écran"));
+    act(() => void window.dispatchEvent(new Event(SHOW_INSPECTOR_EVENT)));
+    expect(properties).toBeVisible();
+    act(() => void vi.advanceTimersByTime(3500));
+    expect(properties).not.toBeVisible();
+
+    // Left by hand: it stays left.
+    act(() => void window.dispatchEvent(new Event(SHOW_INSPECTOR_EVENT)));
+    await user.click(button("Afficher le schéma en plein écran"));
+    await user.click(button("Quitter le plein écran (Échap)"));
+    act(() => void vi.advanceTimersByTime(3500));
+    expect(properties).toBeVisible();
   });
 
   it("moves the results under the schematic and remembers it", async () => {
