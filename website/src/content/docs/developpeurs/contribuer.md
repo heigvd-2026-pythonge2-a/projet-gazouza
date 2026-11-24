@@ -23,8 +23,11 @@ Les règles complètes sont dans
 5. **Ouvrir une petite PR**, une par tâche, avec le modèle de PR rempli honnêtement, `Closes #N`
    pour fermer l'issue, et la milestone de l'issue. L'issue passe alors en **In review**. Si on
    abandonne la branche, on la remet en **Todo**.
-6. **Faire relire.** Chaque fusion est relue par un autre membre, et n'est possible que si la CI
-   passe.
+6. **Fusionner quand la CI est verte.** `main` n'accepte que des PR, et une PR ne peut être
+   fusionnée que si le check **CI OK** passe : il résume les tests du backend, du frontend et
+   du site, selon ce que la PR touche. La relecture n'est pas obligatoire, mais GitHub demande
+   celle du propriétaire du module (`.github/CODEOWNERS`) : demande-la pour tout ce qui sort de
+   ton module.
 
 ## Règles importantes
 
