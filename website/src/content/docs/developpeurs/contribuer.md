@@ -14,12 +14,15 @@ Les règles complètes sont dans
    (`gh issue list --state open --search "mots-clés"`). S'il n'y en a pas, crée-la avec le bon
    modèle, sans doublon.
 2. **Créer une branche** `type/description-courte` depuis `main`, par exemple
-   `feat/netlist-resistor` ou `fix/plot-zoom`. Jamais de push direct sur `main`.
+   `feat/netlist-resistor` ou `fix/plot-zoom`. Jamais de push direct sur `main`. Dès qu'on
+   commence, on passe l'issue au statut **In progress** (menu « Status » de l'issue, ou la
+   commande donnée dans `AGENTS.md`) : l'équipe voit ce qui est pris dans l'onglet « Active ».
 3. **Rester dans son module.** Si la tâche demande de toucher le module de quelqu'un d'autre,
    on en parle d'abord avec son propriétaire (voir [Architecture](/projet-gazouza/developpeurs/architecture/#qui-possède-quoi)).
 4. **Tester.** Tests, lint et formatage doivent passer pour la partie touchée.
 5. **Ouvrir une petite PR**, une par tâche, avec le modèle de PR rempli honnêtement, `Closes #N`
-   pour fermer l'issue, et la milestone de l'issue.
+   pour fermer l'issue, et la milestone de l'issue. L'issue passe alors en **In review**. Si on
+   abandonne la branche, on la remet en **Todo**.
 6. **Faire relire.** Chaque fusion est relue par un autre membre, et n'est possible que si la CI
    passe.
 
