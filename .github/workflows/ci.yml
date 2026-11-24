@@ -7,16 +7,15 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'shared/**'
+      - 'build.ps1'
+      - '.pre-commit-config.yaml'
       - '.github/scripts/**'
       - '.github/workflows/ci.yml'
+  # Every pull request runs this workflow, so that the "CI OK" job below always reports:
+  # it is the check the ruleset of main requires. The `changes` job decides which parts
+  # actually need to run.
   pull_request:
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'shared/**'
-      - '.github/scripts/**'
-      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -26,8 +25,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Parties touchées
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      website: ${{ steps.filter.outputs.website }}
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Détection des fichiers modifiés
+        id: filter
+        shell: bash
+        run: |
+          # A push to main is already filtered by the `paths` of the trigger.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "website=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}")
+          echo "$files"
+          code='^(backend/|frontend/|shared/|build\.ps1$|\.pre-commit-config\.yaml$|\.github/scripts/|\.github/workflows/ci\.yml$)'
+          website='^(website/|\.github/workflows/(ci|pages)\.yml$)'
+          if echo "$files" | grep -qE "$code"; then echo "code=true" >> "$GITHUB_OUTPUT"; else echo "code=false" >> "$GITHUB_OUTPUT"; fi
+          if echo "$files" | grep -qE "$website"; then echo "website=true" >> "$GITHUB_OUTPUT"; else echo "website=false" >> "$GITHUB_OUTPUT"; fi
+
   backend:
     name: Backend (uv, ruff, pytest & coverage)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
 
     defaults:
@@ -36,10 +66,10 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Installation de uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: "backend/uv.lock"
@@ -66,7 +96,7 @@ jobs:
 
       - name: Envoi du taux de couverture
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-total
           path: backend/coverage-total.txt
@@ -78,6 +108,8 @@ jobs:
 
   frontend:
     name: Frontend (pnpm, ESLint, Prettier & Build)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
 
     defaults:
@@ -86,16 +118,16 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # La version de pnpm est lue dans le champ "packageManager" de frontend/package.json.
       - name: Installation de pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
 
       - name: Configuration de Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: "pnpm"
@@ -121,6 +153,56 @@ jobs:
       - name: Build de vérification
         run: pnpm build
 
+  # Pull requests only: on main, pages.yml builds and deploys the site.
+  website:
+    name: Site web (Astro build)
+    needs: changes
+    if: needs.changes.outputs.website == 'true'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./website
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v7
+
+      - name: Installation de pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: website/package.json
+
+      - name: Configuration de Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: website/pnpm-lock.yaml
+
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Build du site
+        run: pnpm build
+
+  # The single check required by the ruleset of main. Skipped parts count as passed;
+  # a failed or cancelled part fails it.
+  ci-ok:
+    name: CI OK
+    needs: [changes, backend, frontend, website]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Résultat des parties
+        shell: bash
+        run: |
+          echo "changes=${{ needs.changes.result }} backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }} website=${{ needs.website.result }}"
+          if ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}; then
+            echo "Au moins une partie de la CI a échoué ou a été annulée."
+            exit 1
+          fi
+
   coverage-badge:
     name: Badge de couverture (main uniquement)
     needs: backend
@@ -134,10 +216,10 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Récupération du taux de couverture
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-total
 

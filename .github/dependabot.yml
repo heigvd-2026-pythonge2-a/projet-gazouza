@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Workflows GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "type: chore"
+      - "area: shared"
+
+  # Dépendances Frontend (pnpm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "type: chore"
+      - "area: shared"
+
+  # Dépendances Site web & documentation (pnpm)
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "type: chore"
+      - "area: shared"
+
+  # Dépendances Backend (Python / uv) : l'écosystème "uv" met aussi à jour uv.lock
+  - package-ecosystem: "uv"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "type: chore"
+      - "area: backend"

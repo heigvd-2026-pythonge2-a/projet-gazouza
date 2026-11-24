@@ -29,6 +29,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["ngspice: needs the real ngspice binaries in vendor/ngspice"]
 addopts = "-ra"
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["app"]
