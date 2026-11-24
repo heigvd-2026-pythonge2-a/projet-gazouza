@@ -2,7 +2,7 @@
 // the netlist module (backend/app/netlist/values.py), which reports the same errors (BAD_VALUE,
 // MILLI_SUFFIX) at simulation time: these checks only warn the user earlier. Texts in French.
 
-import type { EditorDoc } from "./document";
+import { nameProblem, netNameProblem, type EditorDoc } from "./document";
 import { getDef, visibleParams } from "./library";
 
 /** Units allowed after the suffix, ignored like in SPICE ("1kOhm", "10uF"). */
@@ -84,5 +84,40 @@ export function invalidValues(doc: EditorDoc): InvalidValue[] {
           ]
         : [];
     });
+  });
+}
+
+/** What is wrong with one field of a component, as shown next to it on the schematic (#196). */
+export interface ComponentProblem extends ValueProblem {
+  comp: string;
+  /** Parameter whose value is wrong, or null for the SPICE name of the component. */
+  param: string | null;
+}
+
+/**
+ * The first problem of each component that has one, errors before warnings, fields in the order
+ * of the properties panel (name, then parameters). Same checks as the panel: the schematic shows
+ * them next to the components, so the user sees every problem at a glance.
+ */
+export function componentProblems(doc: EditorDoc): ComponentProblem[] {
+  return doc.components.flatMap((c) => {
+    const def = getDef(c.type);
+    const found: ComponentProblem[] = [];
+    if (def.prefix !== null) {
+      const message = nameProblem(doc, c, def.prefix);
+      if (message) found.push({ comp: c.id, param: null, level: "error", message });
+    }
+    for (const p of visibleParams(def, c.params)) {
+      const value = c.params[p.name] ?? "";
+      if (c.type === "label" && p.name === "net") {
+        const message = netNameProblem(value);
+        if (message) found.push({ comp: c.id, param: p.name, level: "error", message });
+      } else if (p.kind === "value") {
+        const problem = valueProblem(value, p.unit);
+        if (problem) found.push({ comp: c.id, param: p.name, ...problem });
+      }
+    }
+    const first = found.find((f) => f.level === "error") ?? found[0];
+    return first ? [first] : [];
   });
 }

@@ -240,6 +240,17 @@ export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   return [...components, ...wires, ...junctions].map((item) => item.id);
 }
 
+/** Box of the symbol of `c` on the grid, turned and mirrored like the component. */
+export function componentBounds(c: PlacedComponent): GridRect {
+  const { min, max } = symbolBounds(getDef(c.type));
+  const a = toWorld(min, c);
+  const b = toWorld(max, c);
+  return {
+    min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
+    max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
+  };
+}
+
 /**
  * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires and
  * junctions. Null for an empty document.
