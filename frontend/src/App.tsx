@@ -65,7 +65,8 @@ const FULL_SCREEN_RETURN_MS = 3000;
 // results only show once there is something to show (#96), the properties can be closed (#164).
 export default function App() {
   const [backend, setBackend] = useState("connexion…");
-  const [layout, setLayout] = useState<Layout>(loadLayout);
+  // The results start hidden, even if they were shown when the app was closed (#96).
+  const [layout, setLayout] = useState<Layout>(() => ({ ...loadLayout(), resultsVisible: false }));
   const [rowRef, row] = useElementSize<HTMLDivElement>();
   const [centerRef, center] = useElementSize<HTMLDivElement>();
   const [sideRef, side] = useElementSize<HTMLDivElement>();

@@ -78,6 +78,12 @@ describe("App", () => {
     expect(screen.getByRole("region", { name: "Propriétés", hidden: true })).not.toBeVisible();
   });
 
+  it("starts without the results, even if they were shown when the app was closed (#96)", () => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ resultsVisible: true }));
+    render(<App />);
+    expect(document.querySelector('section[aria-label="Résultats"]')).not.toBeVisible();
+  });
+
   it("shows the results only after a simulation, or on demand (#96)", async () => {
     const user = userEvent.setup();
     render(<App />);

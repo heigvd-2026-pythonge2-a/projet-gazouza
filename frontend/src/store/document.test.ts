@@ -5,7 +5,9 @@ import {
   addWire,
   anchorAt,
   copyItems,
+  componentsOverlap,
   deleteItems,
+  freeMove,
   emptyDoc,
   endPosition,
   moveItems,
@@ -147,6 +149,40 @@ describe("moving", () => {
     moveItems(doc, new Set(["c2", "c3"]), { x: 1, y: 1 });
     deleteItems(doc, new Set(["c2"]));
     expect(doc).toEqual(copy);
+  });
+});
+
+describe("overlapping components", () => {
+  const resistor = (x: number, y: number, rotation: 0 | 90 = 0) =>
+    ({
+      id: `r${x},${y}`,
+      type: "resistor",
+      position: { x, y },
+      rotation,
+      mirror: false,
+      params: {},
+    }) as const;
+
+  it("overlap when stacked or partly covering each other", () => {
+    expect(componentsOverlap(resistor(0, 0), resistor(0, 0))).toBe(true);
+    expect(componentsOverlap(resistor(0, 0), resistor(0, 1))).toBe(true);
+    expect(componentsOverlap(resistor(0, 0), resistor(0, 0, 90))).toBe(true);
+  });
+
+  it("do not overlap when apart, or touching by a single pin", () => {
+    expect(componentsOverlap(resistor(0, 0), resistor(2, 0))).toBe(false);
+    expect(componentsOverlap(resistor(0, 0), resistor(0, 4))).toBe(false);
+    // An L: the vertical one's pin 2 at (0,2) is the horizontal one's pin at (0,2).
+    expect(componentsOverlap(resistor(0, 0), resistor(2, 2, 90))).toBe(false);
+  });
+
+  it("moves to the nearest free place", () => {
+    let doc = withResistor(emptyDoc(), { x: 0, y: 0 }).doc;
+    const added = withResistor(doc, { x: 6, y: 0 });
+    doc = added.doc;
+    const moved = freeMove(doc, new Set([added.id]), { x: -6, y: 0 });
+    const c = moved.components.find((x) => x.id === added.id)!;
+    expect(Math.abs(c.position.x) + Math.abs(c.position.y)).toBe(1);
   });
 });
 

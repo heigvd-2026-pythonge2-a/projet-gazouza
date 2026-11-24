@@ -51,6 +51,11 @@ export async function runSimulation(): Promise<void> {
         .then((n) => n.nets ?? {})
         .catch(() => ({}));
     }
+    // Stopped while the nodes were fetched (that error is swallowed above): drop the result.
+    if (controller.signal.aborted) {
+      useEditorStore.getState().setSimulating(false);
+      return;
+    }
     const now = useEditorStore.getState();
     // Edited meanwhile: the result is of another schematic, it would show as stale at once.
     if (now.doc !== doc) {
