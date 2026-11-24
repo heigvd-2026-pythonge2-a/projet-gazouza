@@ -255,7 +255,8 @@ export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
  */
 function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
   if (doc === s.doc) return {};
-  return { doc, history: record(s.history, s.doc, key) };
+  // The wire sections are kept by index: once the wires change, they may point elsewhere.
+  return { doc, history: record(s.history, s.doc, key), segments: [] };
 }
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */

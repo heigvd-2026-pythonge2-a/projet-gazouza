@@ -81,6 +81,26 @@ describe("wire sections in the rectangle (#121)", () => {
     expect(store().doc).toBe(withR.doc);
   });
 
+  it("forgets the sections when the schematic changes, so Delete never removes another one", () => {
+    // The wire leaves the resistor's pin 2 at (0,2), bends at (0,6) and ends at (12,6).
+    let doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: p(0, 0),
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    doc = addWire(doc, [p(0, 2), p(0, 6), p(12, 6)])!.doc;
+    store().openDocument(doc);
+    store().selectInRect(rectFrom(p(-1, -3), p(5, 7)), "inside");
+    expect(store().segments).toHaveLength(1);
+    // Pin 2 comes down onto the bend: the selected segment (0,2)-(0,6) is gone, and index 0 is now
+    // the segment (0,6)-(12,6), which was never selected.
+    store().moveSelection(p(0, 4));
+    expect(store().segments).toEqual([]);
+    store().deleteSelection();
+    expect(store().doc.wires).toHaveLength(1);
+  });
+
   it("forgets the sections when the selection changes", () => {
     const { doc } = zigzag();
     store().openDocument(doc);
