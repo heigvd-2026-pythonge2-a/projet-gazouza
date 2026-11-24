@@ -43,15 +43,48 @@ export interface EditorJunction {
   position: GridPoint;
 }
 
+/** Free text on the schematic (#123): decorative, ignored by the netlist. */
+export interface EditorText {
+  id: string;
+  /** Top-left corner of the text, on the grid. */
+  position: GridPoint;
+  /** Text as typed, line breaks included. */
+  content: string;
+}
+
 export interface EditorDoc {
   components: PlacedComponent[];
   wires: EditorWire[];
   junctions: EditorJunction[];
+  texts: EditorText[];
 }
 
-export const emptyDoc = (): EditorDoc => ({ components: [], wires: [], junctions: [] });
+export const emptyDoc = (): EditorDoc => ({ components: [], wires: [], junctions: [], texts: [] });
 
 // --- Geometry -------------------------------------------------------------------------------
+
+/** Size of the free texts, in grid units: font size, line height and (estimated) letter width. */
+export const TEXT_FONT_SIZE = 0.7;
+export const TEXT_LINE_HEIGHT = 0.9;
+const TEXT_CHAR_WIDTH = 0.4;
+/** Longest content of a free text (the contract's limit). */
+export const TEXT_MAX_LENGTH = 2000;
+
+/**
+ * Box of a free text, in grid units (estimated from its lines, the font is not measured): used
+ * by the selection rectangle and to fit the view. An empty text keeps the size of one letter.
+ */
+export function textBounds(t: EditorText): GridRect {
+  const lines = t.content.split("\n");
+  const longest = Math.max(1, ...lines.map((l) => l.length));
+  return {
+    min: { ...t.position },
+    max: {
+      x: t.position.x + longest * TEXT_CHAR_WIDTH,
+      y: t.position.y + lines.length * TEXT_LINE_HEIGHT,
+    },
+  };
+}
 
 /**
  * Local symbol coordinates -> grid coordinates.
@@ -227,7 +260,7 @@ const inRect = (p: GridPoint, r: GridRect): boolean =>
 
 /**
  * Ids of what lies entirely inside `r`: components whose symbol box does, wires whose points all
- * do, and junctions. Used by the selection rectangle.
+ * do, junctions, and texts whose box does. Used by the selection rectangle.
  */
 export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   const components = doc.components.filter((c) => {
@@ -237,12 +270,16 @@ export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   });
   const wires = doc.wires.filter((w) => wirePath(doc, w).every((p) => inRect(p, r)));
   const junctions = doc.junctions.filter((j) => inRect(j.position, r));
-  return [...components, ...wires, ...junctions].map((item) => item.id);
+  const texts = doc.texts.filter((t) => {
+    const box = textBounds(t);
+    return inRect(box.min, r) && inRect(box.max, r);
+  });
+  return [...components, ...wires, ...junctions, ...texts].map((item) => item.id);
 }
 
 /**
- * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires and
- * junctions. Null for an empty document.
+ * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires,
+ * junctions and texts. Null for an empty document.
  */
 export function docBounds(doc: EditorDoc): GridRect | null {
   const points: GridPoint[] = [
@@ -252,6 +289,10 @@ export function docBounds(doc: EditorDoc): GridRect | null {
     }),
     ...doc.wires.flatMap((w) => wirePath(doc, w)),
     ...doc.junctions.map((j) => j.position),
+    ...doc.texts.flatMap((t) => {
+      const { min, max } = textBounds(t);
+      return [min, max];
+    }),
   ];
   if (points.length === 0) return null;
   const xs = points.map((p) => p.x);
@@ -279,7 +320,11 @@ const allIds = (doc: EditorDoc): string[] => [
   ...doc.components.map((c) => c.id),
   ...doc.wires.map((w) => w.id),
   ...doc.junctions.map((j) => j.id),
+  ...doc.texts.map((t) => t.id),
 ];
+
+/** Ids of every item of the document: components, wires, junctions and texts. */
+export const docIds = allIds;
 
 // --- Operations -----------------------------------------------------------------------------
 
@@ -299,6 +344,25 @@ export function addComponent(doc: EditorDoc, p: Placement): { doc: EditorDoc; id
   const component: PlacedComponent = { id, params, ...p, position: { ...p.position } };
   if (def.prefix !== null) component.name = nextIndexed(def.prefix, names);
   return { doc: { ...doc, components: [...doc.components, component] }, id };
+}
+
+/** Adds a free text; returns the new doc and the new text id. */
+export function addText(
+  doc: EditorDoc,
+  position: GridPoint,
+  content: string,
+): { doc: EditorDoc; id: string } {
+  const id = nextIndexed("t", allIds(doc));
+  const text: EditorText = { id, position: { ...position }, content };
+  return { doc: { ...doc, texts: [...doc.texts, text] }, id };
+}
+
+/** Changes the content of a free text (cut to `TEXT_MAX_LENGTH`). */
+export function setTextContent(doc: EditorDoc, id: string, content: string): EditorDoc {
+  const clipped = content.slice(0, TEXT_MAX_LENGTH);
+  const text = doc.texts.find((t) => t.id === id);
+  if (!text || text.content === clipped) return doc;
+  return { ...doc, texts: doc.texts.map((t) => (t.id === id ? { ...t, content: clipped } : t)) };
 }
 
 function updateComponents(
@@ -588,7 +652,7 @@ export function deleteSegment(doc: EditorDoc, part: WirePart): EditorDoc {
 const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });
 
 /**
- * Moves components, junctions and wires (by id) by `delta`, in grid units. A moved wire takes
+ * Moves components, junctions, texts and wires (by id) by `delta`, in grid units. A moved wire takes
  * its bends and free ends along. Wires attached to moved items on both sides are translated
  * whole; the others are re-aligned (see `realignedBends`) so they stay connected and orthogonal.
  */
@@ -606,6 +670,7 @@ export function moveItems(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridP
     wires: doc.wires.map((w) =>
       ids.has(w.id) ? { ...w, from: moveEnd(w.from), to: moveEnd(w.to) } : w,
     ),
+    texts: doc.texts.map((t) => (ids.has(t.id) ? { ...t, position: shift(t.position, delta) } : t)),
   };
   return {
     ...after,
@@ -791,7 +856,7 @@ export function addWire(
 export type Clip = EditorDoc;
 
 /**
- * The selected components and junctions, plus the wires whose two ends are inside the copy: both
+ * The selected components, junctions and texts, plus the wires whose two ends are inside the copy: both
  * attached to copied items, or free ends of a selected wire. Wires going outside are left out.
  */
 export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
@@ -802,7 +867,8 @@ export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
       "comp" in end ? ids.has(end.comp) : "junction" in end ? ids.has(end.junction) : ids.has(w.id);
     return inside(w.from) && inside(w.to);
   });
-  return structuredClone({ components, wires, junctions });
+  const texts = doc.texts.filter((t) => ids.has(t.id));
+  return structuredClone({ components, wires, junctions, texts });
 }
 
 /**
@@ -853,19 +919,25 @@ export function pasteClip(
     to: end(w.to),
     points: w.points.map((p) => shift(p, offset)),
   }));
+  const texts = clip.texts.map((t) => ({
+    id: fresh(t.id, "t"),
+    position: shift(t.position, offset),
+    content: t.content,
+  }));
 
   return {
     doc: {
       components: [...doc.components, ...components],
       wires: [...doc.wires, ...wires],
       junctions: [...doc.junctions, ...junctions],
+      texts: [...doc.texts, ...texts],
     },
-    ids: [...components, ...wires, ...junctions].map((item) => item.id),
+    ids: [...components, ...wires, ...junctions, ...texts].map((item) => item.id),
   };
 }
 
 /**
- * Deletes components, wires and junctions by id. Wire ends attached to a deleted component or
+ * Deletes components, wires, junctions and texts by id. Wire ends attached to a deleted component or
  * junction become free {x, y} ends at the same place, so no wire ever points to nothing.
  */
 export function deleteItems(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
@@ -883,6 +955,7 @@ export function deleteItems(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc
   return {
     components: doc.components.filter((c) => !ids.has(c.id)),
     junctions: doc.junctions.filter((j) => !ids.has(j.id)),
+    texts: doc.texts.filter((t) => !ids.has(t.id)),
     wires: doc.wires
       .filter((w) => !ids.has(w.id))
       .map((w) => ({ ...w, from: detach(w.from), to: detach(w.to) })),

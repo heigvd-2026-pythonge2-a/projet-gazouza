@@ -1,13 +1,15 @@
 // Schematic files saved and opened by the editor (File > Save / Open). This is the editor's own
 // format, not the API contract: it stores the editor document as it is.
 
-import type {
-  EditorDoc,
-  EditorJunction,
-  EditorWire,
-  GridPoint,
-  PlacedComponent,
-  WireEnd,
+import {
+  TEXT_MAX_LENGTH,
+  type EditorDoc,
+  type EditorJunction,
+  type EditorText,
+  type EditorWire,
+  type GridPoint,
+  type PlacedComponent,
+  type WireEnd,
 } from "./document";
 import { getDef } from "./library";
 
@@ -130,7 +132,21 @@ export function parseDoc(text: string): EditorDoc {
       points: w.points.map((p: unknown) => point(p, w.id as string)),
     };
   });
-  const all = [...ids.comps.keys(), ...ids.junctions, ...wires.map((w) => w.id)];
+  // Files saved before the free texts (#123) have none.
+  if (raw.texts !== undefined && !Array.isArray(raw.texts)) return fail("textes invalides");
+  const texts: EditorText[] = (raw.texts ?? []).map((t: unknown) => {
+    if (!isObject(t) || typeof t.id !== "string" || typeof t.content !== "string") {
+      return fail("texte invalide");
+    }
+    if (t.content.length > TEXT_MAX_LENGTH) return fail(`${t.id} : texte trop long`);
+    return { id: t.id, position: point(t.position, t.id), content: t.content };
+  });
+  const all = [
+    ...ids.comps.keys(),
+    ...ids.junctions,
+    ...wires.map((w) => w.id),
+    ...texts.map((t) => t.id),
+  ];
   if (new Set(all).size !== all.length) return fail("identifiants en double");
-  return { components, wires, junctions };
+  return { components, wires, junctions, texts };
 }

@@ -1,11 +1,13 @@
 import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 import {
+  TEXT_MAX_LENGTH,
   getDef,
   nameProblem,
   netNameProblem,
   useEditorStore,
   visibleParams,
+  type EditorText,
   type ParamOption,
   type PlacedComponent,
 } from "../store";
@@ -158,23 +160,87 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
   );
 }
 
-/** Properties of the selected component, editable. */
+/**
+ * Content of the selected free text (#123), in a multiline field: Enter starts a new line,
+ * Ctrl+Enter keeps what was typed, Escape takes it back.
+ */
+function TextProperties({ text }: { text: EditorText }) {
+  const setTextContent = useEditorStore((s) => s.setTextContent);
+  const id = useId();
+  const edited = useRef(false);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const done = e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey));
+    if (!done) return;
+    e.preventDefault();
+    // Escape must not also reach the app (it would leave full screen or clear the selection).
+    e.stopPropagation();
+    if (e.key === "Escape" && edited.current) useEditorStore.getState().undo();
+    edited.current = false;
+    e.currentTarget.blur();
+  };
+  return (
+    <>
+      <h3 style={UI.heading}>Texte</h3>
+      <label
+        htmlFor={id}
+        style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 3 }}
+      >
+        Contenu
+      </label>
+      <textarea
+        id={id}
+        value={text.content}
+        rows={4}
+        maxLength={TEXT_MAX_LENGTH}
+        onChange={(e) => {
+          edited.current = true;
+          setTextContent(text.id, e.target.value);
+        }}
+        onFocus={() => {
+          edited.current = false;
+          // The edits typed from now on are one undo step of their own, for Escape.
+          useEditorStore.getState().sealHistory();
+        }}
+        onKeyDown={onKeyDown}
+        style={{
+          ...controlStyle,
+          width: "100%",
+          boxSizing: "border-box",
+          resize: "vertical",
+          border: "1px solid #d1d5db",
+          borderRadius: 4,
+          background: "#ffffff",
+        }}
+      />
+      <p style={{ fontSize: 12, color: UI.muted, lineHeight: 1.5 }}>
+        Texte décoratif : il n'a aucun effet sur la simulation.
+        <br />
+        Entrée : nouvelle ligne · Ctrl+Entrée : valider · Échap : annuler.
+      </p>
+    </>
+  );
+}
+
+/** Properties of the selected component or text, editable. */
 export function Inspector() {
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
 
   const selected =
     selection.length === 1 ? doc.components.find((c) => c.id === selection[0]) : null;
+  const selectedText = selection.length === 1 ? doc.texts.find((t) => t.id === selection[0]) : null;
 
   let content;
   if (selected) content = <ComponentProperties component={selected} />;
+  else if (selectedText) content = <TextProperties text={selectedText} />;
   else {
     const text =
       selection.length > 1
         ? `${selection.length} éléments sélectionnés.`
         : selection.length === 1
           ? "Un fil n'a pas de propriétés."
-          : "Sélectionne un composant pour voir et modifier ses propriétés.";
+          : "Sélectionne un composant ou un texte pour voir et modifier ses propriétés.";
     content = (
       <>
         <h3 style={UI.heading}>Propriétés</h3>

@@ -174,5 +174,23 @@
         "pin": "1"
       }
     }
+  ],
+  "texts": [
+    {
+      "id": "t1",
+      "position": {
+        "x": -2,
+        "y": -7
+      },
+      "content": "Diviseur de tension"
+    },
+    {
+      "id": "t2",
+      "position": {
+        "x": 10,
+        "y": -1
+      },
+      "content": "Sortie attendue : 5 V"
+    }
   ]
 }

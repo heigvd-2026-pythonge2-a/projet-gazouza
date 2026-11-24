@@ -65,6 +65,14 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     ],
   },
   {
+    title: "Texte libre",
+    items: [
+      { keys: "T, puis clic", action: "Poser un texte, à écrire dans les propriétés" },
+      { keys: "Double-clic sur un texte", action: "Modifier son contenu" },
+      { keys: "Ctrl+Entrée / Échap", action: "Valider / annuler la saisie du texte" },
+    ],
+  },
+  {
     title: "Vue",
     items: [
       { keys: "Molette", action: "Zoom" },

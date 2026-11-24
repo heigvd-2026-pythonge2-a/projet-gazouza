@@ -57,6 +57,14 @@ afficher cette liste à tout moment.
 | Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser |
 | Double-clic sur un fil | Sélectionner le fil entier |
 
+## Texte libre
+
+| Geste | Action |
+|---|---|
+| <kbd>T</kbd>, puis clic | Poser un texte, à écrire dans les propriétés |
+| Double-clic sur un texte | Modifier son contenu |
+| <kbd>Ctrl+Entrée</kbd> / <kbd>Échap</kbd> | Valider / annuler la saisie du texte |
+
 ## Vue
 
 | Geste | Action |

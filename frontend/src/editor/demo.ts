@@ -32,6 +32,7 @@ export function loadDemo(name: string) {
     components: schematic.components,
     junctions: schematic.junctions,
     wires: schematic.wires.map((w: EditorWire) => ({ ...w, points: w.points ?? [] })),
+    texts: schematic.texts ?? [],
   };
   useEditorStore.getState().openDocument(doc);
   useEditorStore.getState().setSimulation(result);

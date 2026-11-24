@@ -19,15 +19,18 @@ import {
   wirePartAt,
   wirePartPoints,
   type GridPoint,
+  type EditorText,
   type GridRect,
   type PlacedComponent,
   type WirePart,
+  NEW_TEXT,
 } from "../store";
 import { AnimationControls } from "./AnimationControls";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport } from "./fitView";
+import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
@@ -69,7 +72,7 @@ interface Press {
   vy: number;
   /** The view is being moved (always for the middle button, after the threshold for the right). */
   panning: boolean;
-  /** Component under the right press, if any. */
+  /** Component or text under the right press, if any. */
   componentId: string | null;
 }
 
@@ -172,6 +175,10 @@ function useKeyboardShortcuts() {
         case "W":
           s.startWiring();
           break;
+        case "t":
+        case "T":
+          s.startText();
+          break;
         case "Delete":
         case "Backspace":
           s.deleteSelection();
@@ -221,6 +228,7 @@ export function SchematicCanvas() {
   const wirePart = useEditorStore((s) => s.wirePart);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
+  const placeText = useEditorStore((s) => s.placeText);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
@@ -270,9 +278,9 @@ export function SchematicCanvas() {
   const shownSelection = exporting ? [] : selection;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
-  const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
+  const dragIds = (c: { id: string }): ReadonlySet<string> =>
     new Set(selection.includes(c.id) ? selection : [c.id]);
-  const deltaFrom = (c: PlacedComponent, position: GridPoint): GridPoint => ({
+  const deltaFrom = (c: { position: GridPoint }, position: GridPoint): GridPoint => ({
     x: position.x - c.position.x,
     y: position.y - c.position.y,
   });
@@ -391,13 +399,16 @@ export function SchematicCanvas() {
 
   /**
    * Right click without moving: leaves the wire being drawn or the current tool (like Escape);
-   * with the select tool, opens the menu of the component clicked.
+   * with the select tool, opens the menu of the component (or text) clicked.
    */
   const rightClick = (press: Press, e: MouseEvent) => {
     const s = useEditorStore.getState();
     if (s.draft) s.cancelDraft();
     else if (s.tool.kind !== "select") s.cancel();
-    else if (press.componentId && s.doc.components.some((c) => c.id === press.componentId)) {
+    else if (
+      press.componentId &&
+      [...s.doc.components, ...s.doc.texts].some((c) => c.id === press.componentId)
+    ) {
       if (!s.selection.includes(press.componentId)) s.select([press.componentId]);
       const box = containerRef.current?.getBoundingClientRect();
       if (box) setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
@@ -595,6 +606,12 @@ export function SchematicCanvas() {
     } else if (tool.kind === "place") {
       const p = pointerGrid();
       if (p) placeAt(p);
+    } else if (tool.kind === "text") {
+      const p = pointerGrid();
+      if (!p) return;
+      placeText(p);
+      // The new text is selected: type its content in the properties panel.
+      focusInspector();
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -607,6 +624,21 @@ export function SchematicCanvas() {
   /** `c` as it is in the store (the one drawn may be shifted by the drag in progress). */
   const storeComponent = (c: PlacedComponent): PlacedComponent =>
     storeDoc.components.find((x) => x.id === c.id) ?? c;
+  const storeText = (t: EditorText): EditorText => storeDoc.texts.find((x) => x.id === t.id) ?? t;
+
+  /** While dragging `item`: shows the items that follow it moved by `delta`. */
+  const dragTo = (item: { id: string }, delta: GridPoint) =>
+    setDrag((d) =>
+      d && d.delta.x === delta.x && d.delta.y === delta.y
+        ? d
+        : { ids: d?.ids ?? dragIds(item), delta },
+    );
+  /** End of a drag of `item` by `delta`: moves it with the rest of the selection. */
+  const dropAt = (item: { id: string }, delta: GridPoint) => {
+    setDrag(null);
+    if (!selection.includes(item.id)) select([item.id]);
+    moveSelection(delta);
+  };
 
   const closeMenu = useCallback(() => setMenu(null), []);
 
@@ -653,7 +685,13 @@ export function SchematicCanvas() {
         position: "relative",
         overflow: "hidden",
         background: COLORS.background,
-        cursor: panning ? "grabbing" : tool.kind === "select" ? "default" : "crosshair",
+        cursor: panning
+          ? "grabbing"
+          : tool.kind === "select"
+            ? "default"
+            : tool.kind === "text"
+              ? "text"
+              : "crosshair",
       }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={onDragOver}
@@ -694,19 +732,8 @@ export function SchematicCanvas() {
               onContextPress={() => {
                 rightPressed.current = c.id;
               }}
-              onDrag={(position) => {
-                const delta = deltaFrom(storeComponent(c), position);
-                setDrag((d) =>
-                  d && d.delta.x === delta.x && d.delta.y === delta.y
-                    ? d
-                    : { ids: d?.ids ?? dragIds(c), delta },
-                );
-              }}
-              onMove={(position) => {
-                setDrag(null);
-                if (!selection.includes(c.id)) select([c.id]);
-                moveSelection(deltaFrom(storeComponent(c), position));
-              }}
+              onDrag={(position) => dragTo(c, deltaFrom(storeComponent(c), position))}
+              onMove={(position) => dropAt(c, deltaFrom(storeComponent(c), position))}
               onDoubleClick={
                 tool.kind === "select"
                   ? () => {
@@ -720,6 +747,28 @@ export function SchematicCanvas() {
                   ? (pin) => {
                       startWireFrom(pinPosition(c, pin));
                       trackPointer();
+                    }
+                  : undefined
+              }
+            />
+          ))}
+          {doc.texts.map((t) => (
+            <FreeText
+              key={t.id}
+              text={t}
+              selected={shownSelection.includes(t.id)}
+              draggable={tool.kind === "select"}
+              onSelect={(e) => selectItem(t.id, e)}
+              onContextPress={() => {
+                rightPressed.current = t.id;
+              }}
+              onDrag={(position) => dragTo(t, deltaFrom(storeText(t), position))}
+              onMove={(position) => dropAt(t, deltaFrom(storeText(t), position))}
+              onDoubleClick={
+                tool.kind === "select"
+                  ? () => {
+                      select([t.id]);
+                      focusInspector();
                     }
                   : undefined
               }
@@ -762,6 +811,9 @@ export function SchematicCanvas() {
             />
           ))}
           {ghost && !exporting && <ComponentSymbol component={ghost} ghost />}
+          {tool.kind === "text" && pointer && !exporting && (
+            <FreeText text={{ id: "ghost", position: pointer, content: NEW_TEXT }} ghost />
+          )}
           {band && !exporting && (
             <Rect
               x={band.min.x * GRID}

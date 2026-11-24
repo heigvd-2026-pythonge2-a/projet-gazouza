@@ -6,12 +6,14 @@ import { create } from "zustand";
 import type { SimulationResult } from "../api/client";
 import {
   addComponent,
+  addText,
   addWire,
   anchorAt,
   copyItems,
   deleteBend,
   deleteItems,
   deleteSegment,
+  docIds,
   emptyDoc,
   mirrorComponents,
   moveComponent,
@@ -23,6 +25,7 @@ import {
   rotateCw,
   samePoint,
   setParam,
+  setTextContent,
   type Clip,
   type EditorDoc,
   type GridPoint,
@@ -39,7 +42,12 @@ export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
 export type Tool =
   | { kind: "select" }
   | { kind: "place"; type: string; rotation: Rotation; mirror: boolean }
-  | { kind: "wire" };
+  | { kind: "wire" }
+  /** Click on the schematic to write a free text there (#123). */
+  | { kind: "text" };
+
+/** Content of a free text just placed, selected in the properties panel to be typed over. */
+export const NEW_TEXT = "Texte";
 
 /** Wire being drawn: not part of the document until it is finished. */
 export interface WireDraft {
@@ -122,6 +130,15 @@ interface EditorState {
   setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
+  /** Starts the text tool (T). */
+  startText: () => void;
+  /**
+   * Click with the text tool: adds a text there, selects it and goes back to the select tool (its
+   * content is then typed in the properties panel).
+   */
+  placeText: (position: GridPoint) => void;
+  /** Changes the content of a free text (one undo step per field edit, like the other fields). */
+  setTextContent: (id: string, content: string) => void;
   /** Presses on a pin with the select tool: starts a wire there. */
   startWireFrom: (position: GridPoint) => void;
   /**
@@ -152,7 +169,7 @@ interface EditorState {
    * current tool, else clears the selection.
    */
   cancel: () => void;
-  /** Ctrl+A: selects every component, wire and junction. */
+  /** Ctrl+A: selects every component, wire, junction and text. */
   selectAll: () => void;
   /** Ctrl+C: copies the selection (and the wires between selected items) to the clipboard. */
   copy: () => void;
@@ -235,13 +252,13 @@ function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
 function existing(doc: EditorDoc, selection: string[]): string[] {
-  const ids = new Set([
-    ...doc.components.map((c) => c.id),
-    ...doc.wires.map((w) => w.id),
-    ...doc.junctions.map((j) => j.id),
-  ]);
+  const ids = new Set(docIds(doc));
   return selection.filter((id) => ids.has(id));
 }
+
+/** True if a clipboard holds something to paste (a junction alone is not worth it). */
+const pastable = (clip: Clip): boolean =>
+  clip.components.length + clip.wires.length + clip.texts.length > 0;
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
   ...freshDocument(emptyDoc()),
@@ -303,6 +320,23 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
 
   startWiring: () => set({ tool: { kind: "wire" }, selection: [], wirePart: null, draft: null }),
+
+  startText: () => set({ tool: { kind: "text" }, selection: [], wirePart: null, draft: null }),
+
+  placeText: (position) =>
+    set((s) => {
+      if (s.tool.kind !== "text") return {};
+      const added = addText(s.doc, position, NEW_TEXT);
+      return {
+        ...change(s, added.doc),
+        selection: [added.id],
+        wirePart: null,
+        tool: { kind: "select" },
+      };
+    }),
+
+  setTextContent: (id, content) =>
+    set((s) => change(s, setTextContent(s.doc, id, content), `text:${id}`)),
 
   startWireFrom: (position) =>
     set({
@@ -429,11 +463,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   selectAll: () =>
     set((s) => ({
-      selection: [
-        ...s.doc.components.map((c) => c.id),
-        ...s.doc.wires.map((w) => w.id),
-        ...s.doc.junctions.map((j) => j.id),
-      ],
+      selection: docIds(s.doc),
       wirePart: null,
       tool: { kind: "select" },
       draft: null,
@@ -447,7 +477,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   paste: () =>
     set((s) => {
-      if (!s.clipboard || s.clipboard.components.length + s.clipboard.wires.length === 0) return {};
+      if (!s.clipboard || !pastable(s.clipboard)) return {};
       const pasted = pasteClip(s.doc, s.clipboard, PASTE_OFFSET);
       return {
         ...change(s, pasted.doc),
@@ -464,7 +494,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => {
       if (s.selection.length === 0) return {};
       const clip = copyItems(s.doc, new Set(s.selection));
-      if (clip.components.length + clip.wires.length === 0) return {};
+      if (!pastable(clip)) return {};
       const pasted = pasteClip(s.doc, clip, PASTE_OFFSET);
       return { ...change(s, pasted.doc), selection: pasted.ids, wirePart: null };
     }),

@@ -19,11 +19,11 @@ export function focusInspector({ value = false }: { value?: boolean } = {}) {
   window.dispatchEvent(new Event(SHOW_INSPECTOR_EVENT));
   // Wait for the panel to show the selected component and, if needed, for full screen to end.
   requestAnimationFrame(() => {
-    const fields = `#${INSPECTOR_ID} input, #${INSPECTOR_ID} select`;
+    const fields = `#${INSPECTOR_ID} input, #${INSPECTOR_ID} select, #${INSPECTOR_ID} textarea`;
     const field =
       (value && document.querySelector<HTMLElement>(`#${INSPECTOR_ID} [${VALUE_FIELD_ATTR}]`)) ||
       document.querySelector<HTMLElement>(fields);
     field?.focus();
-    if (field instanceof HTMLInputElement) field.select();
+    if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) field.select();
   });
 }
