@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { isUnsaved, useEditorStore } from "../store";
 import { exportImage, newFile, openFile, saveFile, saveFileAs } from "./fileActions";
+import { exportNetlist } from "./simulationActions";
 import { UI } from "./theme";
 import { fitView, zoomIn, zoomOut } from "./viewCommands";
 
@@ -15,6 +16,7 @@ const ICONS = {
   saveAs: "M2.5 2.5h9l2 2v3 M2.5 2.5v11h5 M5 2.5v3.5h5V2.5 M9.5 13.5l4-4 1 1-4 4h-1z",
   import: "M8 1.5v8 M5 6.5l3 3 3-3 M2.5 10.5v3h11v-3",
   export: "M8 9.5v-8 M5 4.5l3-3 3 3 M2.5 10.5v3h11v-3",
+  netlist: "M3.5 1.5h6l3 3v10h-9z M5.5 7.5h5 M5.5 9.5h5 M5.5 11.5h3",
   undo: "M5.5 3.5l-3 3 3 3 M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7",
   redo: "M10.5 3.5l3 3-3 3 M13.5 6.5H6a3.5 3.5 0 0 0 0 7h3",
   delete: "M2.5 4h11 M6 4V2.5h4V4 M4 4l.8 9.5h6.4L12 4 M6.8 6.5V11 M9.2 6.5V11",
@@ -159,6 +161,11 @@ export function EditorToolbar() {
           label="Exporter le schéma en image PNG"
           icon="export"
           onClick={() => void exportImage()}
+        />
+        <ToolButton
+          label="Exporter la netlist SPICE (.cir), avec l'analyse choisie"
+          icon="netlist"
+          onClick={() => void exportNetlist()}
         />
       </Group>
       <Group label="Édition">

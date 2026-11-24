@@ -17,7 +17,7 @@ import {
 import { exportImage as renderImage } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
-interface PickerType {
+export interface PickerType {
   description: string;
   accept: Record<string, string[]>;
 }
@@ -218,7 +218,7 @@ export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
 export const saveFileAs = () => saveFile({ askWhere: true });
 
 /** Saves `content` in a new file, chosen with the system dialog or downloaded. */
-async function saveNewFile(name: string, content: Blob, types: PickerType[]) {
+export async function saveNewFile(name: string, content: Blob, types: PickerType[]) {
   const api = pickers();
   if (!api) {
     download(name, content);

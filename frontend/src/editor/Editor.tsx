@@ -1,7 +1,7 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Layer, Rect, Stage } from "react-konva";
+import { Circle, Layer, Rect, Stage, Text } from "react-konva";
 
 import {
   animatable,
@@ -10,6 +10,7 @@ import {
   itemsInRect,
   moveItems,
   moveWirePart,
+  operatingPointLabels,
   pinPosition,
   rectFrom,
   samePoint,
@@ -229,6 +230,14 @@ export function SchematicCanvas() {
   const dropComponent = useEditorStore((s) => s.dropComponent);
   const simulation = useEditorStore(freshSimulation);
   const animation = useEditorStore((s) => s.animation);
+  const showValues = useEditorStore((s) => s.showValues);
+  const nets = useEditorStore((s) => s.simulation?.nets);
+  // Values of an operating point next to the nodes and components (#102).
+  const valueLabels = useMemo(
+    () =>
+      showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
+    [showValues, simulation, nets, storeDoc],
+  );
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
@@ -716,6 +725,30 @@ export function SchematicCanvas() {
               }
             />
           ))}
+          {!drag &&
+            valueLabels.map((l) => {
+              const width = 80;
+              const x = l.position.x * GRID;
+              const y = l.position.y * GRID;
+              const at = {
+                above: { x: x - width / 2, y: y - 16, align: "center" },
+                below: { x: x - width / 2, y: y + 4, align: "center" },
+                right: { x: x + 6, y: y - 6, align: "left" },
+                left: { x: x - width - 2, y: y - 6, align: "right" },
+              }[l.side];
+              return (
+                <Text
+                  key={l.key}
+                  text={l.text}
+                  {...at}
+                  width={width}
+                  fontSize={11}
+                  fontStyle="bold"
+                  fill={l.kind === "voltage" ? "#7c3aed" : "#b45309"}
+                  listening={false}
+                />
+              );
+            })}
           {freePins.map((p) => (
             <Circle
               key={`${p.comp}/${p.pin}`}

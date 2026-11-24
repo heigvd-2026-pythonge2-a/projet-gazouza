@@ -6,3 +6,4 @@ export * from "./editorStore";
 export * from "./fileFormat";
 export * from "./library";
 export * from "./routing";
+export * from "./simulation";

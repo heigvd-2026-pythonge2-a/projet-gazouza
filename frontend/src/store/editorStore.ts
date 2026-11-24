@@ -31,6 +31,7 @@ import {
 } from "./document";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
+import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
 
 /** Grid units between a copied (or pasted) group and the next paste. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
@@ -82,8 +83,23 @@ interface EditorState {
   clipboard: Clip | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
   history: History<EditorDoc>;
-  /** Last simulation, with the document it was run on: stale once `doc` is another one. */
-  simulation: { result: SimulationResult; doc: EditorDoc } | null;
+  /**
+   * Last simulation, with the document it was run on: stale once `doc` is another one. `nets`
+   * (SPICE node -> wire ids, from the netlist) places the node voltages on the schematic.
+   */
+  simulation: {
+    result: SimulationResult;
+    doc: EditorDoc;
+    nets: Record<string, string[]>;
+  } | null;
+  /** The analysis set in the toolbar, used by the Simulate button and the netlist export. */
+  analysis: AnalysisSettings;
+  /** A simulation is running (the Simulate button then stops it). */
+  simulating: boolean;
+  /** Why the last simulation could not run (backend unreachable, invalid settings...), in French. */
+  simulationError: string | null;
+  /** Show the operating point values (.op) on the schematic. */
+  showValues: boolean;
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
@@ -157,7 +173,11 @@ interface EditorState {
    */
   sealHistory: () => void;
   /** Keeps the result of a simulation of the current document (null: forget it). */
-  setSimulation: (result: SimulationResult | null) => void;
+  setSimulation: (result: SimulationResult | null, nets?: Record<string, string[]>) => void;
+  setAnalysis: (patch: Partial<AnalysisSettings>) => void;
+  /** Records that a simulation started (`true`), or ended with this error (or none). */
+  setSimulating: (running: boolean, error?: string | null) => void;
+  setShowValues: (show: boolean) => void;
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
@@ -227,6 +247,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   ...freshDocument(emptyDoc()),
   clipboard: null,
   animation: { on: false, electrons: false, playing: true, speed: 1 },
+  analysis: DEFAULT_ANALYSIS,
+  simulating: false,
+  simulationError: null,
+  showValues: true,
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null }),
 
@@ -357,13 +381,20 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   sealHistory: () => set((s) => ({ history: seal(s.history) })),
 
-  setSimulation: (result) =>
+  setSimulation: (result, nets = {}) =>
     set((s) => ({
-      simulation: result ? { result, doc: s.doc } : null,
+      simulation: result ? { result, doc: s.doc, nets } : null,
       animation: { ...s.animation, on: false },
     })),
 
   setAnimation: (patch) => set((s) => ({ animation: { ...s.animation, ...patch } })),
+
+  setAnalysis: (patch) => set((s) => ({ analysis: { ...s.analysis, ...patch } })),
+
+  setSimulating: (running, error = null) =>
+    set({ simulating: running, simulationError: running ? null : error }),
+
+  setShowValues: (show) => set({ showValues: show }),
 
   newDocument: () => set(freshDocument(emptyDoc())),
 

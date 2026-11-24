@@ -8,6 +8,8 @@ import {
   Palette,
   SHOW_INSPECTOR_EVENT,
   SchematicCanvas,
+  SimulationControls,
+  SimulationReport,
   StatusBar,
   saveRescueCopy,
 } from "./editor";
@@ -116,7 +118,7 @@ export default function App() {
         />
       </div>
       <PanelErrorBoundary panel="les résultats">
-        <p style={{ color: "#6b7280" }}>Les courbes s'afficheront ici après une simulation.</p>
+        <SimulationReport />
       </PanelErrorBoundary>
     </section>
   );
@@ -167,33 +169,9 @@ export default function App() {
         <PanelErrorBoundary panel="la barre d'outils" onRescue={saveRescueCopy} compact>
           <EditorToolbar />
         </PanelErrorBoundary>
-        {/* Simulation group. Wired to POST /api/simulate in a later PR (simulation panel). */}
-        <select
-          disabled
-          aria-label="Analyse"
-          title="Choix de l'analyse et de ses paramètres — Bientôt disponible"
-          style={{ ...TOOL_BUTTON, opacity: 0.5, cursor: "not-allowed" }}
-        >
-          <option>Analyse : point de fonctionnement (.op)</option>
-        </select>
-        <button
-          type="button"
-          disabled
-          title="Bientôt disponible"
-          style={{
-            padding: "5px 12px",
-            border: "1px solid #16a34a",
-            borderRadius: 5,
-            background: "#16a34a",
-            color: "#ffffff",
-            fontWeight: 600,
-            font: "inherit",
-            opacity: 0.5,
-            cursor: "not-allowed",
-          }}
-        >
-          ▶ Simuler
-        </button>
+        <PanelErrorBoundary panel="la simulation" compact>
+          <SimulationControls />
+        </PanelErrorBoundary>
         <AnimateButton style={TOOL_BUTTON} />
         <button
           type="button"
