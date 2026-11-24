@@ -18,17 +18,19 @@ hero:
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Aside, Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 import AppShowcase from '../../components/AppShowcase.astro';
 import Roadmap from '../../components/Roadmap.astro';
 import Team from '../../components/Team.astro';
 
 <AppShowcase />
 
-<p style="text-align: center; font-size: var(--sl-text-sm); color: var(--sl-color-gray-3);">
-	Illustration de l'objectif : un circuit RC, sa courbe de charge et la sonde posée sur le nœud
-	<code>out</code>.
-</p>
+<Aside type="caution" title="Psice est en cours de développement">
+	L'éditeur de schéma et le moteur de simulation (netlist, ngspice, import `.asc`) fonctionnent
+	déjà. Le bouton **Simuler**, les courbes, la sonde et l'import depuis l'interface arrivent dans
+	les prochains jalons : l'illustration ci-dessus montre l'objectif. Voir la
+	[feuille de route](/projet-gazouza/projet/feuille-de-route/).
+</Aside>
 
 <div class="psice-section">
 <span class="psice-kicker">Pourquoi Psice</span>
@@ -56,8 +58,8 @@ import Team from '../../components/Team.astro';
 		peut même s'animer sur le schéma.
 	</Card>
 	<Card title="Des erreurs qui expliquent" icon="warning">
-		Pas de masse ? Broche en l'air ? Psice le dit en français et surligne l'endroit du schéma
-		concerné.
+		Pas de masse ? Broche en l'air ? Psice le dit en français et nomme le composant concerné.
+		Les broches non reliées sont marquées en rouge pendant que tu dessines.
 	</Card>
 	<Card title="Compatible LTspice" icon="random">
 		Importe les fichiers <code>.asc</code> de LTspice (composants du périmètre) pour reprendre

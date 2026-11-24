@@ -4,8 +4,13 @@ description: Tous les messages d'erreur et avertissements de Psice, ce qu'ils ve
 ---
 
 Avant de simuler, Psice **vérifie le schéma** et rassemble toutes les erreurs d'un coup. Chaque
-message est en français, nomme le composant concerné, et l'éditeur **surligne** l'élément
-fautif (composant, broche, fil, jonction ou nœud).
+message est en français et nomme le composant concerné. Il désigne aussi l'élément fautif
+(composant, broche, fil, jonction ou nœud), pour que l'éditeur le surligne.
+
+:::note[Déjà visible dans l'éditeur]
+Pendant que tu dessines, les broches non reliées sont déjà marquées en **rouge** et comptées
+dans la barre d'état. Le surlignage des autres erreurs arrive avec le panneau de simulation.
+:::
 
 - Une **erreur** bloque la simulation : il faut la corriger.
 - Un **avertissement** n'empêche pas de simuler, mais signale probablement un oubli.
