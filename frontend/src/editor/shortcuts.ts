@@ -41,6 +41,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (décalé, avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },
       { keys: "Ctrl+Z / Ctrl+Y", action: "Annuler / rétablir" },
+      { keys: "Double-clic sur un composant", action: "Changer sa valeur sur le schéma" },
       { keys: "Clic droit sur un composant", action: "Menu des actions" },
     ],
   },

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { addComponent, emptyDoc, renameComponent, setParam, type EditorDoc } from "./document";
-import { paletteGroups } from "./library";
-import { componentProblems, invalidValues, valueProblem } from "./values";
+import { getDef, paletteGroups } from "./library";
+import { componentProblems, invalidValues, paramProblem, valueProblem } from "./values";
 
 describe("valueProblem", () => {
   it("accepts SPICE numbers, with a suffix and a unit, in any case", () => {
@@ -126,5 +126,18 @@ describe("componentProblems", () => {
     expect(componentProblems(setParam(l.doc, l.id, "net", "n3"))).toEqual([
       { comp: l.id, param: "net", level: "error", message: expect.stringMatching(/réservé/) },
     ]);
+  });
+});
+
+describe("paramProblem", () => {
+  it("checks numbers, the node name of a label, and never a choice", () => {
+    const [resistance] = getDef("resistor").params;
+    const [net] = getDef("label").params;
+    const waveform = getDef("voltage_source").params.find((p) => p.kind === "choice");
+    expect(paramProblem("resistor", resistance!, "10l")?.level).toBe("error");
+    expect(paramProblem("resistor", resistance!, "10k")).toBeNull();
+    expect(paramProblem("label", net!, "n1")?.message).toMatch(/réservé/);
+    expect(paramProblem("label", net!, "out")).toBeNull();
+    expect(paramProblem("voltage_source", waveform!, "")).toBeNull();
   });
 });

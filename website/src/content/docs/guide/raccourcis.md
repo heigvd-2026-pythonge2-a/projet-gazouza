@@ -36,6 +36,7 @@ afficher cette liste à tout moment.
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (décalé, avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
+| Double-clic sur un composant | Changer sa valeur sur le schéma |
 | Clic droit sur un composant | Menu des actions |
 
 ## Composants
