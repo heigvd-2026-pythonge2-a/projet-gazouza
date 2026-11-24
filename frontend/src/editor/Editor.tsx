@@ -1,13 +1,13 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Layer, Rect, Stage } from "react-konva";
+import { Circle, Group, Layer, Rect, Stage } from "react-konva";
 
 import {
   animatable,
+  clipAnchor,
   docBounds,
   freshSimulation,
-  itemsInRect,
   moveItems,
   moveWirePart,
   pinPosition,
@@ -143,7 +143,7 @@ function useKeyboardShortcuts() {
       if (arrow) {
         if (s.tool.kind !== "select" || s.selection.length === 0) return;
         // Holding the key down repeats it: one undo step for the whole move.
-        s.moveSelection(arrow, true);
+        s.moveSelection(arrow, { merge: true });
         e.preventDefault();
         return;
       }
@@ -192,14 +192,21 @@ export function SchematicCanvas() {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
-  /** Selection rectangle being drawn (grid units). */
-  const [band, setBand] = useState<GridRect | null>(null);
+  /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
+  const [band, setBand] = useState<{ rect: GridRect; touching: boolean } | null>(null);
   /** Context menu, at this position in the canvas. */
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
-  /** Items being dragged and how far (grid units): shown moved before the store changes. */
-  const [drag, setDrag] = useState<{ ids: ReadonlySet<string>; delta: GridPoint } | null>(null);
+  /**
+   * Items being dragged and how far (grid units): shown moved before the store changes. With
+   * Ctrl (`detach`), the wires stay where they are.
+   */
+  const [drag, setDrag] = useState<{
+    ids: ReadonlySet<string>;
+    delta: GridPoint;
+    detach: boolean;
+  } | null>(null);
   /** Where the selected wire part is being dragged (grid point), before the store changes. */
   const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
@@ -208,8 +215,10 @@ export function SchematicCanvas() {
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
+  const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
+  const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
@@ -242,7 +251,7 @@ export function SchematicCanvas() {
 
   // While dragging, show the dragged items (and the wires they pull) at their new place.
   const doc = drag
-    ? moveItems(storeDoc, drag.ids, drag.delta)
+    ? moveItems(storeDoc, drag.ids, drag.delta, { detach: drag.detach })
     : partTarget && wirePart
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
@@ -398,14 +407,15 @@ export function SchematicCanvas() {
 
   /**
    * Left press in the void with the select tool: dragging draws a selection rectangle, which
-   * selects what is entirely inside it (Shift adds to the selection). A click without moving
-   * clears the selection. Escape while drawing drops the rectangle.
+   * selects what is entirely inside it, sections of wires included. With Shift, it toggles what
+   * touches it instead (see `selectInRect`). A click without moving clears the selection (not
+   * with Shift). Escape while drawing drops the rectangle.
    */
   const startBand = (e: MouseEvent) => {
     endPress.current?.();
     const start = pointerAt(e);
     if (!start) return;
-    const additive = e.shiftKey;
+    const touching = e.shiftKey;
     const from = { x: e.clientX, y: e.clientY };
     let rect: GridRect | null = null;
 
@@ -414,18 +424,17 @@ export function SchematicCanvas() {
       const p = pointerAt(ev);
       if (!p) return;
       rect = rectFrom(start, p);
-      setBand(rect);
+      setBand({ rect, touching });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
       const s = useEditorStore.getState();
       if (!rect) {
-        if (!additive) s.select([]);
+        if (!touching) s.select([]);
         return;
       }
-      const inside = itemsInRect(s.doc, rect);
-      s.select(additive ? [...new Set([...s.selection, ...inside])] : inside);
+      s.selectInRect(rect, touching ? "touching" : "inside");
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
@@ -533,6 +542,9 @@ export function SchematicCanvas() {
     } else if (tool.kind === "place") {
       const p = pointerGrid();
       if (p) placeAt(p);
+    } else if (tool.kind === "paste") {
+      const p = pointerGrid();
+      if (p) pasteAt(p);
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -582,6 +594,19 @@ export function SchematicCanvas() {
         }
       : null;
 
+  // Pasted or duplicated items, centred on the pointer until a click drops them.
+  const pasteGhost = useMemo(() => {
+    if (tool.kind !== "paste" || !pointer) return null;
+    const clip = tool.clip;
+    const anchor = clipAnchor(clip);
+    const ids = new Set([
+      ...clip.components.map((c) => c.id),
+      ...clip.wires.map((w) => w.id),
+      ...clip.junctions.map((j) => j.id),
+    ]);
+    return moveItems(clip, ids, { x: pointer.x - anchor.x, y: pointer.y - anchor.y });
+  }, [tool, pointer]);
+
   return (
     <div
       ref={containerRef}
@@ -618,6 +643,7 @@ export function SchematicCanvas() {
             doc={doc}
             selection={selection}
             part={tool.kind === "select" ? wirePart : null}
+            segments={tool.kind === "select" ? segments : []}
             onSelect={tool.kind === "select" ? selectItem : undefined}
             onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
             onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
@@ -632,18 +658,18 @@ export function SchematicCanvas() {
               onContextPress={() => {
                 rightPressed.current = c.id;
               }}
-              onDrag={(position) => {
+              onDrag={(position, detach) => {
                 const delta = deltaFrom(storeComponent(c), position);
                 setDrag((d) =>
-                  d && d.delta.x === delta.x && d.delta.y === delta.y
+                  d && d.delta.x === delta.x && d.delta.y === delta.y && d.detach === detach
                     ? d
-                    : { ids: d?.ids ?? dragIds(c), delta },
+                    : { ids: d?.ids ?? dragIds(c), delta, detach },
                 );
               }}
-              onMove={(position) => {
+              onMove={(position, detach) => {
                 setDrag(null);
                 if (!selection.includes(c.id)) select([c.id]);
-                moveSelection(deltaFrom(storeComponent(c), position));
+                moveSelection(deltaFrom(storeComponent(c), position), { detach });
               }}
               onDoubleClick={
                 tool.kind === "select"
@@ -676,16 +702,27 @@ export function SchematicCanvas() {
             />
           ))}
           {ghost && <ComponentSymbol component={ghost} ghost />}
+          {pasteGhost && (
+            <>
+              <Group opacity={0.5} listening={false}>
+                <Wires doc={pasteGhost} selection={[]} />
+              </Group>
+              {pasteGhost.components.map((c) => (
+                <ComponentSymbol key={c.id} component={c} ghost />
+              ))}
+            </>
+          )}
           {band && (
+            // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
             <Rect
-              x={band.min.x * GRID}
-              y={band.min.y * GRID}
-              width={(band.max.x - band.min.x) * GRID}
-              height={(band.max.y - band.min.y) * GRID}
-              fill="rgba(37, 99, 235, 0.08)"
-              stroke={COLORS.selected}
+              x={band.rect.min.x * GRID}
+              y={band.rect.min.y * GRID}
+              width={(band.rect.max.x - band.rect.min.x) * GRID}
+              height={(band.rect.max.y - band.rect.min.y) * GRID}
+              fill={band.touching ? "rgba(22, 163, 74, 0.08)" : "rgba(37, 99, 235, 0.08)"}
+              stroke={band.touching ? "#16a34a" : COLORS.selected}
               strokeWidth={1 / viewport.scale}
-              dash={[4 / viewport.scale, 4 / viewport.scale]}
+              dash={band.touching ? [4 / viewport.scale, 4 / viewport.scale] : undefined}
               listening={false}
             />
           )}

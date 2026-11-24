@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { SimulationResult } from "../api/client";
-import { emptyDoc, pinPosition, wirePath, type GridPoint } from "./document";
+import { emptyDoc, overlappingPairs, pinPosition, wirePath, type GridPoint } from "./document";
 import { PASTE_OFFSET, freshSimulation, isUnsaved, useEditorStore } from "./editorStore";
 import { fixtureDoc, fixtureResult } from "./testFixtures";
 
@@ -18,6 +18,36 @@ beforeEach(() => {
 });
 
 describe("placing components", () => {
+  it("shifts a component placed on top of another one until it is free", () => {
+    store().startPlacing("resistor");
+    for (let i = 0; i < 3; i++) store().placeAt({ x: 0, y: 0 });
+    const positions = store().doc.components.map((c) => c.position);
+    expect(positions).toEqual([
+      { x: 0, y: 0 },
+      { x: PASTE_OFFSET.x, y: PASTE_OFFSET.y },
+      { x: 2 * PASTE_OFFSET.x, y: 2 * PASTE_OFFSET.y },
+    ]);
+    // Shifted before being connected to anything: no wire to the one it was placed on.
+    expect(store().doc.wires).toEqual([]);
+  });
+
+  it("does not move a component onto another one", () => {
+    const a = dropResistor({ x: 0, y: 0 });
+    const b = dropResistor({ x: 4, y: 0 });
+    store().select([b.id]);
+    store().moveSelection({ x: -4, y: 0 });
+    const moved = store().doc.components.find((c) => c.id === b.id)!;
+    expect(moved.position).not.toEqual(a.position);
+    expect(overlappingPairs(store().doc, new Set([b.id])).size).toBe(0);
+  });
+
+  it("allows two components touching by one pin", () => {
+    dropResistor({ x: 0, y: 0 });
+    // Pin 2 of the first resistor is at (0,2), pin 1 of this one too.
+    const b = dropResistor({ x: 0, y: 4 });
+    expect(b.position).toEqual({ x: 0, y: 4 });
+  });
+
   it("keeps placing with the place tool, rotated and mirrored as set", () => {
     store().startPlacing("capacitor");
     store().rotate();
@@ -76,8 +106,8 @@ describe("undo / redo", () => {
 
   it("merges a held arrow key into one step", () => {
     const c = dropResistor({ x: 0, y: 0 });
-    store().moveSelection({ x: 1, y: 0 }, true);
-    store().moveSelection({ x: 1, y: 0 }, true);
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
     expect(store().doc.components[0]!.position).toEqual({ x: 2, y: 0 });
     store().undo();
     expect(store().doc.components[0]!.position).toEqual(c.position);
@@ -160,26 +190,61 @@ describe("selection, clipboard and deletion", () => {
     expect(store().selection).toHaveLength(all.length);
   });
 
-  it("pastes further each time and selects what was pasted", () => {
+  it("pastes where the user clicks, centred on the pointer, and selects what was pasted", () => {
     const c = dropResistor({ x: 0, y: 0 });
     store().copy();
     store().paste();
-    store().paste();
+    expect(store().tool.kind).toBe("paste");
+    // Nothing is added until the click.
+    expect(store().doc.components).toHaveLength(1);
+    store().pasteAt({ x: 10, y: 0 });
     const comps = store().doc.components;
-    expect(comps.map((x) => x.position)).toEqual([
-      c.position,
-      { x: PASTE_OFFSET.x, y: PASTE_OFFSET.y },
-      { x: 2 * PASTE_OFFSET.x, y: 2 * PASTE_OFFSET.y },
-    ]);
-    expect(store().selection).toEqual([comps[2]!.id]);
-    expect(comps.map((x) => x.name)).toEqual(["R1", "R2", "R3"]);
+    expect(comps.map((x) => x.position)).toEqual([c.position, { x: 10, y: 0 }]);
+    expect(store().selection).toEqual([comps[1]!.id]);
+    expect(comps.map((x) => x.name)).toEqual(["R1", "R2"]);
+    expect(store().tool).toEqual({ kind: "select" });
+    // The clipboard can be pasted again.
+    store().paste();
+    store().pasteAt({ x: 20, y: 0 });
+    expect(store().doc.components.map((x) => x.name)).toEqual(["R1", "R2", "R3"]);
+  });
+
+  it("never pastes on top of a component", () => {
+    dropResistor({ x: 0, y: 0 });
+    store().duplicate();
+    store().pasteAt({ x: 0, y: 0 });
+    const [a, b] = store().doc.components;
+    expect(b!.position).not.toEqual(a!.position);
+    expect(overlappingPairs(store().doc, new Set([b!.id])).size).toBe(0);
+    expect(store().doc.wires).toEqual([]);
+  });
+
+  it("drops nothing when the paste is cancelled", () => {
+    dropResistor({ x: 0, y: 0 });
+    store().duplicate();
+    store().cancel();
+    expect(store().tool).toEqual({ kind: "select" });
+    expect(store().doc.components).toHaveLength(1);
+    expect(store().history.past).toHaveLength(1);
   });
 
   it("duplicates without touching the clipboard", () => {
     dropResistor({ x: 0, y: 0 });
     store().duplicate();
+    store().pasteAt({ x: 6, y: 6 });
     expect(store().doc.components).toHaveLength(2);
     expect(store().clipboard).toBeNull();
+  });
+
+  it("pastes the wires between copied components with them", () => {
+    store().openDocument(fixtureDoc("divider_op"));
+    store().selectAll();
+    const before = store().doc;
+    store().duplicate();
+    store().pasteAt({ x: 40, y: 40 });
+    const after = store().doc;
+    expect(after.components).toHaveLength(2 * before.components.length);
+    expect(after.wires).toHaveLength(2 * before.wires.length);
   });
 
   it("deletes the whole wire of a bend selected on its own", () => {

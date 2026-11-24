@@ -1,11 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from "react";
 
-import {
-  componentBounds,
-  componentProblems,
-  type ComponentProblem,
-  type EditorDoc,
-} from "../store";
+import { componentBox, componentProblems, type ComponentProblem, type EditorDoc } from "../store";
 import type { Viewport } from "./Grid";
 import { GRID, UI } from "./theme";
 
@@ -146,7 +141,7 @@ export function ErrorBubbles({
       {problems.map((p) => {
         const c = doc.components.find((x) => x.id === p.comp);
         if (!c) return null;
-        const box = componentBounds(c);
+        const box = componentBox(c);
         return (
           <Bubble
             key={p.comp}
