@@ -186,7 +186,7 @@ def test_prepare_netlist_preserves_directives_title_and_appends_save_and_end() -
         "V1 in 0 DC 10",
         "R1 in out 1k",
         ".op",
-        ".save all @r1[i]",
+        ".save v(in) v(out) i(v1) i(l1) @r1[i]",
         ".end",
     ]
 
@@ -212,7 +212,7 @@ def test_prepare_netlist_preserves_directives_title_and_appends_save_and_end() -
         "R1 in out 1k",
         "C1 out 0 1u",
         ".tran 10u 5m 0 10u",
-        ".save all @r1[i] @c1[i]",
+        ".save v(in) v(out) i(v1) @r1[i] @c1[i]",
         ".end",
     ]
 
@@ -503,7 +503,7 @@ def test_successful_run_executes_in_isolated_tempdir_with_create_no_window(
     assert recorded["env"]["SPICE_ASCIIRAWFILE"] == "1"
     assert recorded["creationflags"] == 0x08000000
     assert recorded["shell"] is False
-    assert ".save all @r1[i] @r2[i]" in recorded["circuit_text"]
+    assert ".save v(in) v(out) i(v1) @r1[i] @r2[i]" in recorded["circuit_text"]
     assert not recorded["cwd"].exists()
 
 
@@ -1620,7 +1620,7 @@ def test_prepare_netlist_revalidates_final_output(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         runner_module,
         "_collect_save_tokens",
-        lambda _components, _existing, *, is_ac=False: ["all\n.control\nshell calc\n.endc"],
+        lambda *_args, **_kwargs: ["all\n.control\nshell calc\n.endc"],
     )
     with pytest.raises(UnsafeNetlistError):
         prepare_netlist(_divider_netlist())
@@ -1651,7 +1651,7 @@ def test_prepare_netlist_ac_revalidates_sense_sources_pass_and_fail(
     monkeypatch.setattr(
         runner_module,
         "_collect_save_tokens",
-        lambda _components, _existing, *, is_ac=False: ["all\n.control\nshell calc\n.endc"],
+        lambda *_args, **_kwargs: ["all\n.control\nshell calc\n.endc"],
     )
     with pytest.raises(UnsafeNetlistError):
         prepare_netlist(ac_netlist, ac_analysis)
@@ -1896,7 +1896,7 @@ def test_oversized_netlist_rejected_before_disk_write(monkeypatch: pytest.Monkey
 def test_oversized_rawfile_rejected_before_reading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert MAX_RAWFILE_BYTES == 50 * 1024 * 1024
+    assert MAX_RAWFILE_BYTES == 200 * 1024 * 1024
     fake_exe = tmp_path / "ngspice_con.exe"
     raw_bytes = _divider_raw().encode("utf-8")
     raw_size = len(raw_bytes)
@@ -2134,9 +2134,25 @@ def test_prepare_netlist_ac_instruments_non_vl_components_and_avoids_collisions(
     assert "V__psice_sense_i1 0 __psice_sense_i1 DC 0" in lines
     assert "I1 __psice_sense_i1 n2 DC 1m AC 0" in lines
     assert "X1 n2 out BUF" in lines
-    # .save in AC must only request `all` and NEVER @r1[i] / @c1[i] / @d1[i] / @i1[i].
-    assert ".save all" in lines
-    assert not any("@" in line for line in lines if line.startswith((".save", "+")))
+    # .save in AC with non-empty nets emits explicit v(<net>), i(V*/L*), and i(<sense_source>),
+    # omitting `all`, dummy sense-node voltages, and @comp[...] tokens.
+    save_start = lines.index(next(line for line in lines if line.startswith(".save ")))
+    save_lines = lines[save_start:-1]
+    assert save_lines == [
+        ".save v(in) v(n1) v(n2) v(out) v(__psice_sense_r1) "
+        "i(v1) i(v__psice_sense_r1) i(l1) i(v__psice_sense_r1_1) i(v__psice_sense_c1)",
+        "+ i(v__psice_sense_d1) i(v__psice_sense_i1)",
+    ]
+    save_joined = " ".join(save_lines)
+    assert "all" not in save_joined.split()
+    for omitted_sense_v in (
+        "v(__psice_sense_r1_1)",
+        "v(__psice_sense_c1)",
+        "v(__psice_sense_d1)",
+        "v(__psice_sense_i1)",
+    ):
+        assert omitted_sense_v not in save_joined
+    assert "@" not in save_joined
     assert current_aliases == {
         "v__psice_sense_r1_1": "R1",
         "v__psice_sense_c1": "C1",
@@ -2208,7 +2224,10 @@ def test_run_simulation_ac_mocked_maps_aliases(
 
     res = run_simulation(ac_netlist, ac_analysis, ngspice_path=fake_exe)
     assert res.errors == []
-    assert ".save all\n" in recorded_circuits[0]
+    assert (
+        ".save v(in) v(out) i(v1) i(v__psice_sense_r1) i(v__psice_sense_c1)\n"
+        in recorded_circuits[0]
+    )
     assert "@r1[i]" not in recorded_circuits[0]
     assert [t.name for t in res.traces] == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(C1)"]
     assert res.traces[3].values == [0.0005]
@@ -2426,6 +2445,30 @@ def test_run_simulation_validates_top_level_directives_before_ngspice(
     assert "v1" in res_wrong_dc.errors[0].message.lower()
 
 
+def test_run_simulation_injects_missing_directive_when_mocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_exe = tmp_path / "ngspice_con.exe"
+    fake_exe.write_bytes(b"")
+    recorded_circuits: list[str] = []
+
+    def _fake_run(cmd: list[str], **kwargs: Any) -> SimpleNamespace:
+        cwd = Path(kwargs["cwd"])
+        recorded_circuits.append((cwd / "circuit.cir").read_text(encoding="utf-8"))
+        (cwd / "output.raw").write_text(_divider_raw(), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner_module.subprocess, "run", _fake_run)
+    no_dir = NetlistResult(
+        netlist="* no dir\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.end\n",
+        nets=_divider_netlist().nets,
+        components=_divider_netlist().components,
+    )
+    res = run_simulation(no_dir, OpAnalysis(), ngspice_path=fake_exe)
+    assert res.errors == []
+    assert "\n.op\n.save v(in) v(out) i(v1) @r1[i] @r2[i]\n.end\n" in recorded_circuits[0]
+
+
 def test_prepare_netlist_injects_directives_ac1_and_normalizes_descending_dc() -> None:
     base_netlist = NetlistResult(
         netlist=(
@@ -2453,7 +2496,7 @@ def test_prepare_netlist_injects_directives_ac1_and_normalizes_descending_dc() -
         "R1 in out 1k",
         "C1 out 0 100n",
         ".op",
-        ".save all @r1[i] @c1[i]",
+        ".save v(in) v(out) i(v1) @r1[i] @c1[i]",
         ".end",
     ]
 
@@ -2476,7 +2519,7 @@ def test_prepare_netlist_injects_directives_ac1_and_normalizes_descending_dc() -
     assert "V1 in 0 DC 5 AC 1" in ac_lines
     assert ".ac dec 20 10 100000" in ac_lines
     assert "V__psice_sense_r1 in __psice_sense_r1 DC 0" in ac_lines
-    assert ".save all" in ac_lines
+    assert ".save v(in) v(out) i(v1) i(v__psice_sense_r1) i(v__psice_sense_c1)" in ac_lines
 
     # Direct prepare_netlist with missing DcAnalysis source omits .dc injection cleanly.
     prep_dc_missing = prepare_netlist(
@@ -2815,3 +2858,376 @@ def test_ngspice_descending_dc_and_directive_injection_and_ac_default_warning() 
     assert len(res_bad_ac.errors) == 1
     assert res_bad_ac.errors[0].code == "SIMULATION_FAILED"
     assert "assumes default parameter(s)" in res_bad_ac.errors[0].message.lower()
+
+
+@pytest.mark.parametrize(
+    "bad_net_name",
+    [
+        "",
+        "out)\n.control\nshell calc\n.endc",
+        "out;echo hi",
+        "out bad",
+        "out\tbad",
+        "out(1)",
+        "out)v(in",
+        "out\x01",
+        "out\x7f",
+    ],
+)
+def test_prepare_netlist_rejects_unsafe_net_keys(
+    bad_net_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fail_call(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("ngspice must not be located or invoked for unsafe net names")
+
+    monkeypatch.setattr(runner_module, "locate_ngspice", _fail_call)
+    monkeypatch.setattr(runner_module.subprocess, "run", _fail_call)
+
+    netlist_result = NetlistResult(
+        netlist="* safe body\nV1 in 0 DC 5\nR1 in 0 1k\n.op\n.end\n",
+        nets={bad_net_name: ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    with pytest.raises(UnsafeNetlistError) as exc_info:
+        prepare_netlist(netlist_result)
+    assert exc_info.value.user_message
+
+    result = run_simulation(netlist_result, OpAnalysis())
+    assert result.traces == []
+    assert len(result.errors) == 1
+    assert result.errors[0].code == "SIMULATION_FAILED"
+    assert result.errors[0].message == exc_info.value.user_message
+
+
+def test_prepare_netlist_explicit_save_tokens_dedup_idempotency_and_fallback() -> None:
+    # 1. Explicit nets emit user voltages + currents and skip all, ground 0, Q*, M*, X*.
+    subckt_netlist = NetlistResult(
+        netlist=(
+            "* explicit save\n"
+            ".subckt OA_IDEAL inp inn out\n"
+            "Rin inp inn 1e12\n"
+            "E1 out 0 inp inn 1e6\n"
+            ".ends OA_IDEAL\n"
+            "V1 Vin 0 DC 5\n"
+            "L1 Vin N_Mid 1m\n"
+            "R1 N_Mid Out 1k\n"
+            "C1 Out 0 1u\n"
+            "D1 Out 0 DMOD\n"
+            "I1 0 Out DC 1m\n"
+            "Q1 Out Vin 0 QMOD\n"
+            "M1 Out Vin 0 0 MMOD\n"
+            "X1 Vin 0 Out OA_IDEAL\n"
+            ".model DMOD D\n"
+            ".model QMOD NPN\n"
+            ".model MMOD NMOS\n"
+            ".op\n"
+            ".end\n"
+        ),
+        nets={"Vin": ["w1"], "N_Mid": ["w2"], "Out": ["w3"], "0": ["w4"]},
+        components={
+            "V1": "c1",
+            "L1": "c2",
+            "R1": "c3",
+            "C1": "c4",
+            "D1": "c5",
+            "I1": "c6",
+            "Q1": "c7",
+            "M1": "c8",
+            "X1": "c9",
+        },
+    )
+    prepared_explicit = prepare_netlist(subckt_netlist)
+    save_tokens = [
+        tok
+        for line in prepared_explicit.splitlines()
+        if line.startswith((".save", "+ "))
+        for tok in line.split()[1:]
+    ]
+    assert save_tokens == [
+        "v(vin)",
+        "v(n_mid)",
+        "v(out)",
+        "i(v1)",
+        "i(l1)",
+        "@r1[i]",
+        "@c1[i]",
+        "@d1[id]",
+        "@i1[c]",
+    ]
+    assert "all" not in save_tokens
+    assert "v(0)" not in save_tokens
+
+    # Idempotent when re-prepared with existing explicit .save tokens.
+    re_prepared = prepare_netlist(
+        NetlistResult(
+            netlist=prepared_explicit,
+            nets=subckt_netlist.nets,
+            components=subckt_netlist.components,
+        )
+    )
+    assert re_prepared == prepared_explicit
+
+    # Existing partial .save (mixed case) only appends missing tokens.
+    partial_save = NetlistResult(
+        netlist=("* partial\nV1 Vin 0 DC 5\nR1 Vin Out 1k\n.op\n.save v(VIN) I(V1)\n.end\n"),
+        nets={"Vin": ["w1"], "Out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    prep_partial = prepare_netlist(partial_save)
+    assert ".save v(VIN) I(V1)" in prep_partial.splitlines()
+    assert ".save v(out) @r1[i]" in prep_partial.splitlines()
+
+    # 2. In .ac with explicit nets, uninstrumented R_MISSING (absent from netlist) is skipped
+    #    cleanly, while instrumented components emit i(v__psice_sense_*) and no @comp[...].
+    ac_netlist = NetlistResult(
+        netlist="* ac\nV1 in 0 DC 0 AC 1\nR1 in out 1k\n.ac dec 5 10 1000\n.end\n",
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "R_MISSING": "c3"},
+    )
+    ac_prep = prepare_netlist(
+        ac_netlist,
+        AcAnalysis(
+            input_source_id="c1",
+            start_frequency=10.0,
+            stop_frequency=1000.0,
+            points_per_decade=5,
+        ),
+    )
+    assert ".save v(in) v(out) i(v1) i(v__psice_sense_r1)" in ac_prep.splitlines()
+    assert "r_missing" not in ac_prep.lower()
+
+    # 3. Ground-only nets dict emits only component tokens (no v(0)), or nothing if none.
+    ground_only_with_v = prepare_netlist(
+        NetlistResult(
+            netlist="* gnd\nV1 0 0 DC 0\n.op\n.end\n",
+            nets={"0": ["w0"]},
+            components={"V1": "c1"},
+        )
+    )
+    assert ".save i(v1)" in ground_only_with_v.splitlines()
+
+    ground_only_no_comp = prepare_netlist(
+        NetlistResult(
+            netlist="* gnd only\nV1 0 0 DC 0\n.op\n.end\n",
+            nets={"0": ["w0"]},
+            components={"X1": "c1"},
+        )
+    )
+    assert not any(line.startswith(".save") for line in ground_only_no_comp.splitlines())
+
+
+def test_normalize_dc_step_line_inspects_netlist_bounds_and_spice_suffixes() -> None:
+    # Analysis ascending (-5 -> 5) vs descending netlist bounds (5 -> -5): must flip to -1.
+    desc_netlist_asc_analysis = NetlistResult(
+        netlist="* dc mismatch\nV1 in 0 DC 0\nR1 in 0 1k\n.dc V1 5 -5 1\n.end\n",
+        nets={"in": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    prep_desc = prepare_netlist(
+        desc_netlist_asc_analysis,
+        DcAnalysis(source_id="c1", start=-5.0, stop=5.0, step=1.0),
+    )
+    assert ".dc V1 5 -5 -1" in prep_desc.splitlines()
+
+    # Analysis descending (5 -> -5) vs ascending netlist bounds (-5 -> 5): must stay +1.
+    asc_netlist_desc_analysis = NetlistResult(
+        netlist="* dc mismatch 2\nV1 in 0 DC 0\nR1 in 0 1k\n.dc V1 -5 5 1\n.end\n",
+        nets={"in": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    prep_asc = prepare_netlist(
+        asc_netlist_desc_analysis,
+        DcAnalysis(source_id="c1", start=5.0, stop=-5.0, step=1.0),
+    )
+    assert ".dc V1 -5 5 1" in prep_asc.splitlines()
+
+    # Ascending netlist bounds with negative step: must flip to positive.
+    asc_neg_step = NetlistResult(
+        netlist="* dc asc neg\nV1 in 0 DC 0\nR1 in 0 1k\n.dc V1 -5 5 -1\n.end\n",
+        nets={"in": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    prep_asc_pos = prepare_netlist(
+        asc_neg_step,
+        DcAnalysis(source_id="c1", start=-5.0, stop=5.0, step=1.0),
+    )
+    assert ".dc V1 -5 5 1" in prep_asc_pos.splitlines()
+
+    # SPICE suffixes, units, and inline ';' comments supported cleanly.
+    assert (
+        runner_module._normalize_dc_step_line([".dc", "V1", "10", "5m", "+1m;note"])
+        == ".dc V1 10 5m -1m;note"
+    )
+    assert (
+        runner_module._normalize_dc_step_line([".dc", "V1", "1u", "10k", "-500mV;note"])
+        == ".dc V1 1u 10k 500mV;note"
+    )
+    assert (
+        runner_module._normalize_dc_step_line([".dc", "V1", "10Meg", "-5", "1k"])
+        == ".dc V1 10Meg -5 -1k"
+    )
+
+    # Equal bounds, zero step, overflow, and non-numeric tokens fall back cleanly (None).
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "5", "5", "1"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "5", "0", "0m"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "5", "0", "-0"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "vstart", "5", "1"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "10", "{stop}", "1"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "10", "0", "{step}"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "1e999", "0", "1"]) is None
+    assert runner_module._normalize_dc_step_line([".dc", "V1", "1kk", "0", "1"]) is None
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_explicit_save_excludes_subckt_and_sense_nodes_and_supports_100k_tran(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oa_generic_subckt = (
+        ".subckt OA_GENERIC inp inn out vp vn\n"
+        "Rin inp inn 2Meg\n"
+        "Gm 0 int inp inn 1m\n"
+        "Rint int 0 100Meg\n"
+        "Cint int 0 159p\n"
+        "Vcp vp cp DC 2\n"
+        "Vcn cn vn DC 2\n"
+        "Dp int cp DCLAMP\n"
+        "Dn cn int DCLAMP\n"
+        "Eout o1 0 int 0 1\n"
+        "Rout o1 out 75\n"
+        ".model DCLAMP D(Is=1e-14)\n"
+        ".ends OA_GENERIC\n"
+    )
+    opamp_circuit = (
+        "* opamp inverting circuit\n"
+        "V1 vp 0 DC 15\n"
+        "V2 vn 0 DC -15\n"
+        "V3 in 0 DC 0.5 AC 1\n"
+        "R1 in inv 1k\n"
+        "R2 inv out 10k\n"
+        "X1 0 inv out vp vn OA_GENERIC\n"
+        "Rload out 0 10k\n"
+        f"{oa_generic_subckt}"
+    )
+
+    recorded_raw_headers: list[str] = []
+    orig_parse = runner_module.parse_ngspice_output
+
+    def _capture_raw(raw_text: str, *args: Any, **kwargs: Any) -> SimulationResult:
+        recorded_raw_headers.append(raw_text.split("Values:", 1)[0])
+        return orig_parse(raw_text, *args, **kwargs)
+
+    monkeypatch.setattr(runner_module, "parse_ngspice_output", _capture_raw)
+
+    # 1. With nets provided in .op and .ac: rawfile must NOT contain X1 internal or sense nodes.
+    op_with_nets = NetlistResult(
+        netlist=f"{opamp_circuit}.op\n.end\n",
+        nets={"vp": ["w1"], "vn": ["w2"], "in": ["w3"], "inv": ["w4"], "out": ["w5"], "0": ["w6"]},
+        components={
+            "V1": "c1",
+            "V2": "c2",
+            "V3": "c3",
+            "R1": "c4",
+            "R2": "c5",
+            "X1": "c6",
+            "Rload": "c7",
+        },
+    )
+    res_op = run_simulation(op_with_nets, OpAnalysis())
+    assert res_op.errors == []
+    op_header = recorded_raw_headers[-1].lower()
+    for internal_var in ("x1.int", "x1.cp", "x1.cn", "x1.o1", "v.x1.vcp", "e.x1.eout"):
+        assert internal_var not in op_header
+    assert {t.name: t.values[0] for t in res_op.traces}["v(out)"] == pytest.approx(-5.0, abs=1e-3)
+
+    ac_with_nets = NetlistResult(
+        netlist=f"{opamp_circuit}.ac dec 5 10 1k\n.end\n",
+        nets=op_with_nets.nets,
+        components=op_with_nets.components,
+    )
+    res_ac = run_simulation(
+        ac_with_nets,
+        AcAnalysis(
+            input_source_id="c3",
+            start_frequency=10.0,
+            stop_frequency=1000.0,
+            points_per_decade=5,
+        ),
+    )
+    assert res_ac.errors == []
+    ac_header = recorded_raw_headers[-1].lower()
+    assert "x1.int" not in ac_header
+    assert "v(__psice_sense_" not in ac_header
+    assert "i(v__psice_sense_r1)" in ac_header
+
+    # 2. Raw netlist fallback (empty nets={}) still uses `.save all` and includes X1 nodes in raw.
+    raw_fallback = NetlistResult(
+        netlist=f"{opamp_circuit}.op\n.end\n",
+        nets={},
+        components={"V3": "c3", "R1": "c4", "X1": "c6"},
+    )
+    assert ".save all @r1[i]" in prepare_netlist(raw_fallback)
+    res_raw_fb = run_simulation(raw_fallback, OpAnalysis())
+    assert res_raw_fb.errors == []
+    assert "v(x1.int)" in recorded_raw_headers[-1].lower()
+
+    # 3. 100,000+ point .tran circuit with .subckt op-amp succeeds cleanly under MAX_RAWFILE_BYTES.
+    monkeypatch.undo()
+    tran_100k_netlist = NetlistResult(
+        netlist=(
+            "* 120k point opamp tran\n"
+            "V1 vp 0 DC 15\n"
+            "V2 vn 0 DC -15\n"
+            "V3 in 0 SIN(0 0.5 1k)\n"
+            "R1 in inv 1k\n"
+            "R2 inv out 10k\n"
+            "X1 0 inv out vp vn OA_GENERIC\n"
+            "Rload out 0 10k\n"
+            f"{oa_generic_subckt}"
+            ".tran 100n 12m 0 100n\n"
+            ".end\n"
+        ),
+        nets=op_with_nets.nets,
+        components=op_with_nets.components,
+    )
+    res_100k = run_simulation(
+        tran_100k_netlist,
+        TranAnalysis(stop_time=0.012, max_step=1e-7),
+        timeout=30.0,
+    )
+    assert res_100k.errors == []
+    assert res_100k.axis is not None
+    assert len(res_100k.axis.values) > 100_000
+    assert len(res_100k.axis.values) <= MAX_RESULT_POINTS
+    traces_100k = {t.name: t for t in res_100k.traces}
+    assert "i(X1)" not in traces_100k
+    assert min(traces_100k["v(out)"].values) == pytest.approx(-5.0, abs=0.05)
+    assert max(traces_100k["v(out)"].values) == pytest.approx(5.0, abs=0.05)
+
+    # 4. Real ngspice DC sweeps with netlist bounds overriding DcAnalysis polarity.
+    dc_desc_netlist = NetlistResult(
+        netlist="* dc 5 to -5\nV1 in 0 DC 0\nR1 in 0 1k\n.dc V1 5 -5 2.5\n.end\n",
+        nets={"in": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    res_dc_desc = run_simulation(
+        dc_desc_netlist,
+        DcAnalysis(source_id="c1", start=-5.0, stop=5.0, step=2.5),
+    )
+    assert res_dc_desc.errors == []
+    assert res_dc_desc.axis is not None
+    assert res_dc_desc.axis.values == pytest.approx([5.0, 2.5, 0.0, -2.5, -5.0])
+
+    dc_asc_neg = NetlistResult(
+        netlist="* dc -5 to 5 neg step\nV1 in 0 DC 0\nR1 in 0 1k\n.dc V1 -5 5 -2.5\n.end\n",
+        nets={"in": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    res_dc_asc = run_simulation(
+        dc_asc_neg,
+        DcAnalysis(source_id="c1", start=-5.0, stop=5.0, step=2.5),
+    )
+    assert res_dc_asc.errors == []
+    assert res_dc_asc.axis is not None
+    assert res_dc_asc.axis.values == pytest.approx([-5.0, -2.5, 0.0, 2.5, 5.0])
