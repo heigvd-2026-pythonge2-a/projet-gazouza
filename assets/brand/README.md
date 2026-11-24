@@ -53,8 +53,11 @@ le logo.
 
 ## Origine et licence
 
-- Logo dessiné par l'équipe Psice (HEIG-VD, 2026) ; fichiers sous la licence MIT du dépôt
+- Logo dessiné par l'équipe Psice (HEIG-VD, 2026). Le dessin (P, point, borne, tuile), le
+  script `make_brand.py` et les icônes sont sous la licence MIT du dépôt
   ([`LICENSE`](../../LICENSE)).
-- Les lettres « sice » viennent de la police **Segoe UI Semibold** (Microsoft, installée avec
-  Windows). Dans `psice-logo.svg`, elles sont converties en contours : le SVG s'affiche donc
-  sans la police installée, et le fichier de police n'est pas distribué.
+- **Exception** : les lettres « sice » de `psice-logo.svg` (et des images générées à partir de
+  lui) sont des contours issus de la police **Segoe UI Semibold**, propriété de Microsoft et
+  installée avec Windows. Ces contours sont utilisés uniquement pour le logo ; ils ne sont pas
+  couverts par la licence MIT du dépôt, et la police elle-même n'est pas distribuée. Le SVG
+  s'affiche sans la police installée.
