@@ -147,6 +147,7 @@ pnpm dev                                      # http://localhost:5173 (proxy /ap
 pnpm test                                     # tests unitaires (vitest)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
+pnpm build:demo                               # démo en ligne du site (website/public/demo/)
 pnpm gen:api                                  # régénérer les types depuis shared/openapi.json
 
 # Site web et documentation (dans website/)

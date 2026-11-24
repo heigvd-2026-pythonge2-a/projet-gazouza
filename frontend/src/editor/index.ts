@@ -10,6 +10,7 @@ export { SimulationControls, SimulationReport } from "./SimulationControls";
 export { StatusBar } from "./StatusBar";
 export { EditorToolbar } from "./Toolbar";
 
-// Development only: psiceDemo("rc_tran") or ?demo=rc_tran loads a fixture with its result.
-// It waits for the component library, like the editor itself.
-if (import.meta.env.DEV) void import("./demo").then((demo) => demo.installDemo());
+// Development and online demo only: psiceDemo("rc_tran") or ?demo=rc_tran loads a fixture with
+// its result. It waits for the component library, like the editor itself.
+if (import.meta.env.DEV || import.meta.env.MODE === "demo")
+  void import("./demo").then((demo) => demo.installDemo());

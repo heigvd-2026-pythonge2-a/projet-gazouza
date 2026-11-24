@@ -102,6 +102,7 @@ cd frontend
 pnpm test                 # tests unitaires (vitest)
 pnpm lint ; pnpm format   # lint + formatage
 pnpm build                # vérification de types + build
+pnpm build:demo           # démo en ligne, construite dans website/public/demo/
 ```
 
 </TabItem>
@@ -153,3 +154,17 @@ et le publie sur GitHub Pages à chaque fusion sur `main`.
 
 Les liens internes s'écrivent avec le chemin de base du site :
 `[Analyses](/projet-gazouza/guide/analyses/)`.
+
+### La démo en ligne
+
+La page [Essayer en ligne](/projet-gazouza/demarrer/essayer/) affiche le vrai frontend, construit
+en mode `demo` (`pnpm build:demo` dans `frontend/`) dans `website/public/demo/` (ignoré par git).
+Dans ce mode, le client API ne contacte pas de backend : `src/api/demoBackend.ts` répond à
+`/api/health`, sert `/api/library` depuis `shared/fixtures/library.json`, et répond à
+`/api/simulate` et `/api/netlist` avec les fichiers de `shared/fixtures/` quand on simule un
+circuit de référence tel quel (mêmes composants, valeurs, connexions et analyse ; les positions
+ne comptent pas). Pour tout autre circuit, la démo explique qu'il faut l'application. Les
+circuits de référence s'ouvrent avec `?demo=<circuit>`, avec leur résultat et leur analyse.
+`pages.yml` reconstruit la démo à chaque fusion sur `main` qui touche `frontend/` ou
+`shared/fixtures/`, et la CI vérifie qu'elle se construit sur chaque PR. Pour la voir en local,
+lance `pnpm build:demo` dans `frontend/` avant `pnpm dev` dans `website/`.
