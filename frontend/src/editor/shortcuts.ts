@@ -26,7 +26,14 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     items: [
       { keys: "Clic", action: "Sélectionner" },
       { keys: "Maj + clic", action: "Ajouter ou retirer de la sélection" },
-      { keys: "Glisser dans le vide", action: "Sélection par zone (Maj : ajouter)" },
+      {
+        keys: "Glisser dans le vide",
+        action: "Sélectionner ce qui est entièrement dans la zone (tronçons de fil compris)",
+      },
+      {
+        keys: "Maj + glisser dans le vide",
+        action: "Ajouter ce qui touche la zone, retirer ce qui était déjà sélectionné",
+      },
       { keys: "Ctrl+A", action: "Tout sélectionner" },
       { keys: "Échap", action: "Vider la sélection" },
     ],
@@ -34,14 +41,17 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "Modifier",
     items: [
-      { keys: "Glisser", action: "Déplacer la sélection" },
+      { keys: "Glisser", action: "Déplacer la sélection (les fils suivent)" },
+      { keys: "Ctrl + glisser", action: "Déplacer sans que les fils suivent" },
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
       { keys: "M", action: "Miroir" },
       { keys: "Suppr", action: "Supprimer" },
-      { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (décalé, avec de nouveaux noms)" },
+      { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },
+      { keys: "Clic (après coller ou dupliquer)", action: "Poser la copie qui suit la souris" },
       { keys: "Ctrl+Z / Ctrl+Y", action: "Annuler / rétablir" },
+      { keys: "Double-clic sur un composant", action: "Changer sa valeur sur le schéma" },
       { keys: "Clic droit sur un composant", action: "Menu des actions" },
     ],
   },
@@ -62,6 +72,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Échap (outil fil)", action: "Enlever le dernier coude" },
       { keys: "Clic sur un fil", action: "Sélectionner un coude ou un tronçon, à glisser" },
       { keys: "Double-clic sur un fil", action: "Sélectionner le fil entier" },
+      {
+        keys: "Suppr (coude / tronçon)",
+        action: "Supprimer le fil entier / couper le fil à cet endroit",
+      },
     ],
   },
   {

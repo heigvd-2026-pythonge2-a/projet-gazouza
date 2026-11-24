@@ -242,7 +242,9 @@ export function EditorToolbar() {
   const canUndo = useEditorStore((s) => s.history.past.length > 0);
   const canRedo = useEditorStore((s) => s.history.future.length > 0);
   const hasSelection = useEditorStore((s) => s.selection.length > 0);
-  const canDelete = useEditorStore((s) => s.selection.length > 0 || s.wirePart !== null);
+  const canDelete = useEditorStore(
+    (s) => s.selection.length > 0 || s.wirePart !== null || s.segments.length > 0,
+  );
   // Turning applies to the selected components, or to the one about to be placed.
   const canTurn = useEditorStore(
     (s) =>
