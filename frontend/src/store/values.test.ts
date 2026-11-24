@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+
+import { addComponent, emptyDoc, setParam } from "./document";
+import { paletteGroups } from "./library";
+import { invalidValues, valueProblem } from "./values";
+
+describe("valueProblem", () => {
+  it("accepts SPICE numbers, with a suffix and a unit, in any case", () => {
+    for (const v of [
+      "1",
+      "4.7k",
+      "10u",
+      ".5",
+      "-3",
+      "1e3",
+      "2.2Meg",
+      "1kOhm",
+      "10uF",
+      "5 ",
+      "1MEG",
+    ]) {
+      expect(valueProblem(v), v).toBeNull();
+    }
+  });
+
+  it("refuses an empty field, text, and a double suffix", () => {
+    expect(valueProblem("")).toEqual({ level: "error", message: "La valeur est obligatoire." });
+    for (const v of ["abc", "1kk", "10 ohms", "4k7", "k1"]) {
+      expect(valueProblem(v)?.level, v).toBe("error");
+      expect(valueProblem(v)?.message, v).toMatch(/1k, 10u, 2.2Meg/);
+    }
+  });
+
+  it("suggests the decimal point for a comma", () => {
+    expect(valueProblem("1,5k")).toEqual({
+      level: "error",
+      message: "Le séparateur décimal est le point, pas la virgule : écris « 1.5k ».",
+    });
+  });
+
+  it("warns about M (milli) and about F (femto) for a capacitance", () => {
+    expect(valueProblem("1M")).toEqual({
+      level: "warning",
+      message: "« M » veut dire milli en SPICE. Pour méga, écris « 1Meg ».",
+    });
+    expect(valueProblem("1m")).toBeNull();
+    expect(valueProblem("1F", "F")?.level).toBe("warning");
+    expect(valueProblem("1F", "Hz")).toBeNull();
+    expect(valueProblem("10uF", "F")).toBeNull();
+  });
+
+  it("accepts the default value of every parameter of the library", () => {
+    for (const group of paletteGroups()) {
+      for (const def of group.defs) {
+        for (const p of def.params) {
+          if (p.kind === "value")
+            expect(valueProblem(p.default, p.unit), `${def.type}.${p.name}`).toBeNull();
+        }
+      }
+    }
+  });
+});
+
+describe("invalidValues", () => {
+  it("lists the errors of the document, not the warnings", () => {
+    const added = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      mirror: false,
+    });
+    expect(invalidValues(added.doc)).toEqual([]);
+    expect(invalidValues(setParam(added.doc, added.id, "resistance", "1M"))).toEqual([]);
+    expect(invalidValues(setParam(added.doc, added.id, "resistance", "abc"))).toEqual([
+      {
+        comp: added.id,
+        name: "R1",
+        param: "resistance",
+        label: "Résistance",
+        message: expect.stringMatching(/non reconnue/),
+      },
+    ]);
+  });
+});
