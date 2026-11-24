@@ -9,6 +9,8 @@ Toutes les commandes sont à lancer avec **pnpm** depuis `website/`.
 
 - `pnpm dev` : lance le serveur local de prévisualisation (http://localhost:4321/projet-gazouza/).
 - `pnpm build` : vérifie la compilation du site avant commit ou PR.
+- La page « Essayer en ligne » affiche l'app construite dans `public/demo/` (ignoré par git) par
+  `pnpm build:demo` dans `frontend/` : lance-le avant `pnpm dev` pour voir la démo en local.
 
 Les pages de documentation sont rédigées en français dans `src/content/docs/` (Markdown / MDX).
 Le déploiement est assuré automatiquement par [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
