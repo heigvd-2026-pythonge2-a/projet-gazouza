@@ -102,7 +102,8 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   branche qui traite une ou plusieurs issues, passe chacune en `In progress`, avant le premier
   commit, pour que l'équipe voie ce qui est pris. Ensuite, le workflow
   [`issue-status.yml`](.github/workflows/issue-status.yml) s'occupe des issues fermées par la
-  PR (`Closes #N`) : `In review` quand la PR est ouverte, `In progress` si elle repasse en
+  PR (`Closes #N`, lu aussi dans la description pour une PR empilée sur une autre branche,
+  que GitHub ne relie pas à l'issue) : `In review` quand la PR est ouverte, `In progress` si elle repasse en
   brouillon, `Todo` si elle est fermée sans fusion ; la fusion ferme l'issue et la passe en
   `Done`. Il ne voit pas les issues seulement citées (`Refs #N`) : remets-les en `Todo` toi-même
   si personne ne continue la suite, ou si tu abandonnes la branche avant d'ouvrir une PR.

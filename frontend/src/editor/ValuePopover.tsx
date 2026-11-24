@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 
 import {
-  componentBounds,
+  componentBox,
   getDef,
   mainParam,
   paramProblem,
@@ -72,7 +72,7 @@ export function ValuePopover({
     const el = ref.current;
     const area = el?.parentElement?.getBoundingClientRect();
     if (!el || !area || !component) return;
-    const box = componentBounds(component);
+    const box = componentBox(component);
     const scale = GRID * viewport.scale;
     const x = ((box.min.x + box.max.x) / 2) * scale + viewport.x;
     const above = (box.min.y - GAP) * scale + viewport.y;
