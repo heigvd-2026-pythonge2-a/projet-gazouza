@@ -41,8 +41,12 @@ describe("EditorToolbar", () => {
 
     expect(button("Coller (Ctrl+V)")).toBeDisabled();
     await user.click(button("Copier (Ctrl+C)"));
+    // The copy follows the mouse on the schematic until a click there drops it.
     await user.click(button("Coller (Ctrl+V)"));
+    expect(editorState().tool.kind).toBe("paste");
+    act(() => editorState().pasteAt({ x: 10, y: 0 }));
     await user.click(button("Dupliquer (Ctrl+D)"));
+    act(() => editorState().pasteAt({ x: 20, y: 0 }));
     expect(editorState().doc.components.map((c) => c.name)).toEqual(["R1", "R2", "R3"]);
 
     await user.click(button("Supprimer (Suppr)"));

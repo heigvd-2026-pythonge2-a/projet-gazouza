@@ -1,10 +1,11 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Layer, Rect, Stage } from "react-konva";
+import { Circle, Group, Layer, Rect, Stage } from "react-konva";
 
 import {
   animatable,
+  clipAnchor,
   docBounds,
   freshSimulation,
   itemsInRect,
@@ -209,6 +210,7 @@ export function SchematicCanvas() {
   const wirePart = useEditorStore((s) => s.wirePart);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
+  const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
@@ -532,6 +534,9 @@ export function SchematicCanvas() {
     } else if (tool.kind === "place") {
       const p = pointerGrid();
       if (p) placeAt(p);
+    } else if (tool.kind === "paste") {
+      const p = pointerGrid();
+      if (p) pasteAt(p);
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -580,6 +585,19 @@ export function SchematicCanvas() {
           params: {},
         }
       : null;
+
+  // Pasted or duplicated items, centred on the pointer until a click drops them.
+  const pasteGhost = useMemo(() => {
+    if (tool.kind !== "paste" || !pointer) return null;
+    const clip = tool.clip;
+    const anchor = clipAnchor(clip);
+    const ids = new Set([
+      ...clip.components.map((c) => c.id),
+      ...clip.wires.map((w) => w.id),
+      ...clip.junctions.map((j) => j.id),
+    ]);
+    return moveItems(clip, ids, { x: pointer.x - anchor.x, y: pointer.y - anchor.y });
+  }, [tool, pointer]);
 
   return (
     <div
@@ -675,6 +693,16 @@ export function SchematicCanvas() {
             />
           ))}
           {ghost && <ComponentSymbol component={ghost} ghost />}
+          {pasteGhost && (
+            <>
+              <Group opacity={0.5} listening={false}>
+                <Wires doc={pasteGhost} selection={[]} />
+              </Group>
+              {pasteGhost.components.map((c) => (
+                <ComponentSymbol key={c.id} component={c} ghost />
+              ))}
+            </>
+          )}
           {band && (
             <Rect
               x={band.min.x * GRID}
