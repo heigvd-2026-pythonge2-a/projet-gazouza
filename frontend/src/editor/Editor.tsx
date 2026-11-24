@@ -34,7 +34,7 @@ import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
-import { registerViewCommands } from "./viewCommands";
+import { registerViewCommands, type ImageOptions } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
@@ -198,7 +198,10 @@ export function SchematicCanvas() {
    * While set, the schematic is drawn for the image export (no grid, no selection, no marks),
    * and this receives the image once that drawing is done.
    */
-  const [exporting, setExporting] = useState<{ done: (image: Blob | null) => void } | null>(null);
+  const [exporting, setExporting] = useState<{
+    options: ImageOptions;
+    done: (image: Blob | null) => void;
+  } | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
@@ -329,12 +332,12 @@ export function SchematicCanvas() {
       zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
       zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
       fit: fitView,
-      exportImage: () => new Promise((done) => setExporting({ done })),
+      exportImage: (options) => new Promise((done) => setExporting({ options, done })),
     });
   }, [size, zoomAt, fitView]);
 
-  /** The circuit drawn on a white background, as a PNG (null: nothing to draw). */
-  const renderImage = (): Promise<Blob | null> => {
+  /** The circuit drawn on a white or transparent background, as a PNG (null: nothing to draw). */
+  const renderImage = ({ transparent }: ImageOptions): Promise<Blob | null> => {
     const stage = stageRef.current;
     const layer = contentRef.current;
     const box = layer?.getClientRect();
@@ -355,20 +358,22 @@ export function SchematicCanvas() {
     image.height = drawn.height;
     const ctx = image.getContext("2d");
     if (!ctx) return Promise.resolve(null);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, image.width, image.height);
+    if (!transparent) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, image.width, image.height);
+    }
     ctx.drawImage(drawn, 0, 0);
     return new Promise((done) => image.toBlob(done, "image/png"));
   };
 
   // Image export: once drawn without the editing marks, render the circuit (with its captions)
-  // on a white background, whatever the zoom and the part shown on screen.
+  // on a white (or transparent) background, whatever the zoom and the part shown on screen.
   useEffect(() => {
     if (!exporting) return;
     // On the next frame: the layers then show the schematic drawn for the export.
     const frame = requestAnimationFrame(() => {
       setExporting(null);
-      void renderImage().then(exporting.done);
+      void renderImage(exporting.options).then(exporting.done);
     });
     return () => cancelAnimationFrame(frame);
   }, [exporting]);

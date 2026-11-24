@@ -125,10 +125,24 @@ describe("saving with the system file dialogs", () => {
 
     f.state().dropComponent("resistor", { x: 0, y: 0 });
     await f.exportImage();
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false });
     expect(showSaveFilePicker).toHaveBeenCalledWith(
       expect.objectContaining({ suggestedName: "schema.png" }),
     );
     expect(written).toEqual([image]);
+
+    await f.exportImage({ transparent: true });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+  });
+
+  it("remembers the transparent background choice, white by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.TRANSPARENT_EXPORT_KEY);
+    expect(f.exportTransparent()).toBe(false);
+    f.setExportTransparent(true);
+    expect(f.exportTransparent()).toBe(true);
+    f.setExportTransparent(false);
+    expect(f.exportTransparent()).toBe(false);
   });
 
   it("keeps the changes unsaved when the dialog is closed", async () => {
