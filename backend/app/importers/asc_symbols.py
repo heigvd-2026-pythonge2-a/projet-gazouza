@@ -32,12 +32,50 @@ SYMBOLS: dict[str, SymbolDef] = {
     "diode": SymbolDef("diode", _DIODE_PINS, "model"),
     "zener": SymbolDef("zener", _DIODE_PINS, "model"),
     "led": SymbolDef("led", _DIODE_PINS, "model"),
+    # Battery (Misc\cell): "+" at the origin. Positions checked on real LTspice files.
+    "cell": SymbolDef("voltage_source", (("+", 0, 0), ("-", 0, 64))),
+    # LTspice ideal op-amp: same outline as the real ones; its supply pins are not used.
+    "opamp": SymbolDef("opamp", (("+", -32, 80), ("-", -32, 48), ("out", 32, 64)), "model"),
+}
+
+# Real op-amps of the LTspice library (OpAmps\LT1055, OpAmps\opamp2...) share one outline.
+# Psice has one generic real model: the LTspice part is replaced by it, with a warning.
+REAL_OPAMP = SymbolDef(
+    "opamp_real",
+    (("+", -32, 80), ("-", -32, 48), ("out", 32, 64), ("V+", 0, 32), ("V-", 0, 96)),
+    "model",
+)
+
+
+# First letter of a SPICE name, by Psice type. LTspice calls op-amps U1, U2..., but a SPICE
+# subcircuit must start with X: such names are renamed on import (U1 -> XU1).
+PREFIXES = {
+    "resistor": "R",
+    "capacitor": "C",
+    "inductor": "L",
+    "voltage_source": "V",
+    "current_source": "I",
+    "diode": "D",
+    "zener": "D",
+    "led": "D",
+    "opamp": "X",
+    "opamp_real": "X",
 }
 
 
 def symbol_key(name: str) -> str:
     """'Misc\\\\res' or 'RES' -> 'res': LTspice may prefix the library folder."""
     return name.replace("/", "\\").split("\\")[-1].lower()
+
+
+def find_symbol(name: str) -> SymbolDef | None:
+    """The Psice definition of an LTspice symbol, or None if it is not supported."""
+    key = symbol_key(name)
+    if key in SYMBOLS:
+        return SYMBOLS[key]
+    if name.replace("/", "\\").lower().startswith("opamps\\"):
+        return REAL_OPAMP
+    return None
 
 
 def parse_orientation(orientation: str) -> tuple[int, bool]:

@@ -55,6 +55,11 @@ def test_read_lines() -> None:
     assert parsed.directives == [".tran 5m"]  # the comment is not a directive
 
 
+def test_blank_lines_before_version_are_accepted() -> None:
+    # A text editor may add an empty line at the top of the file.
+    assert read_asc("\n\n" + asc("FLAG 0 0 0")).flags[0].name == "0"
+
+
 def test_several_directives_in_one_text() -> None:
     assert read_asc(asc("TEXT 0 0 Left 2 !.op\\n.tran 1m")).directives == [".op", ".tran 1m"]
 
@@ -213,6 +218,12 @@ def test_sin_source_with_missing_arguments_keeps_the_defaults() -> None:
     assert params["phase"] == "0"  # default of the library
 
 
+def test_ltspice_sine_is_read_as_sin() -> None:
+    # The LTspice editor writes SINE(...), not SIN(...).
+    params = source("SINE(0 1 1k 0 0 0)")
+    assert (params["waveform"], params["amplitude"], params["frequency"]) == ("sin", "1", "1k")
+
+
 def test_current_source_uses_i1_i2() -> None:
     params = source("PULSE(0 1m 0 1n 1n 1m 2m)", symbol="current")
     assert (params["i1"], params["i2"]) == ("0", "1m")
@@ -236,9 +247,9 @@ def test_missing_value_uses_the_default() -> None:
 
 
 def test_unsupported_symbol_is_an_error() -> None:
-    result = import_asc(asc("SYMBOL OpAmps\\LT1001 0 0 R0", "SYMATTR InstName U1"))
+    result = import_asc(asc("SYMBOL Misc\\NE555 0 0 R0", "SYMATTR InstName U1"))
     assert result.schematic.components == []
-    assert "LT1001" in result.errors[0] and "U1" in result.errors[0]
+    assert "NE555" in result.errors[0] and "U1" in result.errors[0]
 
 
 def test_unknown_orientation_is_an_error() -> None:
@@ -278,6 +289,10 @@ def test_ac_uses_the_source_marked_ac() -> None:
         (".ac oct 10 1 1k", "dec"),  # only per decade
         (".ac dec 10 1 1k", "AC"),  # no source has an AC amplitude
         (".ac dec ten 1 1k", "pas pu être lue"),
+        (".ac dec 10 0 100k", "fréquence"),  # 0 Hz: would crash AcAnalysis (gt=0)
+        (".ac dec 10 -1 100k", "fréquence"),
+        (".ac dec 10 1k 10", "fréquence"),  # start after stop
+        (".ac dec 0 1 1k", "point"),
         (".tran abc", "pas pu être lue"),
         (".dc V9 0 1 0.1", "pas pu être lue"),  # unknown source
         (".param R=1k", "ignorée"),
@@ -309,6 +324,13 @@ def test_diode_models_are_replaced_by_psice_models() -> None:
     models = [c.params["model"] for c in result.schematic.components]
     assert models == ["D_SIGNAL", "D_RECT", "D_Z3V3", "D_LED_GREEN"]
     assert len(result.warnings) == 4
+
+
+def test_psice_model_name_is_kept_without_warning() -> None:
+    result = import_asc(asc("SYMBOL diode 0 0 R0", "SYMATTR InstName D1",
+                            "SYMATTR Value D_RECT"))  # fmt: skip
+    assert result.schematic.components[0].params["model"] == "D_RECT"
+    assert result.warnings == []
 
 
 # --- Golden tests: an .asc of each reference circuit gives exactly its netlist ----------------
@@ -354,3 +376,115 @@ def test_imported_asc_simulates(circuit: str) -> None:
     )
     assert simulation.errors == []
     assert simulation.traces
+
+
+# --- Real files saved by LTspice (Sallen-Key filters of a lab, provided by Damien) ------------
+
+LTSPICE_DIR = Path(__file__).parent / "ltspice"
+REAL_FILES = sorted(LTSPICE_DIR.glob("*.asc"))
+
+
+def pins_of(component_type: str) -> list[str]:
+    from app.importers.asc_symbols import REAL_OPAMP, SYMBOLS
+
+    definitions = [*SYMBOLS.values(), REAL_OPAMP]
+    if component_type in ("ground", "label"):
+        return ["1"]
+    definition = next(d for d in definitions if d.psice_type == component_type)
+    return [pin for pin, _, _ in definition.pins]
+
+
+def test_there_are_real_ltspice_files() -> None:
+    assert len(REAL_FILES) >= 3  # acceptance criterion of #110: 3 real LTspice circuits
+
+
+@pytest.mark.parametrize("path", REAL_FILES, ids=lambda p: p.stem)
+def test_real_file_imports_without_error(path: Path) -> None:
+    result = import_asc(path.read_bytes())
+    assert result.errors == []
+    assert result.analysis is not None
+
+
+@pytest.mark.parametrize("path", REAL_FILES, ids=lambda p: p.stem)
+def test_real_file_every_pin_is_connected(path: Path) -> None:
+    # The strongest check of the pin positions: in a real LTspice file every wire ends on a
+    # pin, so if one position were wrong, that pin would be left alone.
+    schematic = import_asc(path.read_bytes()).schematic
+    connected = {
+        (end.comp, end.pin)
+        for wire in schematic.wires
+        for end in (wire.from_, wire.to)
+        if isinstance(end, PinEnd)
+    }
+    alone = [
+        (c.name or c.type, pin)
+        for c in schematic.components
+        for pin in pins_of(c.type)
+        if (c.id, pin) not in connected
+    ]
+    assert alone == []
+
+
+def test_real_step_response_ideal_opamps() -> None:
+    result = import_asc((LTSPICE_DIR / "simu_indicielle_ideale.asc").read_bytes())
+    types = [c.type for c in result.schematic.components]
+    assert types.count("opamp") == 2
+    assert types.count("resistor") == 5 and types.count("capacitor") == 5
+    assert result.analysis == TranAnalysis(stop_time=1e-3, max_step=1e-8)
+    assert any(".lib opamp.sub" in w for w in result.warnings)  # never copied
+    assert any("Rser=1m" in w for w in result.warnings)  # series resistance of L1
+
+
+def test_real_supply_labels_stay_apart() -> None:
+    # "+15" and "-15" must not become the same node (that would short the supplies).
+    result = import_asc((LTSPICE_DIR / "simu_indicielle_LT1055.asc").read_bytes())
+    nets = {c.params["net"] for c in result.schematic.components if c.type == "label"}
+    assert {"P15", "M15", "OUT_P", "OUT_A1", "OUT_A2"} <= nets
+    assert sum(c.type == "opamp_real" for c in result.schematic.components) == 2
+    assert any("LT1055" in w and "OA_GENERIC" in w for w in result.warnings)
+    batteries = [c for c in result.schematic.components if c.name in ("V4", "V5")]
+    assert [b.params["dc"] for b in batteries] == ["15", "15"]
+
+
+def test_real_bode_file() -> None:
+    result = import_asc((LTSPICE_DIR / "simu_bode_LT1055_measured_components.asc").read_bytes())
+    assert result.analysis == AcAnalysis(
+        input_source_id="c4", start_frequency=100, stop_frequency=40e3, points_per_decade=1000
+    )
+    v1 = next(c for c in result.schematic.components if c.name == "V1")
+    assert v1.params["dc"] == "0"  # Value "" in the file
+    assert any("plusieurs sources" in w for w in result.warnings)  # V1, V2, V3 have AC 1
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+def test_real_step_response_simulates() -> None:
+    from app.netlist.library import get_library
+
+    if "opamp" not in get_library():
+        pytest.skip("op-amps come with PR #139")
+    result = import_asc((LTSPICE_DIR / "simu_indicielle_ideale.asc").read_bytes())
+    assert result.analysis is not None
+    netlist = generate_netlist(result.schematic, result.analysis)
+    assert netlist.errors == []
+    simulation = run_simulation(netlist, result.analysis)
+    assert simulation.errors == []
+    # Unity-gain Sallen-Key low-pass: after the 1 V step, the output settles at 1 V.
+    out = next(t for t in simulation.traces if t.name.lower() == "v(out_a1)").values
+    assert out[-1] == pytest.approx(1, abs=0.05)
+
+
+def test_opamp_names_get_the_x_prefix() -> None:
+    # LTspice calls op-amps U1, U2; in SPICE a subcircuit name starts with X.
+    result = import_asc((LTSPICE_DIR / "simu_indicielle_ideale.asc").read_bytes())
+    names = [c.name for c in result.schematic.components if c.type == "opamp"]
+    assert names == ["XU1", "XU2"]
+    assert any("U1 est renommé XU1" in w for w in result.warnings)
+
+
+def test_renamed_component_stays_unique() -> None:
+    opamp = r"SYMBOL OpAmps\opamp 0 0 R0"
+    lines = ["SYMBOL res 0 0 R0", "SYMATTR InstName RXU1", opamp, "SYMATTR InstName U1",
+             opamp, "SYMATTR InstName XU1", opamp, "SYMATTR InstName U1"]  # fmt: skip
+    names = [c.name for c in import_asc(asc(*lines)).schematic.components]
+    assert names == ["RXU1", "XU1_2", "XU1", "XU1_3"]  # never the name of another one

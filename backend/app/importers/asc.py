@@ -14,8 +14,15 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from app.importers.asc_reader import AscFile, AscFormatError, AscWire, decode, read_asc
-from app.importers.asc_symbols import GRID, SYMBOLS, SymbolDef, parse_orientation, place, symbol_key
+from app.importers.asc_reader import AscFile, AscFormatError, AscSymbol, AscWire, decode, read_asc
+from app.importers.asc_symbols import (
+    GRID,
+    PREFIXES,
+    SymbolDef,
+    find_symbol,
+    parse_orientation,
+    place,
+)
 from app.models import (
     AcAnalysis,
     Analysis,
@@ -83,9 +90,11 @@ def _grid(value: float) -> int:
 
 def _components(asc: AscFile, result: AscImport) -> list[_Placed]:
     placed: list[_Placed] = []
+    # A renamed component must not take the name of another one of the file.
+    file_names: set[str | None] = {s.attributes.get("InstName") for s in asc.symbols}
     for symbol in asc.symbols:
         name = symbol.attributes.get("InstName", "?")
-        definition = SYMBOLS.get(symbol_key(symbol.name))
+        definition = find_symbol(symbol.name)
         if definition is None:
             result.errors.append(
                 f"Le symbole « {symbol.name} » ({name}) n'est pas pris en charge par Psice."
@@ -104,14 +113,22 @@ def _components(asc: AscFile, result: AscImport) -> list[_Placed]:
         center_x = sum(x for x, _ in pins.values()) / len(pins)
         center_y = sum(y for _, y in pins.values()) / len(pins)
 
+        prefix = PREFIXES[definition.psice_type]
+        taken = file_names | {p.component.name for p in placed}
+        spice_name = _spice_name(name, prefix, taken)
+        if spice_name != name:
+            result.warnings.append(
+                f"{name} est renommé {spice_name} : en SPICE, le nom de ce composant doit "
+                f"commencer par {prefix}."
+            )
         component = Component(
             id=f"c{len(placed) + 1}",
             type=definition.psice_type,
-            name=name,
+            name=spice_name,
             position=Point(x=_grid(center_x), y=_grid(center_y)),
             rotation=rotation,
             mirror=mirror,
-            params=_values(definition, symbol.attributes, name, result),
+            params=_values(definition, symbol, name, result),
         )
         if definition.psice_type in ("voltage_source", "current_source") and _has_ac(
             symbol.attributes
@@ -121,17 +138,30 @@ def _components(asc: AscFile, result: AscImport) -> list[_Placed]:
     return placed
 
 
+def _spice_name(name: str, prefix: str, taken: set[str | None]) -> str:
+    """'U1' for an op-amp -> 'XU1' (subcircuits start with X), unique among the names."""
+    if name.upper().startswith(prefix):
+        return name
+    upper = {t.upper() for t in taken if t}
+    candidate, number = f"{prefix}{name}", 2
+    while candidate.upper() in upper:
+        candidate, number = f"{prefix}{name}_{number}", number + 1
+    return candidate
+
+
 def _flags(asc: AscFile, first: int, result: AscImport) -> list[_Placed]:
     """FLAG 0 -> ground ; any other FLAG -> label with that node name."""
     placed: list[_Placed] = []
+    names: dict[str, str] = {}  # LTspice name (lower case) -> Psice name
     for flag in asc.flags:
         comp_id = f"c{first + len(placed) + 1}"
         position = Point(x=_grid(flag.x), y=_grid(flag.y))
         if flag.name.lower() in GROUND_NAMES:
             component = Component(id=comp_id, type="ground", position=position)
         else:
-            net = _label_name(flag.name)
-            if net != flag.name:
+            known = flag.name.lower() in names
+            net = names.setdefault(flag.name.lower(), _label_name(flag.name, set(names.values())))
+            if net != flag.name and not known:
                 result.warnings.append(
                     f"Le nœud « {flag.name} » est renommé « {net} » (lettres, chiffres et _ "
                     "seulement)."
@@ -141,12 +171,17 @@ def _flags(asc: AscFile, first: int, result: AscImport) -> list[_Placed]:
     return placed
 
 
-def _label_name(name: str) -> str:
-    """A valid Psice node name close to the LTspice one ('V out' -> 'V_out', '2x' -> 'N2x')."""
-    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name)
+def _label_name(name: str, taken: set[str]) -> str:
+    """A valid Psice node name close to the LTspice one: '+15' -> 'P15', '-15' -> 'M15',
+    'V out' -> 'V_out', '2x' -> 'N_2x'. Two different LTspice names never give the same one
+    (that would join two nodes, e.g. short +15 V and -15 V)."""
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name.replace("+", "P").replace("-", "M"))
     if not LABEL_NAME.fullmatch(cleaned) or re.fullmatch(r"n\d+", cleaned, re.IGNORECASE):
         cleaned = f"N_{cleaned}"
-    return cleaned
+    candidate, number = cleaned, 2
+    while candidate.lower() in {t.lower() for t in taken}:
+        candidate, number = f"{cleaned}_{number}", number + 1
+    return candidate
 
 
 # --- Values and sources (20d) ----------------------------------------------------------------
@@ -169,14 +204,27 @@ def _defaults(psice_type: str) -> dict[str, str]:
 
 
 def _values(
-    definition: SymbolDef, attributes: dict[str, str], name: str, result: AscImport
+    definition: SymbolDef, symbol: AscSymbol, name: str, result: AscImport
 ) -> dict[str, str]:
     """Like the editor, write every default first, then what the file says."""
+    attributes = symbol.attributes
     params = _defaults(definition.psice_type)
-    value = _spice_text(attributes.get("Value", ""))
+    value = _spice_text(attributes.get("Value", "").strip('"'))
+    if attributes.get("SpiceLine"):
+        result.warnings.append(
+            f"{name} : les paramètres LTspice « {attributes['SpiceLine']} » sont ignorés."
+        )
 
     if definition.psice_type in ("voltage_source", "current_source"):
         params.update(_source(f"{value} {attributes.get('Value2', '')}", definition, name, result))
+    elif definition.psice_type == "opamp":
+        params["model"] = "OA_IDEAL"
+    elif definition.psice_type == "opamp_real":
+        params["model"] = "OA_GENERIC"
+        result.warnings.append(
+            f"{name} : l'ampli-op LTspice « {symbol.name.split(chr(92))[-1]} » est remplacé par "
+            "le modèle générique Psice OA_GENERIC."
+        )
     elif definition.value_param == "model":
         params["model"] = _diode_model(definition.psice_type, value, name, result)
     elif definition.value_param is not None:
@@ -199,6 +247,8 @@ def _source(text: str, definition: SymbolDef, name: str, result: AscImport) -> d
         return params
 
     kind = function["kind"].lower()
+    if kind == "sine":  # the LTspice editor writes SINE(...), SPICE and Psice say SIN
+        kind = "sin"
     if kind not in WAVEFORM_ARGS:
         result.errors.append(
             f"{name} : la forme d'onde {function['kind'].upper()} n'est pas prise en charge "
@@ -220,6 +270,13 @@ def _has_ac(attributes: dict[str, str]) -> bool:
     return re.search(r"\bAC\s+\S+", text, re.IGNORECASE) is not None
 
 
+PSICE_DIODE_MODELS = {
+    "diode": {"D_SIGNAL", "D_RECT"},
+    "zener": {"D_Z3V3", "D_Z5V1", "D_Z12"},
+    "led": {"D_LED_RED", "D_LED_GREEN"},
+}
+
+
 def _diode_model(psice_type: str, ltspice_model: str, name: str, result: AscImport) -> str:
     """Psice has its own generic models: pick the closest one and say so."""
     upper = ltspice_model.upper()
@@ -229,6 +286,8 @@ def _diode_model(psice_type: str, ltspice_model: str, name: str, result: AscImpo
         chosen = "D_LED_GREEN" if "GREEN" in upper or "VERT" in upper else "D_LED_RED"
     else:
         chosen = "D_RECT" if re.search(r"400[1-7]|RECT", upper) else "D_SIGNAL"
+    if upper in PSICE_DIODE_MODELS[psice_type]:  # already a Psice model: keep it, no warning
+        return upper
     result.warnings.append(
         f"{name} : le modèle LTspice « {ltspice_model or '(aucun)'} » est remplacé par le "
         f"modèle Psice {chosen}."
@@ -362,9 +421,20 @@ def _ac(args: list[str], result: AscImport) -> Analysis | None:
     values = _numbers(args[1:])
     if len(values) != 3:
         return None
+    if values[0] < 1 or values[1] <= 0 or values[2] <= values[1]:
+        result.warnings.append(
+            "Analyse .ac : il faut au moins 1 point par décade et 0 < fréquence de départ "
+            "< fréquence de fin."
+        )
+        return None
     if not result.ac_sources:
         result.warnings.append("Analyse .ac : aucune source n'a d'amplitude « AC ».")
         return None
+    if len(result.ac_sources) > 1:
+        result.warnings.append(
+            "Analyse .ac : plusieurs sources ont une amplitude « AC » ; Psice n'en utilise "
+            "qu'une, la première."
+        )
     return AcAnalysis(
         input_source_id=result.ac_sources[0],
         points_per_decade=max(1, round(values[0])),

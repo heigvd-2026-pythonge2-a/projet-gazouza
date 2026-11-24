@@ -79,7 +79,8 @@ def _ints(values: list[str], line_number: int) -> list[int]:
 def read_asc(text: str) -> AscFile:
     """Parse the lines of an `.asc` file. Unknown lines (WINDOW, SHEET, IOPIN...) are skipped."""
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if not lines or not lines[0].strip().startswith("Version"):
+    first = next((line.strip() for line in lines if line.strip()), "")  # skip blank lines
+    if not first.startswith("Version"):
         raise AscFormatError("Ce fichier n'est pas un schéma LTspice (.asc) : « Version » attendu.")
 
     asc = AscFile()
