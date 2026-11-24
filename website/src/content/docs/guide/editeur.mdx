@@ -1,0 +1,102 @@
+---
+title: L'éditeur de schéma
+description: Placer des composants, tracer des fils, sélectionner, déplacer, zoomer et enregistrer dans l'éditeur de Psice.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+La fenêtre de Psice est découpée en panneaux :
+
+| Panneau | Rôle |
+|---|---|
+| **Barre d'outils** (en haut) | Fichier, édition, vue, simulation |
+| **Palette** (à gauche) | Les composants à poser et l'outil **Fil** |
+| **Schéma** (au centre) | La feuille quadrillée où tu dessines |
+| **Résultats** | Les courbes après une simulation (à droite ou en bas, au choix) |
+| **Inspecteur** | Les paramètres du composant sélectionné |
+| **Barre d'état** (en bas) | Une aide sur l'outil en cours, la sélection, le nombre de broches non connectées (en rouge sur le schéma) et le bouton **Raccourcis (?)** |
+
+Les séparateurs entre panneaux se déplacent à la souris, et chaque panneau peut passer en plein
+écran. La disposition est mémorisée d'un lancement à l'autre.
+
+## Poser des composants
+
+- **Glisse** un composant de la palette sur le schéma, ou **clique** dessus puis clique sur le
+  schéma. Tu peux en poser plusieurs à la suite.
+- Les touches <kbd>1</kbd> à <kbd>8</kbd> choisissent directement un outil de la palette.
+- <kbd>Échap</kbd> ou un clic droit arrête de poser.
+- Chaque composant reçoit un nom unique (`R1`, `R2`, `C1`…) et ses **valeurs par défaut** :
+  il est simulable tout de suite.
+
+Les composants se placent sur la **grille** : leurs broches tombent toujours sur un point, ce qui
+évite les fils « presque » connectés.
+
+## Tracer des fils
+
+- **Tire un fil depuis une broche**, ou appuie sur <kbd>W</kbd> pour prendre l'outil **Fil**.
+- Avec l'outil Fil, chaque **clic** ajoute un coude ; un clic **sur une broche ou sur un fil**
+  termine le fil à cet endroit.
+- Un **double-clic** termine le fil dans le vide ; <kbd>Échap</kbd> enlève le dernier coude.
+- Lâcher un fil **au milieu d'un autre fil** crée une **jonction** (le point bleu d'un « T ») :
+  les trois fils sont alors reliés.
+
+Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
+
+<Aside type="tip">
+	Un fil dont un bout n'est relié à rien est accepté (le schéma s'enregistre), mais Psice t'avertit
+	avant la simulation : c'est souvent un oubli.
+</Aside>
+
+## Sélectionner et modifier
+
+| Geste | Effet |
+|---|---|
+| Clic | Sélectionner un composant ou un fil |
+| <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
+| Glisser dans le vide | Sélection par zone |
+| Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser pour le déplacer |
+| Double-clic sur un fil | Sélectionner le fil entier |
+| <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
+| Flèches | Déplacer la sélection d'un pas de grille |
+| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
+| <kbd>Ctrl+D</kbd> | Dupliquer |
+| <kbd>Suppr</kbd> | Supprimer |
+| <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
+| Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
+
+## Modifier les paramètres
+
+Double-clique sur un composant (ou clic droit, puis **Propriétés…**) : l'**inspecteur** affiche
+ses paramètres. Pour une source, l'inspecteur n'affiche que les champs utiles à la forme d'onde
+choisie (continue, impulsion ou sinusoïde).
+
+Les valeurs se tapent avec les suffixes SPICE (`4.7k`, `100n`) : voir
+[Valeurs et unités](/projet-gazouza/guide/valeurs-et-unites/).
+
+## Naviguer dans le schéma
+
+- **Molette** : zoom autour du pointeur.
+- **Clic droit ou molette maintenus** : déplacer la vue.
+- <kbd>F</kbd> : ajuster la vue à tout le circuit.
+
+## Enregistrer et ouvrir
+
+| Raccourci | Action |
+|---|---|
+| <kbd>Ctrl+N</kbd> | Nouveau schéma |
+| <kbd>Ctrl+O</kbd> | Ouvrir un schéma |
+| <kbd>Ctrl+S</kbd> | Enregistrer |
+
+Les schémas sont enregistrés dans des fichiers **`.psice.json`** : du JSON lisible, décrit dans
+[Format de schéma](/projet-gazouza/developpeurs/format-schema/).
+
+Psice te demande confirmation avant de fermer ou d'ouvrir un autre schéma si tu as des
+modifications non enregistrées. Et si un panneau rencontre une erreur inattendue, il te propose
+d'enregistrer une **copie de secours** (`schema-recupere.psice.json`) pour ne rien perdre.
+
+## Animer le courant
+
+Après une simulation `.op` ou `.tran`, le bouton **Animer** de la barre d'outils fait circuler
+des points le long des fils, dans le sens du courant et d'autant plus vite que le courant est
+fort. Tu peux choisir le sens conventionnel du courant ou le sens des électrons. C'est une
+manière visuelle de vérifier où passe le courant dans le circuit.

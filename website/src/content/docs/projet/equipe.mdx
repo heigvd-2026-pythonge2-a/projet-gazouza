@@ -1,0 +1,36 @@
+---
+title: Équipe
+description: L'équipe de Psice, ses rôles et son organisation.
+---
+
+import Team from '../../../components/Team.astro';
+
+Psice est un projet de groupe de 2ᵉ année à la **HEIG-VD**, mené par quatre personnes
+(environ 90 heures chacune, soit environ 360 heures au total), avec l'assistance de l'IA.
+Le chef de projet est **Antoine Bezençon**.
+
+<Team />
+
+## Rôles
+
+| Rôle | Responsabilité | Personne |
+|---|---|---|
+| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler / rétablir | Noé Guenin |
+| Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | Noémi Voélin |
+| Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | Damien Bignens |
+| Simulation | Intégration ngspice, analyses, packaging | Antoine Bezençon |
+
+Chaque rôle correspond à un module du code, dont la personne est propriétaire : voir
+[Architecture](/projet-gazouza/developpeurs/architecture/#qui-possède-quoi).
+
+## Comment on travaille
+
+- Le code est sur [GitHub](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza), une
+  branche par tâche, et chaque fusion est **relue par un autre membre**.
+- Les tâches sont suivies dans
+  [GitHub Issues](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues), rattachées
+  aux milestones des jalons.
+- GitHub Actions lance les tests à chaque pull request ; une fusion n'est possible que s'ils
+  passent.
+
+Le détail est dans [Contribuer](/projet-gazouza/developpeurs/contribuer/).

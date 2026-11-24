@@ -1,40 +1,144 @@
 ---
-title: Welcome to Starlight
-description: Get started building your docs site with Starlight.
-template: splash # Remove or comment out this line to display the site sidebar on this page.
+title: Simuler un circuit, sans apprendre SPICE
+description: Psice est un simulateur de circuits électroniques open source pour les étudiants de 1re et 2e année. Dessiner, simuler avec ngspice, mesurer d'un clic.
+template: splash
 hero:
-  tagline: Congrats on setting up a new Starlight project!
+  tagline: Psice est un simulateur de circuits électroniques pensé pour les débutants. Dessine ton circuit, lance la simulation et lis tensions et courants d'un simple clic, sans taper une ligne de SPICE.
   image:
-    file: ../../assets/houston.webp
+    light: ../../assets/psice-logo.svg
+    dark: ../../assets/psice-logo-dark.svg
+    alt: Logo Psice, un P dont la patte se termine par une borne de circuit
   actions:
-    - text: Example Guide
-      link: /guides/example/
+    - text: Commencer
+      link: /projet-gazouza/demarrer/premier-circuit/
       icon: right-arrow
-    - text: Read the Starlight docs
-      link: https://starlight.astro.build
-      icon: external
+    - text: Voir sur GitHub
+      link: https://github.com/heigvd-2026-pythonge2-a/projet-gazouza
+      icon: github
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+import AppShowcase from '../../components/AppShowcase.astro';
+import Roadmap from '../../components/Roadmap.astro';
+import Team from '../../components/Team.astro';
 
-## Next steps
+<AppShowcase />
+
+<p style="text-align: center; font-size: var(--sl-text-sm); color: var(--sl-color-gray-3);">
+	Illustration de l'objectif : un circuit RC, sa courbe de charge et la sonde posée sur le nœud
+	<code>out</code>.
+</p>
+
+<div class="psice-section">
+<span class="psice-kicker">Pourquoi Psice</span>
+
+## LTspice est puissant. Il est aussi intimidant.
+
+<p class="psice-lead">
+	Interface datée, directives à taper, résultats difficiles à lire : avec LTspice, on passe plus
+	de temps à apprendre l'outil qu'à comprendre le circuit. Psice garde le même moteur de
+	simulation éprouvé, ngspice, et cache la complexité derrière une interface moderne.
+</p>
+</div>
 
 <CardGrid stagger>
-	<Card title="Update content" icon="pencil">
-		Edit `src/content/docs/index.mdx` to see this page change.
+	<Card title="Éditeur de schéma moderne" icon="pencil">
+		Glisse les composants, tire les fils depuis les broches, tourne avec <kbd>R</kbd>, annule
+		avec <kbd>Ctrl+Z</kbd>. Symboles selon la norme CEI 60617.
 	</Card>
-	<Card title="Change page layout" icon="document">
-		Delete `template: splash` in `src/content/docs/index.mdx` to display a
-		sidebar on this page.
+	<Card title="Aucune directive à taper" icon="setting">
+		Choisis l'analyse dans une fenêtre guidée : point de fonctionnement, temporelle,
+		fréquentielle (Bode) ou balayage DC.
 	</Card>
-	<Card title="Add new content" icon="add-document">
-		Add Markdown or MDX files to `src/content/docs` to create new pages.
+	<Card title="Sonde au clic" icon="magnifier">
+		Clique sur un fil pour voir sa tension, sur un composant pour voir son courant. Le courant
+		peut même s'animer sur le schéma.
 	</Card>
-	<Card title="Configure your site" icon="setting">
-		Edit your `sidebar` and other config in `astro.config.mjs`.
+	<Card title="Des erreurs qui expliquent" icon="warning">
+		Pas de masse ? Broche en l'air ? Psice le dit en français et surligne l'endroit du schéma
+		concerné.
 	</Card>
-	<Card title="Read the docs" icon="open-book">
-		Learn more in [the Starlight Docs](https://starlight.astro.build/).
+	<Card title="Compatible LTspice" icon="random">
+		Importe les fichiers <code>.asc</code> de LTspice (composants du périmètre) pour reprendre
+		les circuits du cours.
+	</Card>
+	<Card title="Ouvert et transparent" icon="open-book">
+		Licence MIT, écrit en Python, le langage enseigné à la HEIG-VD : le simulateur n'est plus
+		une boîte noire.
 	</Card>
 </CardGrid>
+
+<div class="psice-section">
+<span class="psice-kicker">Comment ça marche</span>
+
+## Un premier circuit en moins de 15 minutes
+
+</div>
+
+<Steps>
+
+1. **Dessine.** Pose une source, une résistance, un condensateur et une masse depuis la palette,
+   puis relie-les avec des fils.
+
+2. **Règle les valeurs.** Double-clique sur un composant et tape sa valeur comme sur papier :
+   `1k`, `10u`, `4.7Meg`.
+
+3. **Simule.** Choisis l'analyse (par exemple temporelle sur 5 ms) et lance la simulation :
+   ngspice tourne en local, sans connexion Internet.
+
+4. **Mesure.** Clique sur un fil pour afficher sa courbe, place les curseurs et lis crête,
+   moyenne ou temps de montée.
+
+</Steps>
+
+<div class="psice-section">
+<span class="psice-kicker">Documentation</span>
+
+## Par où commencer ?
+
+</div>
+
+<CardGrid>
+	<LinkCard
+		title="Premier circuit"
+		description="Le tutoriel pas à pas : un circuit RC dessiné et simulé."
+		href="/projet-gazouza/demarrer/premier-circuit/"
+	/>
+	<LinkCard
+		title="Guide d'utilisation"
+		description="Éditeur, composants, unités, analyses, messages d'erreur, raccourcis."
+		href="/projet-gazouza/guide/editeur/"
+	/>
+	<LinkCard
+		title="Pour les développeurs"
+		description="Architecture, environnement de développement, format de schéma et API."
+		href="/projet-gazouza/developpeurs/architecture/"
+	/>
+	<LinkCard
+		title="Le projet"
+		description="L'équipe, la feuille de route, le logo et les licences."
+		href="/projet-gazouza/projet/equipe/"
+	/>
+</CardGrid>
+
+<div class="psice-section">
+<span class="psice-kicker">Feuille de route</span>
+
+## Où en est le projet ?
+
+<p class="psice-lead">
+	Psice est développé en douze semaines, découpées en cinq jalons.
+</p>
+</div>
+
+<Roadmap />
+
+<div class="psice-section">
+<span class="psice-kicker">L'équipe</span>
+
+## Un projet de groupe de 2ᵉ année, HEIG-VD
+
+</div>
+
+<Team />

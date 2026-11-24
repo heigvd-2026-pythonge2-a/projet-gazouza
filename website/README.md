@@ -21,15 +21,30 @@ pnpm preview     # prévisualise le build localement
 
 ```
 website/
-├── public/              fichiers statiques (favicon, icônes)
+├── public/
+│   └── favicon.svg        icône du site (copie de assets/brand/psice-icon.svg)
 ├── src/
-│   ├── assets/          images et ressources multimédias
-│   └── content/
-│       └── docs/        pages de documentation (Markdown / MDX)
-│           ├── guides/  guides d'utilisation
-│           ├── reference/ pages de référence
-│           └── index.mdx page d'accueil
-├── astro.config.mjs     configuration du thème Starlight et du chemin de base
+│   ├── assets/            logo (clair et sombre)
+│   ├── components/        composants Astro de la page d'accueil (aperçu, feuille de route, équipe)
+│   ├── styles/custom.css  thème aux couleurs du logo
+│   └── content/docs/      pages (Markdown / MDX)
+│       ├── index.mdx      page d'accueil
+│       ├── demarrer/      présentation, installation, premier circuit
+│       ├── guide/         guide d'utilisation
+│       ├── developpeurs/  architecture, environnement, contribuer, format, API
+│       └── projet/        équipe, feuille de route, logo, licences
+├── astro.config.mjs       configuration Starlight : menu, logo, langue, chemin de base
 ├── package.json
 └── tsconfig.json
 ```
+
+## Ajouter une page
+
+1. Crée un fichier `.md` (ou `.mdx` pour utiliser des composants) dans le bon dossier de
+   `src/content/docs/`, avec un `title` et une `description` en tête.
+2. Ajoute-le au menu dans `astro.config.mjs` (`sidebar`).
+3. Écris les liens internes avec le chemin de base : `[Analyses](/projet-gazouza/guide/analyses/)`.
+4. Vérifie avec `pnpm build`.
+
+Les pages décrivent ce que l'application fait **aujourd'hui** : une fonctionnalité pas encore
+livrée est signalée comme « en cours » (badge dans le menu, encadré en haut de page).
