@@ -7,7 +7,7 @@
 
 import re
 
-from app.models import AcAnalysis, Analysis, NetlistResult, Schematic
+from app.models import AcAnalysis, Analysis, Component, NetlistResult, Schematic
 from app.netlist.checks import check_nodes, check_structure
 from app.netlist.connectivity import build_nodes
 from app.netlist.library import ComponentType, get_library
@@ -21,6 +21,23 @@ LINE_BREAKS = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 def header(title: str | None) -> str:
     """The first line of the netlist ('* Circuit RC'), always on a single line."""
     return "* " + (LINE_BREAKS.sub(" ", title or "").strip() or "Psice")
+
+
+def used_models(comp: Component, ctype: ComponentType) -> dict[str, str]:
+    """The models of `ctype` this component uses: the value of its 'choice' parameters (the
+    'model' choice) and the words written as is in the template.
+
+    Not the whole SPICE line: a node named like another model (a label "DLED" next to a
+    D1N4148 diode) must not add that model. The text comes from the library only.
+    """
+    names = ctype.fixed_tokens() | {
+        comp.params[p.name].strip().lower()
+        for p in ctype.used_params(comp.params)
+        if p.kind == "choice"
+    }
+    return {
+        name.lower(): text.strip() for name, text in ctype.models.items() if name.lower() in names
+    }
 
 
 def generate_netlist(
@@ -48,13 +65,15 @@ def generate_netlist(
     ac_input = analysis.input_source_id if isinstance(analysis, AcAnalysis) else None
 
     lines = [header(schematic.title)]
-    includes = dict.fromkeys(i for c in schematic.components for i in library[c.type].includes)
-    lines += [f".include {path}" for path in includes]
-    lines += [
-        component_line(comp, library[comp.type], nodes.pin_node, ac_input=comp.id == ac_input)
-        for comp in schematic.components
-        if comp.id in names
-    ]
+    models: dict[str, str] = {}  # model name (lower case) -> text, each written once
+    for comp in schematic.components:
+        if comp.id not in names:
+            continue
+        ctype = library[comp.type]
+        line = component_line(comp, ctype, nodes.pin_node, ac_input=comp.id == ac_input)
+        lines.append(line)
+        models.update(used_models(comp, ctype))
+    lines += models.values()
     lines += [analysis_line(analysis, names), ".end"]
 
     return NetlistResult(

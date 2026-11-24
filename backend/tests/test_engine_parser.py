@@ -1158,3 +1158,92 @@ Values:
     )
     assert ok_compat.errors == []
     assert ok_compat.traces[0].imag is None
+
+
+def test_dc_sweep_rejects_cross_type_axis_and_non_source_component() -> None:
+    netlist_i = NetlistResult(
+        netlist="",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"I1": "c1", "R1": "c2"},
+    )
+    voltage_plot = RawPlot(
+        title="* v_sweep",
+        date="",
+        plotname="DC transfer characteristic",
+        flags=("real",),
+        variables=(
+            RawVariable(index=0, name="v(v-sweep)", var_type="voltage"),
+            RawVariable(index=1, name="v(out)", var_type="voltage"),
+        ),
+        num_points=2,
+        columns={"v(v-sweep)": [0.0, 5.0], "v(out)": [0.0, 5.0]},
+    )
+    res_i_mismatch = map_plot_to_simulation_result(
+        voltage_plot,
+        netlist_i,
+        DcAnalysis(source_id="c1", start=0.0, stop=5.0, step=5.0),
+    )
+    assert len(res_i_mismatch.errors) == 1
+    assert res_i_mismatch.errors[0].code == "SIMULATION_FAILED"
+    assert "balayage dc" in res_i_mismatch.errors[0].message.lower()
+
+    current_plot = RawPlot(
+        title="* i_sweep",
+        date="",
+        plotname="DC transfer characteristic",
+        flags=("real",),
+        variables=(
+            RawVariable(index=0, name="i(i-sweep)", var_type="current"),
+            RawVariable(index=1, name="v(out)", var_type="voltage"),
+        ),
+        num_points=2,
+        columns={"i(i-sweep)": [0.0, 0.005], "v(out)": [0.0, 5.0]},
+    )
+    netlist_v = NetlistResult(
+        netlist="",
+        nets={"out": ["w1"], "0": ["w2"]},
+        components={"V1": "c1", "R1": "c2"},
+    )
+    res_v_mismatch = map_plot_to_simulation_result(
+        current_plot,
+        netlist_v,
+        DcAnalysis(source_id="c1", start=0.0, stop=5.0, step=5.0),
+    )
+    assert len(res_v_mismatch.errors) == 1
+    assert res_v_mismatch.errors[0].code == "SIMULATION_FAILED"
+    assert "balayage dc" in res_v_mismatch.errors[0].message.lower()
+
+    res_resistor_source = map_plot_to_simulation_result(
+        voltage_plot,
+        netlist_v,
+        DcAnalysis(source_id="c2", start=0.0, stop=5.0, step=5.0),
+    )
+    assert len(res_resistor_source.errors) == 1
+    assert res_resistor_source.errors[0].code == "DC_SOURCE_NOT_FOUND"
+
+
+def test_zero_point_eof_in_variables_raises_no_points_message() -> None:
+    truncated_zero_points_raw = (
+        "Title: * dc desc\n"
+        "Plotname: DC transfer characteristic\n"
+        "Flags: real\n"
+        "No. Variables: 4\n"
+        "No. Points: 0       \n"
+        "Variables:\n"
+    )
+    with pytest.raises(RawParseError, match="0 points") as exc_info:
+        parse_raw_ascii(truncated_zero_points_raw)
+    assert exc_info.value.user_message == "La simulation ngspice n'a produit aucun point."
+
+    res = parse_ngspice_output(
+        truncated_zero_points_raw,
+        NetlistResult(
+            netlist="",
+            nets={"out": ["w1"], "0": ["w2"]},
+            components={"V1": "c1"},
+        ),
+        DcAnalysis(source_id="c1", start=5.0, stop=0.0, step=1.0),
+    )
+    assert len(res.errors) == 1
+    assert res.errors[0].code == "SIMULATION_FAILED"
+    assert res.errors[0].message == "La simulation ngspice n'a produit aucun point."
