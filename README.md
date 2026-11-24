@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/psice-logo.png" alt="Logo Psice : un P dont la patte se termine par une borne de circuit" width="480">
+</p>
+
 # Psice 
 
 [![CI](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)

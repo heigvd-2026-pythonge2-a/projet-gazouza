@@ -7,6 +7,7 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'shared/**'
+      - '.github/scripts/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -14,7 +15,15 @@ on:
       - 'backend/**'
       - 'frontend/**'
       - 'shared/**'
+      - '.github/scripts/**'
       - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
@@ -27,10 +36,10 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Installation de uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           cache-dependency-glob: "backend/uv.lock"
@@ -69,7 +78,7 @@ jobs:
 
   frontend:
     name: Frontend (pnpm, ESLint, Prettier & Build)
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     defaults:
       run:
@@ -77,16 +86,16 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       # La version de pnpm est lue dans le champ "packageManager" de frontend/package.json.
       - name: Installation de pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json
 
       - name: Configuration de Node.js 24
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: "pnpm"
@@ -125,7 +134,7 @@ jobs:
 
     steps:
       - name: Checkout du dépôt
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Récupération du taux de couverture
         uses: actions/download-artifact@v4
