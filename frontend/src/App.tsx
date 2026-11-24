@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
 import { getHealth } from "./api/client";
+import { PlotPanel } from "./plot";
 import {
   AnimateButton,
   EditorToolbar,
@@ -116,7 +117,7 @@ export default function App() {
         />
       </div>
       <PanelErrorBoundary panel="les résultats">
-        <p style={{ color: "#6b7280" }}>Les courbes s'afficheront ici après une simulation.</p>
+        <PlotPanel />
       </PanelErrorBoundary>
     </section>
   );

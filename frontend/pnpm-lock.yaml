@@ -178,6 +178,9 @@ importers:
       react-konva:
         specifier: ^19.3.2
         version: 19.3.2(@types/react@19.3.0)(konva@10.9.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      uplot:
+        specifier: ^1.6.32
+        version: 1.6.32
       zustand:
         specifier: ^5.1.0
         version: 5.1.0(@types/react@19.3.0)(react@19.3.1)
@@ -1463,6 +1466,9 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  uplot@1.6.32:
+    resolution: {integrity: sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==}
 
   uri-js-replace@1.0.3:
     resolution: {integrity: sha512-MMvVPvWo7I8nHX2Qn3+cji4YPAvEqBKjBoUqt7Z0RpE5hLdDpRLqaNfJtTwf56m40EQt2fJfptnrQdL2LXR99A==}
@@ -2785,6 +2791,8 @@ snapshots:
       browserslist: 4.29.5
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uplot@1.6.32: {}
 
   uri-js-replace@1.0.3: {}
 
