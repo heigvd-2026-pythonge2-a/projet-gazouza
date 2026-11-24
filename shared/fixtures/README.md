@@ -12,6 +12,11 @@ développer sa partie contre ces fichiers sans attendre les autres :
 | `netlist.json` | `NetlistResult` | Netlist (Damien) | Moteur (Antoine), sondes (Noémi) |
 | `result.json` | `SimulationResult` | Moteur (Antoine) | Courbes et sondes (Noémi) |
 
+À la racine, `library.json` est la réponse exacte de `GET /api/library` (liste de
+`LibraryComponent`), produite par la bibliothèque du backend (Damien) et utilisée par les tests
+de l'éditeur (Noé) à la place du backend. Le test `test_library_fixture_is_the_route_answer`
+échoue si elle n'est plus à jour : régénérez-la depuis la route.
+
 Les tests `backend/tests/test_fixtures.py` vérifient que tous ces fichiers respectent le contrat
 (et que les fils, sources et correspondances pointent vers des éléments qui existent).
 Si vous changez un modèle Pydantic, la CI vous forcera à mettre les fixtures à jour.
@@ -30,8 +35,7 @@ Les mêmes circuits sont expliqués pas à pas dans
 
 ## À savoir
 
-- Les fichiers `result.json` de `divider_op` et `rc_tran` contiennent les vraies sorties
-  produites par `ngspice-47` ; ceux de `lowpass_ac` et `loaded_divider_dc` restent
-  **calculés analytiquement** en attendant la prise en charge de `.ac` et `.dc`.
+- Les fichiers `result.json` des quatre circuits (`divider_op`, `rc_tran`, `lowpass_ac` et
+  `loaded_divider_dc`) contiennent les vraies sorties produites par `ngspice-47`.
 - Les positions des composants et les coudes des fils sont indicatifs : ils dépendront des
   positions de broches définies dans la bibliothèque. La netlist ne s'en sert pas.
