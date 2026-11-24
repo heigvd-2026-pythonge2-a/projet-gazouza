@@ -31,6 +31,10 @@ Les séparateurs entre panneaux se déplacent à la souris, et chaque panneau pe
 Les composants se placent sur la **grille** : leurs broches tombent toujours sur un point, ce qui
 évite les fils « presque » connectés.
 
+Un composant ne se pose jamais **sur** un autre : s'il y a déjà quelque chose à cet endroit, il
+est décalé jusqu'à une place libre (et un déplacement s'arrête à la place libre la plus proche).
+Deux composants peuvent quand même se toucher par **une** broche : ils sont alors reliés.
+
 ## Tracer des fils
 
 - **Tire un fil depuis une broche**, ou appuie sur <kbd>W</kbd> pour prendre l'outil **Fil**.
@@ -40,7 +44,13 @@ Les composants se placent sur la **grille** : leurs broches tombent toujours sur
 - Lâcher un fil **au milieu d'un autre fil** crée une **jonction** (le point bleu d'un « T ») :
   les trois fils sont alors reliés.
 
-Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
+Quand tu déplaces un composant, ses fils **restent accrochés** et suivent ; s'ils passeraient
+à travers un autre composant, ils sont retracés autour. Avec <kbd>Ctrl</kbd> enfoncé pendant le
+glisser, les fils restent sur place et se détachent du composant. Deux composants reliés broche
+contre broche le restent aussi : un fil apparaît entre eux quand tu les écartes.
+
+Une broche posée **sur un fil** (ou un fil tracé ou glissé sur une broche) y est reliée. Un
+composant posé sur un fil qui passe par ses deux broches est **inséré dans le fil**, en série.
 
 <Aside type="tip">
 	Un fil dont un bout n'est relié à rien est accepté (le schéma s'enregistre), mais Psice t'avertit
@@ -53,21 +63,29 @@ Quand tu déplaces un composant, ses fils **restent accrochés** et suivent.
 |---|---|
 | Clic | Sélectionner un composant ou un fil |
 | <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
-| Glisser dans le vide | Sélection par zone |
+| Glisser dans le vide | Sélection par zone : ce qui est entièrement dedans, y compris les **tronçons** d'un fil qui dépasse (à supprimer avec <kbd>Suppr</kbd>) |
+| <kbd>Maj</kbd> + glisser dans le vide | Zone verte en pointillés : ajoute ce qui **touche** la zone, retire ce qui était déjà sélectionné |
 | Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser pour le déplacer |
 | Double-clic sur un fil | Sélectionner le fil entier |
 | <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
 | Flèches | Déplacer la sélection d'un pas de grille |
-| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
-| <kbd>Ctrl+D</kbd> | Dupliquer |
+| <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
+| <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) : la copie suit la souris, un clic la pose |
+| <kbd>Ctrl+D</kbd> | Dupliquer (la copie suit aussi la souris) |
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
 
 ## Modifier les paramètres
 
-Double-clique sur un composant (ou clic droit, puis **Propriétés…**) : l'**inspecteur** affiche
-ses paramètres. Pour une source, l'inspecteur n'affiche que les champs utiles à la forme d'onde
+Double-clique sur un composant : un petit champ s'ouvre juste au-dessus de lui, avec sa valeur
+principale (résistance, capacité, tension…) déjà sélectionnée. Tape la nouvelle valeur, puis
+<kbd>Entrée</kbd> (ou clique ailleurs) pour la garder, ou <kbd>Échap</kbd> pour revenir à
+l'ancienne. Une valeur mal écrite est signalée sous le champ. Pour une étiquette, c'est le nom du
+nœud qui se modifie ainsi.
+
+Pour voir tous les paramètres, clic droit puis **Propriétés…** (ou **Plus de paramètres…** dans
+le petit champ d'une source) : l'**inspecteur** les affiche. Pour une source, l'inspecteur n'affiche que les champs utiles à la forme d'onde
 choisie (continue, impulsion ou sinusoïde).
 
 Les valeurs se tapent avec les suffixes SPICE (`4.7k`, `100n`) : voir

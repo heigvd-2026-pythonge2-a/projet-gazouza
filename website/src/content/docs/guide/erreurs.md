@@ -9,7 +9,10 @@ message est en français et nomme le composant concerné. Il désigne aussi l'é
 
 :::note[Déjà visible dans l'éditeur]
 Pendant que tu dessines, les broches non reliées sont déjà marquées en **rouge** et comptées
-dans la barre d'état. Le surlignage des autres erreurs arrive avec le panneau de simulation.
+dans la barre d'état. Un nom ou une valeur mal saisis (`10l` au lieu de `10k`, un nom en double…)
+affichent une **bulle** sous le composant concerné : rouge pour une erreur, orange pour un
+avertissement. Clique sur la bulle pour sélectionner le composant et aller directement au champ
+à corriger. Le surlignage des autres erreurs arrive avec le panneau de simulation.
 :::
 
 - Une **erreur** bloque la simulation : il faut la corriger.

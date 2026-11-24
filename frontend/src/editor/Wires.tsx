@@ -48,6 +48,8 @@ interface WiresProps {
   selection: readonly string[];
   /** Bend or segment selected on its own, highlighted. */
   part?: WirePart | null;
+  /** Wire sections selected with the selection rectangle, highlighted. */
+  segments?: readonly WirePart[];
   /** Left press on a wire or junction, with the select tool. */
   onSelect?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   /** Left press on a wire (instead of `onSelect`), to pick one of its bends or segments. */
@@ -61,6 +63,7 @@ export function Wires({
   doc,
   selection,
   part = null,
+  segments = [],
   onSelect,
   onWirePress,
   onWireDoubleClick,
@@ -93,6 +96,19 @@ export function Wires({
           }}
         />
       ))}
+      {segments.map((seg) => {
+        const points = wirePartPoints(doc, seg);
+        return points ? (
+          <Line
+            key={`${seg.wire}/${seg.index}`}
+            points={flat(points)}
+            stroke={COLORS.selected}
+            strokeWidth={WIRE_WIDTH + 1}
+            lineCap="round"
+            listening={false}
+          />
+        ) : null;
+      })}
       {partPoints?.length === 2 && (
         <Line
           points={flat(partPoints)}

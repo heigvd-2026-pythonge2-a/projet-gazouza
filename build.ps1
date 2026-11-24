@@ -28,6 +28,7 @@ $LibraryDir = Join-Path $BackendDir "app\netlist\library"
 $LicenseFile = Join-Path $RepoRoot "LICENSE"
 $ThirdPartyLicensesFile = Join-Path $RepoRoot "THIRD_PARTY_LICENSES.md"
 $NgspiceCopyingFile = Join-Path $NgspiceDir "COPYING"
+$IconFile = Join-Path $RepoRoot "assets\brand\psice.ico"
 
 $BuildRoot = Join-Path $RepoRoot "build"
 $WorkRoot = Join-Path $BuildRoot "work"
@@ -187,9 +188,21 @@ try {
         "--collect-binaries", "clr_loader",
         "--collect-submodules", "pythonnet",
         "--collect-binaries", "pythonnet",
-        "--hidden-import", "clr",
-        $EntryScript
+        "--hidden-import", "clr"
     )
+
+    # Bundle the multi-size Windows application icon.
+    if (Test-Path -LiteralPath $IconFile -PathType Leaf) {
+        $pyinstallerArgs += @(
+            "--icon", $IconFile,
+            "--add-data", "$IconFile;assets/brand"
+        )
+    }
+    else {
+        Write-Host "==> Warning: application icon missing ($IconFile); building without custom icon." -ForegroundColor Yellow
+    }
+
+    $pyinstallerArgs += $EntryScript
 
     Invoke-Checked -StepName "Packaging desktop application with PyInstaller" -Action {
         & uv @pyinstallerArgs
