@@ -1,0 +1,72 @@
+name: Issue status
+
+# Keeps the GitHub status of the issues a pull request closes ("Closes #N") in step with
+# the pull request: In review while it is open and ready, In progress while it is a draft,
+# Todo when it is closed without being merged. A merge closes the issues, which GitHub
+# then moves to Done on its own. Moving an issue to In progress when work starts on a
+# branch stays manual (see AGENTS.md).
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed, edited]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: issue-status-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  status:
+    # A merged pull request needs nothing: its issues are closed and moved to Done.
+    # Editing a closed pull request changes nothing either.
+    if: >-
+      ${{ (github.event.action == 'closed' && !github.event.pull_request.merged)
+      || (github.event.action != 'closed' && github.event.pull_request.state == 'open') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set the status of the linked issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$ACTION" = "closed" ]; then
+            target="Todo"
+          elif [ "$DRAFT" = "true" ]; then
+            target="In progress"
+          else
+            target="In review"
+          fi
+
+          # The status ids of the repository and the issues the pull request closes.
+          data=$(gh api graphql \
+            -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){planningStatuses(first:20){nodes{id name}} pullRequest(number:$n){closingIssuesReferences(first:20){nodes{id number state status{name}}}}}}' \
+            -f o="$OWNER" -f r="$REPO" -F n="$PR")
+          status_id=$(jq -r --arg t "$target" '.data.repository.planningStatuses.nodes[] | select(.name == $t) | .id' <<<"$data")
+          if [ -z "$status_id" ]; then
+            echo "No status named \"$target\" in this repository: nothing to do."
+            exit 0
+          fi
+
+          # Only open issues; an issue already Done or Not planned is left alone.
+          jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[]
+                 | select(.state == "OPEN")
+                 | select((.status.name // "") as $s | ["Done", "Not planned", "Duplicate"] | index($s) | not)
+                 | "\(.id) \(.number) \(.status.name // "none")"' <<<"$data" |
+          while read -r id number current; do
+            if [ "$current" = "$target" ]; then
+              echo "#$number already $target."
+              continue
+            fi
+            gh api graphql \
+              -f query='mutation($i:ID!,$s:ID!){setIssueStatus(input:{issueId:$i,statusId:$s}){clientMutationId}}' \
+              -f i="$id" -f s="$status_id" > /dev/null
+            echo "#$number: $current -> $target"
+          done
