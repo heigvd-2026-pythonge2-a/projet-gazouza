@@ -156,12 +156,12 @@ def test_valid_model_text(name: str, text: str) -> None:
         # Review of #135: these used to raise IndexError or to pass.
         ("D1N4148", ""),  # empty
         ("D1N4148", "   \n  "),  # blank
-        ("D1N4148", D1N4148 + " .control shell calc"),  # Unicode line separator
-        ("D1N4148", D1N4148 + " .control"),  # Unicode paragraph separator
+        ("D1N4148", D1N4148 + "\u2028.control\u2028shell calc"),  # Unicode line separator
+        ("D1N4148", D1N4148 + "\u2029.control"),  # Unicode paragraph separator
         ("D1N4148", D1N4148 + "\x85.control"),  # NEL
         ("D1N4148", D1N4148 + "\x7f"),  # DEL
-        ("D1N4148", D1N4148 + "\n﻿.control\nshell calc"),  # BOM hides the dot
-        ("D1N4148", "﻿" + D1N4148),
+        ("D1N4148", D1N4148 + "\n\ufeff.control\nshell calc"),  # BOM hides the dot
+        ("D1N4148", "\ufeff" + D1N4148),
         ("OPAMP", ".subckt OPAMP a b\nR1 a b 1k\n.ends\nA1 [a] [b] p\n.ends"),  # double .ends
         ("OPAMP", ".subckt OPAMP a b\n.ends\n.subckt OPAMP2 a b\n.ends"),  # two blocks
         ("OPAMP", ".subckt OPAMP a b\n.subckt IN c d\nR1 c d 1k\n.ends"),  # nested, unclosed
