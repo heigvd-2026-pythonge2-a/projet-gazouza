@@ -63,6 +63,7 @@ DEFAULT_MIN_SIZE: tuple[int, int] = (800, 600)
 SERVER_START_TIMEOUT_S = 10.0
 SERVER_SHUTDOWN_TIMEOUT_S = 5.0
 SPLASH_READY_TIMEOUT_S = 10.0
+SPLASH_MIN_DISPLAY_S = 0.6
 HEALTH_POLL_INTERVAL_S = 0.02
 JS_EVAL_TIMEOUT_S = 2.0
 
@@ -345,46 +346,46 @@ _SPLASH_HTML_TEMPLATE = """<!doctype html>
         transform-origin: center;
       }
       .psice-terminal {
-        animation: psice-pop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) 0s both;
+        animation: psice-pop 0.11s cubic-bezier(0.34, 1.56, 0.64, 1) 0s both;
       }
       .psice-p-stroke {
         stroke-dasharray: 1000 1002;
         stroke-dashoffset: 1001;
-        animation: psice-draw-p 0.44s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+        animation: psice-draw-p 0.2s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
       }
       .psice-spark {
         opacity: 0;
         offset-path: path("__P_PATH__");
         offset-rotate: 0deg;
         filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.65));
-        animation: psice-spark-trace 0.44s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+        animation: psice-spark-trace 0.2s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
       }
       .psice-dot {
-        animation: psice-dot-flash 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s both;
+        animation: psice-dot-flash 0.13s cubic-bezier(0.34, 1.56, 0.64, 1) 0.23s both;
       }
       .psice-letter {
-        animation: psice-letter-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation: psice-letter-rise 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       .psice-letter-s {
-        animation-delay: 0.64s;
+        animation-delay: 0.29s;
       }
       .psice-letter-i {
-        animation-delay: 0.72s;
+        animation-delay: 0.33s;
       }
       .psice-letter-c {
-        animation-delay: 0.8s;
+        animation-delay: 0.37s;
       }
       .psice-letter-e {
-        animation-delay: 0.88s;
+        animation-delay: 0.41s;
       }
       .psice-pin {
         animation:
-          psice-pop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1) 1.06s both,
-          psice-pin-breathe 2.2s ease-in-out 1.32s infinite;
+          psice-pop 0.11s cubic-bezier(0.34, 1.56, 0.64, 1) 0.49s both,
+          psice-pin-breathe 1.2s ease-in-out 0.6s infinite;
       }
       .psice-pin-pulse {
         opacity: 0;
-        animation: psice-pin-ripple 2.2s cubic-bezier(0.22, 1, 0.36, 1) 1.18s infinite;
+        animation: psice-pin-ripple 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.54s infinite;
       }
       .psice-caption {
         margin: 0;
@@ -1034,9 +1035,13 @@ def launch(
     splash_ready_or_closed = threading.Event()
     worker_started = threading.Event()
     worker_done = threading.Event()
+    splash_loaded_at: float | None = None
     startup_error: Exception | None = None
 
     def _on_loaded() -> None:
+        nonlocal splash_loaded_at
+        if splash_loaded_at is None:
+            splash_loaded_at = time.monotonic()
         splash_ready_or_closed.set()
 
     def _on_closed() -> None:
@@ -1058,6 +1063,10 @@ def launch(
                     "Splash screen did not emit 'loaded' within %.1fs; proceeding anyway.",
                     SPLASH_READY_TIMEOUT_S,
                 )
+            if splash_loaded_at is not None and not closed_event.is_set():
+                remaining = SPLASH_MIN_DISPLAY_S - (time.monotonic() - splash_loaded_at)
+                if remaining > 0:
+                    closed_event.wait(remaining)
             if not closed_event.is_set():
                 window.load_url(server.url)
         except Exception as exc:
