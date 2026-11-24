@@ -392,10 +392,17 @@ export function freeMove(
  * leaves them where they are) after `MAX_NUDGES` steps.
  */
 export function nudgeFree(doc: EditorDoc, ids: ReadonlySet<string>, step: GridPoint): EditorDoc {
+  // A component just placed has no wire yet: only its position changes. (Moving it with
+  // `moveItems` would wire it to the pins it touched where it was dropped.)
   let out = doc;
   for (let i = 0; i < MAX_NUDGES; i++) {
     if (overlappingPairs(out, ids).size === 0) return out;
-    out = moveItems(out, ids, step);
+    out = {
+      ...out,
+      components: out.components.map((c) =>
+        ids.has(c.id) ? { ...c, position: shift(c.position, step) } : c,
+      ),
+    };
   }
   return doc;
 }

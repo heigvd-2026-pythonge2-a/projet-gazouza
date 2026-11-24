@@ -540,9 +540,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const anchor = clipAnchor(s.tool.clip);
       const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
       const pasted = pasteClip(s.doc, s.tool.clip, offset);
-      // Every overlap is new: the pasted items were not there before.
+      // Every overlap is new: the pasted items were not there before. Nothing outside is wired
+      // to them yet, and pins they touch where they were dropped must not get wired either.
       const ids = new Set(pasted.ids);
-      const placed = freeMove(pasted.doc, ids, { x: 0, y: 0 }, { allowed: new Set() });
+      const placed = freeMove(
+        pasted.doc,
+        ids,
+        { x: 0, y: 0 },
+        { allowed: new Set(), detach: true },
+      );
       const doc = connectPinsOnWires(connectPinsOnWires(placed, { comps: ids }), { wires: ids });
       return {
         ...change(s, doc),
