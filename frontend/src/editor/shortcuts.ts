@@ -48,7 +48,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "Composants",
     items: [
-      { keys: "1 à 8", action: "Choisir l'outil de la palette" },
+      { keys: "1 à 9", action: "Choisir l'outil de la palette" },
       { keys: "Clic (outil composant)", action: "Poser le composant" },
       { keys: "Échap ou clic droit", action: "Arrêter de poser" },
     ],
