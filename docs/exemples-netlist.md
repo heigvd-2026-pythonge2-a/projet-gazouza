@@ -61,7 +61,7 @@ V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
       { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "10" } },
       { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
-        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+        "rotation": 270, "mirror": false, "params": { "resistance": "1k" } },
       { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
       { "id": "c4", "type": "ground", "position": { "x": 0, "y": 4 },
@@ -76,9 +76,9 @@ V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
     "junctions": [],
     "wires": [
       { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
-        "points": [ { "x": 0, "y": -2 } ] },
+        "points": [] },
       { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "comp": "c3", "pin": "1" },
-        "points": [ { "x": 8, "y": -2 } ] },
+        "points": [] },
       { "id": "w3", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c4", "pin": "1" } },
       { "id": "w4", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
       { "id": "w5", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c6", "pin": "1" } },
@@ -146,7 +146,7 @@ Même câblage que l'exemple 1 : seuls V1, le 2ᵉ composant (C1 au lieu de R2) 
         "params": { "waveform": "pulse", "v1": "0", "v2": "5", "delay": "0",
                     "rise": "1n", "fall": "1n", "width": "10m", "period": "20m" } },
       { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
-        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+        "rotation": 270, "mirror": false, "params": { "resistance": "1k" } },
       { "id": "c3", "type": "capacitor", "name": "C1", "position": { "x": 8, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "capacitance": "1u" } },
       { "id": "c4", "type": "ground", "position": { "x": 0, "y": 4 },
@@ -161,9 +161,9 @@ Même câblage que l'exemple 1 : seuls V1, le 2ᵉ composant (C1 au lieu de R2) 
     "junctions": [],
     "wires": [
       { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
-        "points": [ { "x": 0, "y": -2 } ] },
+        "points": [] },
       { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "comp": "c3", "pin": "1" },
-        "points": [ { "x": 8, "y": -2 } ] },
+        "points": [] },
       { "id": "w3", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c4", "pin": "1" } },
       { "id": "w4", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
       { "id": "w5", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c6", "pin": "1" } },
@@ -281,28 +281,30 @@ les nœuds prennent des **noms automatiques** `n1`, `n2`.
     "components": [
       { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "10" } },
-      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
-        "rotation": 90, "mirror": false, "params": { "resistance": "1k" } },
+      { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -4 },
+        "rotation": 270, "mirror": false, "params": { "resistance": "1k" } },
       { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
       { "id": "c4", "type": "resistor", "name": "R3", "position": { "x": 12, "y": 0 },
         "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
-      { "id": "c5", "type": "ground", "position": { "x": 6, "y": 4 },
+      { "id": "c5", "type": "ground", "position": { "x": 8, "y": 4 },
         "rotation": 0, "mirror": false, "params": {} }
     ],
     "junctions": [
-      { "id": "j1", "position": { "x": 8, "y": -2 } }
+      { "id": "j1", "position": { "x": 8, "y": -4 } }
     ],
     "wires": [
       { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
-        "points": [ { "x": 0, "y": -2 } ] },
+        "points": [ { "x": 0, "y": -4 } ] },
       { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "junction": "j1" } },
       { "id": "w3", "from": { "junction": "j1" }, "to": { "comp": "c3", "pin": "1" } },
       { "id": "w4", "from": { "junction": "j1" }, "to": { "comp": "c4", "pin": "1" },
-        "points": [ { "x": 12, "y": -2 } ] },
-      { "id": "w5", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c5", "pin": "1" } },
+        "points": [ { "x": 12, "y": -4 } ] },
+      { "id": "w5", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c5", "pin": "1" },
+        "points": [ { "x": 0, "y": 4 } ] },
       { "id": "w6", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
-      { "id": "w7", "from": { "comp": "c4", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } }
+      { "id": "w7", "from": { "comp": "c4", "pin": "2" }, "to": { "comp": "c5", "pin": "1" },
+        "points": [ { "x": 12, "y": 4 } ] }
     ]
   },
   "analysis": { "kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1 }
