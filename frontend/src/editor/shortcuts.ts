@@ -25,7 +25,14 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     items: [
       { keys: "Clic", action: "Sélectionner" },
       { keys: "Maj + clic", action: "Ajouter ou retirer de la sélection" },
-      { keys: "Glisser dans le vide", action: "Sélection par zone (Maj : ajouter)" },
+      {
+        keys: "Glisser dans le vide",
+        action: "Sélectionner ce qui est entièrement dans la zone (tronçons de fil compris)",
+      },
+      {
+        keys: "Maj + glisser dans le vide",
+        action: "Ajouter ce qui touche la zone, retirer ce qui était déjà sélectionné",
+      },
       { keys: "Ctrl+A", action: "Tout sélectionner" },
       { keys: "Échap", action: "Vider la sélection" },
     ],

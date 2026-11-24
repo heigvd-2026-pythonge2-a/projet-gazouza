@@ -241,6 +241,46 @@ export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   return [...components, ...wires, ...junctions].map((item) => item.id);
 }
 
+const rectsMeet = (a: GridRect, b: GridRect): boolean =>
+  a.min.x <= b.max.x && b.min.x <= a.max.x && a.min.y <= b.max.y && b.min.y <= a.max.y;
+
+/**
+ * Ids of what touches `r`, even partly: components whose symbol box meets it, wires with a
+ * segment crossing it, and junctions inside. Used by the selection rectangle with Shift (#93).
+ */
+export function itemsTouchingRect(doc: EditorDoc, r: GridRect): string[] {
+  const components = doc.components.filter((c) => {
+    const { min, max } = symbolBounds(getDef(c.type));
+    return rectsMeet(rectFrom(toWorld(min, c), toWorld(max, c)), r);
+  });
+  const wires = doc.wires.filter((w) => {
+    const path = wirePath(doc, w);
+    return path.some(
+      (a, i) => i + 1 < path.length && rectsMeet(rectFrom(a, path[i + 1] as GridPoint), r),
+    );
+  });
+  const junctions = doc.junctions.filter((j) => inRect(j.position, r));
+  return [...components, ...wires, ...junctions].map((item) => item.id);
+}
+
+/**
+ * Segments with both ends inside `r`, of the wires that are not entirely inside it (those are
+ * selected whole): selecting a section of a wire with the rectangle (#121).
+ */
+export function segmentsInRect(doc: EditorDoc, r: GridRect): WirePart[] {
+  const parts: WirePart[] = [];
+  for (const w of doc.wires) {
+    const path = partPath(doc, w);
+    if (path.every((p) => inRect(p, r))) continue;
+    for (let i = 0; i + 1 < path.length; i++) {
+      if (inRect(path[i] as GridPoint, r) && inRect(path[i + 1] as GridPoint, r)) {
+        parts.push({ wire: w.id, kind: "segment", index: i });
+      }
+    }
+  }
+  return parts;
+}
+
 /**
  * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires and
  * junctions. Null for an empty document.
@@ -765,6 +805,33 @@ export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): Editor
         attached.includes(w) ? { ...w, from: free(w.from), to: free(w.to) } : w,
       ),
     };
+  }
+  return out;
+}
+
+/**
+ * Removes several segments (see `deleteSegment`), of one or several wires. They are found again
+ * by their end points after each cut, since cutting a wire changes the indexes of its parts.
+ */
+export function deleteSegments(doc: EditorDoc, parts: readonly WirePart[]): EditorDoc {
+  const targets = parts.flatMap((part) => {
+    const points = part.kind === "segment" ? wirePartPoints(doc, part) : null;
+    return points ? [points as [GridPoint, GridPoint]] : [];
+  });
+  let out = doc;
+  for (const [a, b] of targets) {
+    for (const w of out.wires) {
+      const path = partPath(out, w);
+      const i = path.findIndex(
+        (p, k) =>
+          k + 1 < path.length &&
+          onSegment(a, p, path[k + 1] as GridPoint) &&
+          onSegment(b, p, path[k + 1] as GridPoint),
+      );
+      if (i < 0) continue;
+      out = deleteSegment(out, { wire: w.id, kind: "segment", index: i });
+      break;
+    }
   }
   return out;
 }

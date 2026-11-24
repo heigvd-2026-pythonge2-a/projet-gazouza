@@ -8,7 +8,6 @@ import {
   clipAnchor,
   docBounds,
   freshSimulation,
-  itemsInRect,
   moveItems,
   moveWirePart,
   pinPosition,
@@ -192,8 +191,8 @@ export function SchematicCanvas() {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
-  /** Selection rectangle being drawn (grid units). */
-  const [band, setBand] = useState<GridRect | null>(null);
+  /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
+  const [band, setBand] = useState<{ rect: GridRect; touching: boolean } | null>(null);
   /** Context menu, at this position in the canvas. */
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
@@ -215,6 +214,7 @@ export function SchematicCanvas() {
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
+  const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
   const pasteAt = useEditorStore((s) => s.pasteAt);
@@ -406,14 +406,15 @@ export function SchematicCanvas() {
 
   /**
    * Left press in the void with the select tool: dragging draws a selection rectangle, which
-   * selects what is entirely inside it (Shift adds to the selection). A click without moving
-   * clears the selection. Escape while drawing drops the rectangle.
+   * selects what is entirely inside it, sections of wires included. With Shift, it toggles what
+   * touches it instead (see `selectInRect`). A click without moving clears the selection (not
+   * with Shift). Escape while drawing drops the rectangle.
    */
   const startBand = (e: MouseEvent) => {
     endPress.current?.();
     const start = pointerAt(e);
     if (!start) return;
-    const additive = e.shiftKey;
+    const touching = e.shiftKey;
     const from = { x: e.clientX, y: e.clientY };
     let rect: GridRect | null = null;
 
@@ -422,18 +423,17 @@ export function SchematicCanvas() {
       const p = pointerAt(ev);
       if (!p) return;
       rect = rectFrom(start, p);
-      setBand(rect);
+      setBand({ rect, touching });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
       const s = useEditorStore.getState();
       if (!rect) {
-        if (!additive) s.select([]);
+        if (!touching) s.select([]);
         return;
       }
-      const inside = itemsInRect(s.doc, rect);
-      s.select(additive ? [...new Set([...s.selection, ...inside])] : inside);
+      s.selectInRect(rect, touching ? "touching" : "inside");
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
@@ -642,6 +642,7 @@ export function SchematicCanvas() {
             doc={doc}
             selection={selection}
             part={tool.kind === "select" ? wirePart : null}
+            segments={tool.kind === "select" ? segments : []}
             onSelect={tool.kind === "select" ? selectItem : undefined}
             onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
             onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
@@ -711,15 +712,16 @@ export function SchematicCanvas() {
             </>
           )}
           {band && (
+            // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
             <Rect
-              x={band.min.x * GRID}
-              y={band.min.y * GRID}
-              width={(band.max.x - band.min.x) * GRID}
-              height={(band.max.y - band.min.y) * GRID}
-              fill="rgba(37, 99, 235, 0.08)"
-              stroke={COLORS.selected}
+              x={band.rect.min.x * GRID}
+              y={band.rect.min.y * GRID}
+              width={(band.rect.max.x - band.rect.min.x) * GRID}
+              height={(band.rect.max.y - band.rect.min.y) * GRID}
+              fill={band.touching ? "rgba(22, 163, 74, 0.08)" : "rgba(37, 99, 235, 0.08)"}
+              stroke={band.touching ? "#16a34a" : COLORS.selected}
               strokeWidth={1 / viewport.scale}
-              dash={[4 / viewport.scale, 4 / viewport.scale]}
+              dash={band.touching ? [4 / viewport.scale, 4 / viewport.scale] : undefined}
               listening={false}
             />
           )}
