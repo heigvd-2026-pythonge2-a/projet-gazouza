@@ -317,7 +317,7 @@ INJECTION = '\n.model p d_process(process_file="calc.exe")\nA1 [a] [b] p'
 SAFE_NETLIST = "V1 n1 0 DC 5\nR1 n1 0 1k\n.op\n.end\n"
 
 
-@pytest.mark.parametrize("separator", ["\n", "\r", "\r\n", " ", "\x85", "\x0b", "\x00"])
+@pytest.mark.parametrize("separator", ["\n", "\r", "\r\n", "\u2028", "\x85", "\x0b", "\x00"])
 def test_title_stays_on_one_line(separator: str) -> None:
     title = "x" + INJECTION.replace("\n", separator)
     circuit = schematic([SOURCE, RESISTOR, GROUND], LOOP)
