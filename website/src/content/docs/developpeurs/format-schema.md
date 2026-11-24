@@ -21,7 +21,8 @@ n'a aucun calcul géométrique à faire, et un composant déplacé garde ses fil
   "title": "Circuit RC",
   "components": [ ... ],
   "junctions": [ ... ],
-  "wires": [ ... ]
+  "wires": [ ... ],
+  "texts": [ ... ]
 }
 ```
 
@@ -32,6 +33,7 @@ n'a aucun calcul géométrique à faire, et un composant déplacé garde ses fil
 | `components` | Les composants posés, y compris masses et étiquettes |
 | `junctions` | Les points où des fils se rejoignent hors d'une broche (un « T ») |
 | `wires` | Les fils |
+| `texts` | Facultatif ; texte libre décoratif, ignoré par la netlist |
 
 L'**analyse** n'est pas dans le schéma : elle est envoyée à côté
 (`{ schematic, analysis }`, voir [API du backend](/projet-gazouza/developpeurs/api/)).
@@ -62,6 +64,7 @@ plus récente de l'éditeur s'ouvre quand même.
 | `rotation` | `0`, `90`, `180` ou `270`, sens horaire |
 | `mirror` | Miroir horizontal, appliqué **avant** la rotation |
 | `params` | Valeurs **telles que tapées** (`"10k"`, `"1u"`) ; l'éditeur écrit tous les défauts à la pose |
+| `name_offset`, `value_offset` | Facultatifs : position du nom et de la valeur placés à la main (centre du texte, en cases, décimales permises, dans le repère du composant). Absents : placement automatique |
 
 ## Fils et jonctions
 
@@ -81,6 +84,15 @@ Une extrémité de fil (`from`, `to`) a l'une de ces trois formes :
 `points` ne contient que les **coudes**, pour le dessin ; la netlist l'ignore. Un fil lâché au
 milieu d'un autre est **coupé en deux** par l'éditeur, avec une jonction : le backend ne voit
 jamais de « fil sur fil ».
+
+## Texte libre
+
+```json
+{ "id": "t1", "position": { "x": 2, "y": -4 }, "content": "Entrée\n10 V" }
+```
+
+Texte décoratif (titre, note…) : `position` est son coin haut gauche, `content` le texte tapé
+(retours à la ligne compris, 2000 caractères au plus). La netlist l'ignore complètement.
 
 ## Bibliothèque
 

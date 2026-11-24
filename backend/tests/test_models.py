@@ -4,6 +4,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from app.models import (
+    Component,
     ComponentTarget,
     Diagnostic,
     FreeEnd,
@@ -12,7 +13,10 @@ from app.models import (
     NetTarget,
     PinEnd,
     PinTarget,
+    Point,
     Schematic,
+    Text,
+    TextOffset,
     Wire,
     WireEnd,
     WireTarget,
@@ -83,6 +87,7 @@ def test_minimal_schematic() -> None:
     assert schematic.version == 2
     assert schematic.title is None
     assert schematic.components == schematic.junctions == schematic.wires == []
+    assert schematic.texts == []
 
 
 def test_old_version_is_rejected() -> None:
@@ -125,6 +130,48 @@ def test_unknown_keys_are_ignored() -> None:
     )
     assert "zoom" not in schematic.model_dump()
     assert "color" not in schematic.components[0].model_dump()
+
+
+def test_component_texts_are_placed_automatically_by_default() -> None:
+    component = Component.model_validate(
+        {"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0}}
+    )
+    assert component.name_offset is None
+    assert component.value_offset is None
+
+
+def test_component_text_offsets_take_half_grid_steps() -> None:
+    component = Component.model_validate(
+        {
+            "id": "c1",
+            "type": "resistor",
+            "position": {"x": 0, "y": 0},
+            "name_offset": {"x": 1.5, "y": -0.5},
+            "value_offset": {"x": 1.5, "y": 0.5},
+        }
+    )
+    assert component.name_offset == TextOffset(x=1.5, y=-0.5)
+    assert component.model_dump()["value_offset"] == {"x": 1.5, "y": 0.5}
+
+
+def test_free_text_keeps_its_line_breaks() -> None:
+    schematic = Schematic.model_validate(
+        {"texts": [{"id": "t1", "position": {"x": 2, "y": -4}, "content": "Entrée\n10 V"}]}
+    )
+    assert schematic.texts == [Text(id="t1", position=Point(x=2, y=-4), content="Entrée\n10 V")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        {"id": "t1", "content": "sans position"},
+        {"id": "t1", "position": {"x": 0.5, "y": 0}, "content": "hors grille"},
+        {"id": "t1", "position": {"x": 0, "y": 0}, "content": "x" * 2001},
+    ],
+)
+def test_invalid_free_text_is_rejected(text: dict) -> None:
+    with pytest.raises(ValidationError):
+        Schematic.model_validate({"texts": [text]})
 
 
 # --- Diagnostics --------------------------------------------------------------------------
