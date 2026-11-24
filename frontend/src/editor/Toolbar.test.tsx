@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
+import { TRANSPARENT_EXPORT_KEY } from "./fileActions";
 import { EditorToolbar } from "./Toolbar";
+import { registerViewCommands } from "./viewCommands";
 
 beforeEach(resetEditorStore);
 afterEach(() => vi.restoreAllMocks());
@@ -84,5 +86,38 @@ describe("EditorToolbar", () => {
     confirm.mockReturnValue(true);
     await user.click(button("Nouveau schéma (Ctrl+N)"));
     expect(editorState().doc.components).toEqual([]);
+  });
+
+  it("exports on a white background unless the transparent box is checked, and keeps it", async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(TRANSPARENT_EXPORT_KEY);
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    const exportImage = vi.fn(async () => null);
+    const unregister = registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
+    render(<EditorToolbar />);
+    act(() => void dropComponent("resistor"));
+
+    const open = button("Exporter le schéma en image PNG…");
+    await user.click(open);
+    expect(open).toHaveAttribute("aria-expanded", "true");
+    const box = screen.getByRole("checkbox", { name: /Fond transparent/ });
+    expect(box).not.toBeChecked();
+    await user.click(button("Exporter…"));
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.click(open);
+    await user.click(screen.getByRole("checkbox", { name: /Fond transparent/ }));
+    await user.click(button("Exporter…"));
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+    expect(window.localStorage.getItem(TRANSPARENT_EXPORT_KEY)).toBe("true");
+
+    // Reopened: the last choice is kept; Escape closes without exporting.
+    await user.click(open);
+    expect(screen.getByRole("checkbox", { name: /Fond transparent/ })).toBeChecked();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(exportImage).toHaveBeenCalledTimes(2);
+    unregister();
   });
 });
