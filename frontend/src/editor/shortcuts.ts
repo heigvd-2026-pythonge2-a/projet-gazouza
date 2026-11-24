@@ -18,6 +18,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Ctrl+N", action: "Nouveau schéma" },
       { keys: "Ctrl+O", action: "Ouvrir un schéma" },
       { keys: "Ctrl+S", action: "Enregistrer le schéma" },
+      { keys: "Ctrl+Maj+S", action: "Enregistrer le schéma sous un autre nom" },
     ],
   },
   {

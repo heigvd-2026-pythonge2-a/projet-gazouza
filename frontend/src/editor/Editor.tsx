@@ -30,7 +30,7 @@ import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport } from "./fitView";
-import { newFile, openFile, saveFile } from "./fileActions";
+import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
@@ -50,6 +50,9 @@ const UNCONNECTED_RADIUS = 0.4;
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
 const BAND_THRESHOLD = 3;
+/** Exported image: pixels per drawing pixel at zoom 1, and white margin around the circuit. */
+const EXPORT_PIXEL_RATIO = 2;
+const EXPORT_MARGIN = 20;
 
 /** Grid step of each arrow key, to move the selection. */
 const ARROWS: Record<string, GridPoint> = {
@@ -136,6 +139,7 @@ function useKeyboardShortcuts() {
           s.duplicate(); // also keeps the browser from adding a bookmark
         else if (key === "n") newFile();
         else if (key === "o") openFile();
+        else if (key === "s" && e.shiftKey) saveFileAs();
         else if (key === "s") saveFile();
         else return;
         e.preventDefault();
@@ -192,6 +196,13 @@ function useKeyboardShortcuts() {
 export function SchematicCanvas() {
   const [containerRef, size] = useElementSize<HTMLDivElement>();
   const stageRef = useRef<Konva.Stage>(null);
+  /** Layer of the schematic itself (wires, components), the one exported as an image. */
+  const contentRef = useRef<Konva.Layer>(null);
+  /**
+   * While set, the schematic is drawn for the image export (no grid, no selection, no marks),
+   * and this receives the image once that drawing is done.
+   */
+  const [exporting, setExporting] = useState<{ done: (image: Blob | null) => void } | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
@@ -260,7 +271,9 @@ export function SchematicCanvas() {
     : partTarget && wirePart
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
-  const freePins = useMemo(() => unconnectedPins(doc), [doc]);
+  const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  /** What is drawn as selected (nothing in an exported image). */
+  const shownSelection = exporting ? [] : selection;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
@@ -331,8 +344,49 @@ export function SchematicCanvas() {
       zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
       zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
       fit: fitView,
+      exportImage: () => new Promise((done) => setExporting({ done })),
     });
   }, [size, zoomAt, fitView]);
+
+  /** The circuit drawn on a white background, as a PNG (null: nothing to draw). */
+  const renderImage = (): Promise<Blob | null> => {
+    const stage = stageRef.current;
+    const layer = contentRef.current;
+    const box = layer?.getClientRect();
+    if (!stage || !layer || !box || box.width === 0 || box.height === 0) {
+      return Promise.resolve(null);
+    }
+    const scale = stage.scaleX();
+    const margin = EXPORT_MARGIN * scale;
+    const drawn = layer.toCanvas({
+      x: box.x - margin,
+      y: box.y - margin,
+      width: box.width + 2 * margin,
+      height: box.height + 2 * margin,
+      pixelRatio: EXPORT_PIXEL_RATIO / scale,
+    });
+    const image = document.createElement("canvas");
+    image.width = drawn.width;
+    image.height = drawn.height;
+    const ctx = image.getContext("2d");
+    if (!ctx) return Promise.resolve(null);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, image.width, image.height);
+    ctx.drawImage(drawn, 0, 0);
+    return new Promise((done) => image.toBlob(done, "image/png"));
+  };
+
+  // Image export: once drawn without the editing marks, render the circuit (with its captions)
+  // on a white background, whatever the zoom and the part shown on screen.
+  useEffect(() => {
+    if (!exporting) return;
+    // On the next frame: the layers then show the schematic drawn for the export.
+    const frame = requestAnimationFrame(() => {
+      setExporting(null);
+      void renderImage().then(exporting.done);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [exporting]);
 
   const onWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -641,15 +695,15 @@ export function SchematicCanvas() {
         onMouseMove={onMouseMove}
         onMouseLeave={() => setPointer(null)}
       >
-        <Layer listening={false}>
+        <Layer listening={false} visible={!exporting}>
           <Grid viewport={viewport} width={size.width} height={size.height} />
         </Layer>
-        <Layer>
+        <Layer ref={contentRef}>
           <Wires
             doc={doc}
-            selection={selection}
-            part={tool.kind === "select" ? wirePart : null}
-            segments={tool.kind === "select" ? segments : []}
+            selection={shownSelection}
+            part={tool.kind === "select" && !exporting ? wirePart : null}
+            segments={tool.kind === "select" && !exporting ? segments : []}
             onSelect={tool.kind === "select" ? selectItem : undefined}
             onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
             onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
@@ -658,7 +712,7 @@ export function SchematicCanvas() {
             <ComponentSymbol
               key={c.id}
               component={c}
-              selected={selection.includes(c.id)}
+              selected={shownSelection.includes(c.id)}
               draggable={tool.kind === "select"}
               onSelect={(e) => selectItem(c.id, e)}
               onContextPress={() => {
@@ -709,8 +763,8 @@ export function SchematicCanvas() {
               listening={false}
             />
           ))}
-          {ghost && <ComponentSymbol component={ghost} ghost />}
-          {pasteGhost && (
+          {ghost && !exporting && <ComponentSymbol component={ghost} ghost />}
+          {pasteGhost && !exporting && (
             <>
               <Group opacity={0.5} listening={false}>
                 <Wires doc={pasteGhost} selection={[]} />
@@ -720,7 +774,7 @@ export function SchematicCanvas() {
               ))}
             </>
           )}
-          {band && (
+          {band && !exporting && (
             // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
             <Rect
               x={band.rect.min.x * GRID}
@@ -734,7 +788,7 @@ export function SchematicCanvas() {
               listening={false}
             />
           )}
-          {tool.kind === "wire" && (
+          {tool.kind === "wire" && !exporting && (
             <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
           )}
         </Layer>

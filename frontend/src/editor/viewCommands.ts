@@ -5,6 +5,8 @@ export interface ViewCommands {
   zoomIn: () => void;
   zoomOut: () => void;
   fit: () => void;
+  /** The whole circuit as a PNG image, without the grid nor the selection (null: failed). */
+  exportImage: () => Promise<Blob | null>;
 }
 
 let current: ViewCommands | null = null;
@@ -20,3 +22,5 @@ export function registerViewCommands(commands: ViewCommands): () => void {
 export const zoomIn = () => current?.zoomIn();
 export const zoomOut = () => current?.zoomOut();
 export const fitView = () => current?.fit();
+export const exportImage = (): Promise<Blob | null> =>
+  current?.exportImage() ?? Promise.resolve(null);

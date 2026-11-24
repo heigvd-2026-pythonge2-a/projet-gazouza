@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { isUnsaved, useEditorStore } from "../store";
-import { newFile, openFile, saveFile } from "./fileActions";
+import { exportImage, newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { UI } from "./theme";
 import { fitView, zoomIn, zoomOut } from "./viewCommands";
 
@@ -12,6 +12,7 @@ const ICONS = {
   new: "M4 1.5h5.5l3 3v10H4z M9.5 1.5v3h3",
   open: "M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z",
   save: "M2.5 2.5h9l2 2v9h-11z M5 2.5v3.5h5V2.5 M5 13.5v-4h6v4",
+  saveAs: "M2.5 2.5h9l2 2v3 M2.5 2.5v11h5 M5 2.5v3.5h5V2.5 M9.5 13.5l4-4 1 1-4 4h-1z",
   import: "M8 1.5v8 M5 6.5l3 3 3-3 M2.5 10.5v3h11v-3",
   export: "M8 9.5v-8 M5 4.5l3-3 3 3 M2.5 10.5v3h11v-3",
   undo: "M5.5 3.5l-3 3 3 3 M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7",
@@ -152,13 +153,14 @@ export function EditorToolbar() {
           }
           icon="save"
           badge={unsaved}
-          onClick={saveFile}
+          onClick={() => saveFile()}
         />
+        <ToolButton label="Enregistrer sous… (Ctrl+Maj+S)" icon="saveAs" onClick={saveFileAs} />
         <ToolButton label={`Importer un fichier LTspice (.asc) — ${SOON}`} icon="import" disabled />
         <ToolButton
-          label={`Exporter le schéma en image ou la netlist SPICE — ${SOON}`}
+          label="Exporter le schéma en image PNG"
           icon="export"
-          disabled
+          onClick={() => void exportImage()}
         />
       </Group>
       <Group label="Édition">
