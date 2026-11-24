@@ -366,7 +366,7 @@ def has_ngspice() -> bool:
 
 @pytest.mark.ngspice
 @pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
-@pytest.mark.parametrize("circuit", ["divider_op", "rc_tran"])
+@pytest.mark.parametrize("circuit", ASC_CIRCUITS)
 def test_imported_asc_simulates(circuit: str) -> None:
     # Acceptance criterion of #110: the imported circuits simulate.
     result = import_asc((FIXTURES_DIR / circuit / "circuit.asc").read_bytes())
@@ -465,10 +465,13 @@ def test_real_step_response_simulates() -> None:
     if "opamp" not in get_library():
         pytest.skip("op-amps come with PR #139")
     result = import_asc((LTSPICE_DIR / "simu_indicielle_ideale.asc").read_bytes())
-    assert result.analysis is not None
-    netlist = generate_netlist(result.schematic, result.analysis)
+    assert result.analysis == TranAnalysis(stop_time=1e-3, max_step=1e-8)
+    # The file asks for a 10 ns step: 100 000 points x 25 traces is a ~65 MiB rawfile, over
+    # the engine limit (MAX_RAWFILE_BYTES). A 1 us step is enough to see the output settle.
+    analysis = TranAnalysis(stop_time=1e-3, max_step=1e-6)
+    netlist = generate_netlist(result.schematic, analysis)
     assert netlist.errors == []
-    simulation = run_simulation(netlist, result.analysis)
+    simulation = run_simulation(netlist, analysis)
     assert simulation.errors == []
     # Unity-gain Sallen-Key low-pass: after the 1 V step, the output settles at 1 V.
     out = next(t for t in simulation.traces if t.name.lower() == "v(out_a1)").values
