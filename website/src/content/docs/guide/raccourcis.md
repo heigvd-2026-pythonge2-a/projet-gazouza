@@ -20,7 +20,8 @@ afficher cette liste à tout moment.
 |---|---|
 | Clic | Sélectionner |
 | <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
-| Glisser dans le vide | Sélection par zone (<kbd>Maj</kbd> : ajouter) |
+| Glisser dans le vide | Sélectionner ce qui est entièrement dans la zone (tronçons de fil compris) |
+| <kbd>Maj</kbd> + glisser dans le vide | Ajouter ce qui touche la zone, retirer ce qui était déjà sélectionné |
 | <kbd>Ctrl+A</kbd> | Tout sélectionner |
 | <kbd>Échap</kbd> | Vider la sélection |
 

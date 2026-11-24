@@ -12,9 +12,12 @@ import {
   copyItems,
   deleteItems,
   deleteSegment,
+  deleteSegments,
   docBounds,
   emptyDoc,
   freeMove,
+  itemsInRect,
+  itemsTouchingRect,
   mirrorComponents,
   moveComponent,
   moveWirePart,
@@ -24,10 +27,12 @@ import {
   rotateComponents,
   rotateCw,
   samePoint,
+  segmentsInRect,
   setParam,
   type Clip,
   type EditorDoc,
   type GridPoint,
+  type GridRect,
   type Rotation,
   type WirePart,
 } from "./document";
@@ -96,6 +101,8 @@ interface EditorState {
   selection: string[];
   /** Bend or segment of a wire selected on its own (then `selection` is empty). */
   wirePart: WirePart | null;
+  /** Wire sections selected with the selection rectangle (#121), next to `selection`. */
+  segments: WirePart[];
   tool: Tool;
   draft: WireDraft | null;
   /** Items copied with Ctrl+C (an internal clipboard, not the system one). */
@@ -148,6 +155,12 @@ interface EditorState {
   mirror: () => void;
   deleteSelection: () => void;
   select: (ids: string[]) => void;
+  /**
+   * Releases the selection rectangle `r`. "inside" selects what lies entirely in it, and the
+   * sections of wires (segments) whose two ends do; "touching" (Shift) adds what touches it and
+   * removes what touches it and was already selected (#93).
+   */
+  selectInRect: (r: GridRect, mode: "inside" | "touching") => void;
   /** Selects one bend or segment of a wire (clears the other selection). */
   selectWirePart: (part: WirePart | null) => void;
   /**
@@ -224,6 +237,7 @@ function freshDocument(doc: EditorDoc) {
     history: emptyHistory<EditorDoc>(),
     selection: [],
     wirePart: null,
+    segments: [],
     tool: { kind: "select" } as const,
     draft: null,
     // A result of another document would show as stale: forget it.
@@ -241,7 +255,8 @@ export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
  */
 function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
   if (doc === s.doc) return {};
-  return { doc, history: record(s.history, s.doc, key) };
+  // The wire sections are kept by index: once the wires change, they may point elsewhere.
+  return { doc, history: record(s.history, s.doc, key), segments: [] };
 }
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
@@ -259,13 +274,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   clipboard: null,
   animation: { on: false, electrons: false, playing: true, speed: 1 },
 
-  setTool: (tool) => set({ tool, draft: null, wirePart: null }),
+  setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [] }),
 
   startPlacing: (type) =>
     set({
       tool: { kind: "place", type, rotation: 0, mirror: false },
       selection: [],
       wirePart: null,
+      segments: [],
       draft: null,
     }),
 
@@ -286,6 +302,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ...change(s, connectPinsOnWires(nudgeFree(added.doc, ids, PASTE_OFFSET), { comps: ids })),
         selection: [added.id],
         wirePart: null,
+        segments: [],
         tool: { kind: "select" },
         draft: null,
       };
@@ -316,13 +333,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setParam: (id, param, value) =>
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
 
-  startWiring: () => set({ tool: { kind: "wire" }, selection: [], wirePart: null, draft: null }),
+  startWiring: () =>
+    set({ tool: { kind: "wire" }, selection: [], wirePart: null, segments: [], draft: null }),
 
   startWireFrom: (position) =>
     set({
       tool: { kind: "wire" },
       selection: [],
       wirePart: null,
+      segments: [],
       draft: { points: [{ ...position }], returnToSelect: true },
     }),
 
@@ -388,15 +407,21 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           part.kind === "bend"
             ? deleteItems(s.doc, new Set([part.wire]))
             : deleteSegment(s.doc, part);
-        return doc === s.doc ? {} : { ...change(s, doc), wirePart: null };
+        return doc === s.doc ? {} : { ...change(s, doc), wirePart: null, segments: [] };
       }
-      return s.selection.length > 0
-        ? { ...change(s, deleteItems(s.doc, new Set(s.selection))), selection: [] }
-        : {};
+      if (s.selection.length === 0 && s.segments.length === 0) return {};
+      // Sections first: deleting items may merge wires around a junction (see `cleanJunctions`).
+      const ids = new Set(s.selection);
+      const cut = deleteSegments(
+        s.doc,
+        s.segments.filter((seg) => !ids.has(seg.wire)),
+      );
+      return { ...change(s, deleteItems(cut, ids)), selection: [], segments: [] };
     }),
 
   // Changing the selection ends a field edit: editing the same field again later is a new step.
-  select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
+  select: (ids) =>
+    set((s) => ({ selection: ids, wirePart: null, segments: [], history: seal(s.history) })),
 
   sealHistory: () => set((s) => ({ history: seal(s.history) })),
 
@@ -414,8 +439,24 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   markSaved: (doc) => set({ savedDoc: doc }),
 
+  selectInRect: (r, mode) =>
+    set((s) => {
+      if (mode === "inside") {
+        return {
+          selection: itemsInRect(s.doc, r),
+          segments: segmentsInRect(s.doc, r),
+          wirePart: null,
+          history: seal(s.history),
+        };
+      }
+      const touched = itemsTouchingRect(s.doc, r);
+      const kept = s.selection.filter((id) => !touched.includes(id));
+      const added = touched.filter((id) => !s.selection.includes(id));
+      return { selection: [...kept, ...added], wirePart: null, history: seal(s.history) };
+    }),
+
   selectWirePart: (part) =>
-    set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),
+    set((s) => ({ selection: [], segments: [], wirePart: part, history: seal(s.history) })),
 
   moveWirePart: (target, landing) =>
     set((s) => {
@@ -434,6 +475,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => ({
       history: seal(s.history),
       wirePart: null,
+      segments: [],
       selection: s.selection.includes(id)
         ? s.selection.filter((x) => x !== id)
         : [...s.selection, id],
@@ -443,7 +485,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const s = get();
     if (s.draft) s.removeLastBend();
     else if (s.tool.kind !== "select") set({ tool: { kind: "select" } });
-    else set({ selection: [], wirePart: null });
+    else set({ selection: [], wirePart: null, segments: [] });
   },
 
   selectAll: () =>
@@ -454,6 +496,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ...s.doc.junctions.map((j) => j.id),
       ],
       wirePart: null,
+      segments: [],
       tool: { kind: "select" },
       draft: null,
       history: seal(s.history),
@@ -467,7 +510,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   paste: () =>
     set((s) =>
       hasItems(s.clipboard)
-        ? { tool: { kind: "paste", clip: s.clipboard }, selection: [], wirePart: null, draft: null }
+        ? {
+            tool: { kind: "paste", clip: s.clipboard },
+            selection: [],
+            wirePart: null,
+            segments: [],
+            draft: null,
+          }
         : {},
     ),
 
@@ -476,7 +525,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (s.selection.length === 0) return {};
       const clip = copyItems(s.doc, new Set(s.selection));
       return hasItems(clip)
-        ? { tool: { kind: "paste", clip }, selection: [], wirePart: null, draft: null }
+        ? {
+            tool: { kind: "paste", clip },
+            selection: [],
+            wirePart: null,
+            segments: [],
+            draft: null,
+          }
         : {};
     }),
 
@@ -500,6 +555,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ...change(s, doc),
         selection: pasted.ids,
         wirePart: null,
+        segments: [],
         tool: { kind: "select" },
         draft: null,
       };
@@ -514,6 +570,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         history: step.history,
         selection: existing(step.state, s.selection),
         wirePart: null,
+        segments: [],
         draft: null,
       };
     }),
@@ -527,6 +584,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         history: step.history,
         selection: existing(step.state, s.selection),
         wirePart: null,
+        segments: [],
         draft: null,
       };
     }),
