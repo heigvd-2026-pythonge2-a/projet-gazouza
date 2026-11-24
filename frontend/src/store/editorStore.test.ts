@@ -104,8 +104,8 @@ describe("undo / redo", () => {
 
   it("merges a held arrow key into one step", () => {
     const c = dropResistor({ x: 0, y: 0 });
-    store().moveSelection({ x: 1, y: 0 }, true);
-    store().moveSelection({ x: 1, y: 0 }, true);
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
+    store().moveSelection({ x: 1, y: 0 }, { merge: true });
     expect(store().doc.components[0]!.position).toEqual({ x: 2, y: 0 });
     store().undo();
     expect(store().doc.components[0]!.position).toEqual(c.position);

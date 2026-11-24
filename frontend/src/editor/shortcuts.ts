@@ -33,7 +33,8 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "Modifier",
     items: [
-      { keys: "Glisser", action: "Déplacer la sélection" },
+      { keys: "Glisser", action: "Déplacer la sélection (les fils suivent)" },
+      { keys: "Ctrl + glisser", action: "Déplacer sans que les fils suivent" },
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
       { keys: "M", action: "Miroir" },
