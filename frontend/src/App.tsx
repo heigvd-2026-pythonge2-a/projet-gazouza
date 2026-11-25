@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
+import { PlotPanel } from "./plot";
 import {
   AnimateButton,
   EditorToolbar,
@@ -32,7 +33,7 @@ import {
   useElementSize,
   type Layout,
 } from "./layout";
-import { COLORS, UI, useEditorStore } from "./store";
+import { COLORS, UI, freshSimulation, useEditorStore } from "./store";
 
 /** Panel shown in full screen; the schematic keeps the palette beside it to stay editable. */
 type Maximized = "schematic" | "results" | null;
@@ -168,6 +169,16 @@ export default function App() {
     [],
   );
 
+  const simulating = useEditorStore((s) => s.simulating);
+  const simError = useEditorStore((s) => s.simulationError);
+  const simResult = useEditorStore(freshSimulation);
+  const showPlot =
+    !simulating &&
+    !simError &&
+    simResult !== null &&
+    (simResult.errors ?? []).length === 0 &&
+    simResult.analysis !== "op";
+
   /** Results panel: a slot for the plot module (src/plot). */
   const resultsPanel = (style: CSSProperties) => (
     <section
@@ -192,7 +203,7 @@ export default function App() {
         </div>
       </div>
       <PanelErrorBoundary panel="les résultats">
-        <SimulationReport />
+        {showPlot ? <PlotPanel /> : <SimulationReport />}
       </PanelErrorBoundary>
     </section>
   );
