@@ -49,6 +49,7 @@ const ZOOM_STEP = 1.1;
 const BUTTON_ZOOM_STEP = 1.25;
 /** Radius of the ring drawn around a pin connected to nothing, in grid units. */
 const UNCONNECTED_RADIUS = 0.4;
+const NO_PINS: ReadonlySet<string> = new Set();
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
@@ -289,6 +290,16 @@ export function SchematicCanvas() {
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
   const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  /** Unconnected pin names of each component: the only pins that keep their square. */
+  const freePinsByComp = useMemo(() => {
+    const byComp = new Map<string, Set<string>>();
+    for (const p of freePins) {
+      const pins = byComp.get(p.comp) ?? new Set<string>();
+      pins.add(p.pin);
+      byComp.set(p.comp, pins);
+    }
+    return byComp;
+  }, [freePins]);
   /** What is drawn as selected (nothing in an exported image). */
   const shownSelection = exporting ? [] : selection;
 
@@ -733,6 +744,7 @@ export function SchematicCanvas() {
                 key={c.id}
                 component={c}
                 selected={shownSelection.includes(c.id)}
+                markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
                 draggable={tool.kind === "select"}
                 onSelect={(e) => selectItem(c.id, e)}
                 onContextPress={() => {

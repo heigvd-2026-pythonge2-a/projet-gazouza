@@ -128,6 +128,11 @@ interface ComponentSymbolProps {
   onPinMouseDown?: (pin: string) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /**
+   * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
+   * ones, so a connected pin does not leave a square behind.
+   */
+  markedPins?: ReadonlySet<string>;
 }
 
 /**
@@ -145,6 +150,7 @@ export function ComponentSymbol({
   onMove,
   onPinMouseDown,
   onDoubleClick,
+  markedPins,
 }: ComponentSymbolProps) {
   const colors = useCanvasColors();
   const def = getDef(c.type);
@@ -202,18 +208,20 @@ export function ComponentSymbol({
         {def.symbol.map((shape, i) => (
           <SymbolShapeNode key={i} shape={shape} color={color} />
         ))}
-        {def.pins.map((pin) => (
-          <Rect
-            key={pin.name}
-            x={(pin.x - PIN_SIZE / 2) * GRID}
-            y={(pin.y - PIN_SIZE / 2) * GRID}
-            width={PIN_SIZE * GRID}
-            height={PIN_SIZE * GRID}
-            stroke={colors.pin}
-            strokeWidth={1}
-            listening={false}
-          />
-        ))}
+        {def.pins
+          .filter((pin) => !markedPins || markedPins.has(pin.name))
+          .map((pin) => (
+            <Rect
+              key={pin.name}
+              x={(pin.x - PIN_SIZE / 2) * GRID}
+              y={(pin.y - PIN_SIZE / 2) * GRID}
+              width={PIN_SIZE * GRID}
+              height={PIN_SIZE * GRID}
+              stroke={colors.pin}
+              strokeWidth={1}
+              listening={false}
+            />
+          ))}
         {onPinMouseDown &&
           def.pins.map((pin) => (
             <Rect
