@@ -1438,6 +1438,7 @@ def test_run_self_check_success_and_cli(
     _touch(fake_ngspice)
 
     monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(launcher, "_verify_desktop_runtime", lambda: "ok")
     monkeypatch.setattr(
         launcher,
         "run_simulation",
@@ -1462,6 +1463,7 @@ def test_run_self_check_success_and_cli(
     assert "Self-check OK:" in out
     assert "rc_points=2" in out
     assert "v_out_final=4.9663V" in out
+    assert "desktop_runtime=ok" in out
 
     # Windowed mode with sys.stdout=None completes cleanly without crashing.
     monkeypatch.setattr(sys, "stdout", None)
@@ -1543,6 +1545,43 @@ def test_run_self_check_auto_resolves_frontend_and_validates_failures(
     # CLI returns exit code 1 when self-check fails at runtime.
     assert launcher.main(["--self-check", "--frontend-dist", str(tmp_path / "missing")]) == 1
     assert "Erreur :" in capsys.readouterr().err
+
+
+def test_verify_desktop_runtime_skips_outside_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_called(_name: str) -> object:
+        raise AssertionError("the Windows backend must not be imported outside Windows")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(launcher.importlib, "import_module", fail_if_called)
+    assert launcher._verify_desktop_runtime() == "skipped"
+
+
+def test_verify_desktop_runtime_imports_the_windows_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    imported: list[str] = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", imported.append)
+    assert launcher._verify_desktop_runtime() == "ok"
+    assert imported == ["webview.platforms.edgechromium"]
+
+
+def test_verify_desktop_runtime_reports_blocked_assemblies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def blocked(_name: str) -> object:
+        raise RuntimeError("Failed to resolve Python.Runtime.Loader.Initialize")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", blocked)
+    with pytest.raises(RuntimeError, match=r"\.NET.*Python\.Runtime\.Loader") as exc_info:
+        launcher._verify_desktop_runtime()
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="pywebview's .NET backend is Windows-only")
+def test_verify_desktop_runtime_loads_real_assemblies() -> None:
+    assert launcher._verify_desktop_runtime() == "ok"
 
 
 def test_verify_launcher_app_detects_broken_routes(tmp_path: Path) -> None:

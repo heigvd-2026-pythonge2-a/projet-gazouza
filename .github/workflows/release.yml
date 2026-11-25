@@ -48,8 +48,9 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      # -Verify extracts dist/Psice.zip and runs Psice.exe --self-check from it: frontend
-      # files, /api/health, component library and an offline RC simulation with ngspice.
+      # -Verify extracts dist/Psice.zip, marks the files as downloaded from the Internet (like a
+      # browser download) and runs Psice.exe --self-check from it: frontend files, /api/health,
+      # component library, an offline RC simulation with ngspice and the window's .NET runtime.
       - name: Build et vérification du zip
         shell: pwsh
         run: ./build.ps1 -Verify
