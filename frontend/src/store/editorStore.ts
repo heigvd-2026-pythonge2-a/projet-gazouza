@@ -88,11 +88,12 @@ export interface WireDraft {
 
 /**
  * Route from `a` to `b` as seen while drawing: around the components (see `routeAround`),
- * straight or as an L when nothing is in the way. Returns the points after `a` (the corners,
+ * straight or as an L when nothing is in the way. Pins do not get in the way: a wire drawn across
+ * one stays straight and is connected there (#244). Returns the points after `a` (the corners,
  * then `b`).
  */
 export function routeTo(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
-  return routeAround(doc, a, b);
+  return routeAround(doc, a, b, { throughPins: true });
 }
 
 /** Full path through the clicked points, with the corners `routeTo` adds between them. */
@@ -282,6 +283,16 @@ function freshDocument(doc: EditorDoc) {
     simulation: null,
   };
 }
+
+/**
+ * The analysis kept for another document: its settings, but not the sources chosen for `.ac` and
+ * `.dc`, whose ids may name another source there (the first one is taken instead).
+ */
+const forgetSources = (s: Pick<EditorState, "analysis">): AnalysisSettings => ({
+  ...s.analysis,
+  acSource: "",
+  dcSource: "",
+});
 
 /** True if the document has changes that were not saved. */
 export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
@@ -495,9 +506,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setShowValues: (show) => set({ showValues: show }),
 
-  newDocument: () => set(freshDocument(emptyDoc())),
+  newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
-  openDocument: (doc) => set(freshDocument(doc)),
+  openDocument: (doc) => set((s) => ({ ...freshDocument(doc), analysis: forgetSources(s) })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 

@@ -2,7 +2,7 @@
 // toolbar to the backend. Errors are shown to the user in French.
 
 import { ApiError, generateNetlist, simulate, type SimulationRequest } from "../api/client";
-import { toAnalysis, toSchematic, useEditorStore } from "../store";
+import { analysisSources, toAnalysis, toSchematic, useEditorStore } from "../store";
 import { saveNewFile } from "./fileActions";
 
 /** Cancels the simulation in progress, if any. */
@@ -14,7 +14,7 @@ function request(): { request: SimulationRequest } | { error: string } {
   if (s.doc.components.length === 0) {
     return { error: "Le schéma est vide : pose des composants avant de simuler." };
   }
-  const analysis = toAnalysis(s.analysis);
+  const analysis = toAnalysis(s.analysis, analysisSources(s.doc));
   if ("error" in analysis) return analysis;
   return { request: { schematic: toSchematic(s.doc), analysis: analysis.analysis } };
 }

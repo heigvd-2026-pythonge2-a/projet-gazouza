@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
-import { getHealth } from "./api/client";
+import { PlotPanel } from "./plot";
 import {
   AnimateButton,
   EditorToolbar,
@@ -33,7 +33,7 @@ import {
   useElementSize,
   type Layout,
 } from "./layout";
-import { useEditorStore } from "./store";
+import { COLORS, UI, freshSimulation, useEditorStore } from "./store";
 
 /** Panel shown in full screen; the schematic keeps the palette beside it to stay editable. */
 type Maximized = "schematic" | "results" | null;
@@ -44,14 +44,14 @@ type Folding = "side" | "inspector" | "results" | null;
 /** Look of a panel that will fold away when the splitter is released. */
 const FOLDING: CSSProperties = { opacity: 0.35, transition: "opacity 0.1s" };
 
-const BORDER = "1px solid #e5e7eb";
+const BORDER = `1px solid ${UI.border}`;
 
 const TOOL_BUTTON: CSSProperties = {
   padding: "4px 10px",
   border: BORDER,
   borderRadius: 5,
-  background: "#ffffff",
-  color: "#374151",
+  background: UI.surface,
+  color: COLORS.text,
   font: "inherit",
   fontSize: 12,
   cursor: "pointer",
@@ -64,7 +64,6 @@ const FULL_SCREEN_RETURN_MS = 3000;
 // The results can also go under the schematic; the layout is remembered between launches. The
 // results only show once there is something to show (#96), the properties can be closed (#164).
 export default function App() {
-  const [backend, setBackend] = useState("connexion…");
   // The results start hidden, even if they were shown when the app was closed (#96).
   const [layout, setLayout] = useState<Layout>(() => ({ ...loadLayout(), resultsVisible: false }));
   const [rowRef, row] = useElementSize<HTMLDivElement>();
@@ -170,11 +169,15 @@ export default function App() {
     [],
   );
 
-  useEffect(() => {
-    getHealth()
-      .then((health) => setBackend(health.status))
-      .catch(() => setBackend("injoignable"));
-  }, []);
+  const simulating = useEditorStore((s) => s.simulating);
+  const simError = useEditorStore((s) => s.simulationError);
+  const simResult = useEditorStore(freshSimulation);
+  const showPlot =
+    !simulating &&
+    !simError &&
+    simResult !== null &&
+    (simResult.errors ?? []).length === 0 &&
+    simResult.analysis !== "op";
 
   /** Results panel: a slot for the plot module (src/plot). */
   const resultsPanel = (style: CSSProperties) => (
@@ -200,7 +203,7 @@ export default function App() {
         </div>
       </div>
       <PanelErrorBoundary panel="les résultats">
-        <SimulationReport />
+        {showPlot ? <PlotPanel /> : <SimulationReport />}
       </PanelErrorBoundary>
     </section>
   );
@@ -214,27 +217,12 @@ export default function App() {
         flexDirection: "column",
         fontFamily: '"Segoe UI", system-ui, sans-serif',
         fontSize: 13,
-        color: "#1f2937",
-        background: "#ffffff",
+        color: COLORS.symbol,
+        background: UI.surface,
       }}
     >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          height: 30,
-          flex: "none",
-          padding: "0 12px",
-          background: "#1f2937",
-          color: "#e5e7eb",
-          fontSize: 12,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 13, color: "#ffffff" }}>Psice</h1>
-        <span style={{ marginLeft: "auto" }}>Backend : {backend}</span>
-      </header>
-
+      {/* No header bar (#209): the window title names the app. An unreachable backend is
+          reported by LibraryGate at startup, then by each simulation that fails. */}
       <div
         role="toolbar"
         style={{
@@ -518,7 +506,11 @@ export default function App() {
 }
 
 /** Look of a toggle button of the toolbar while it is on. */
-const PRESSED: CSSProperties = { background: "#eff6ff", color: "#2563eb", borderColor: "#bfdbfe" };
+const PRESSED: CSSProperties = {
+  background: UI.activeBackground,
+  color: COLORS.selected,
+  borderColor: UI.activeBorder,
+};
 
 /** Small × button in a panel's corner, to hide the panel. */
 function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -536,8 +528,8 @@ function CloseButton({ label, onClick }: { label: string; onClick: () => void })
         padding: 0,
         border: BORDER,
         borderRadius: 5,
-        background: "#ffffff",
-        color: "#4b5563",
+        background: UI.surface,
+        color: UI.label,
         cursor: "pointer",
         fontSize: 16,
         lineHeight: 1,

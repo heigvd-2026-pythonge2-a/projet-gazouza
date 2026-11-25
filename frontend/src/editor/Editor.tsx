@@ -17,7 +17,9 @@ import {
   rectFrom,
   samePoint,
   unconnectedPins,
+  PALETTES,
   useEditorStore,
+  useThemeStore,
   wirePartAt,
   wirePartPoints,
   type GridPoint,
@@ -39,7 +41,7 @@ import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
-import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
+import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
 import { ValuePopover } from "./ValuePopover";
 import { registerViewCommands, type ImageOptions } from "./viewCommands";
@@ -50,6 +52,7 @@ const ZOOM_STEP = 1.1;
 const BUTTON_ZOOM_STEP = 1.25;
 /** Radius of the ring drawn around a pin connected to nothing, in grid units. */
 const UNCONNECTED_RADIUS = 0.4;
+const NO_PINS: ReadonlySet<string> = new Set();
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
@@ -215,6 +218,9 @@ export function SchematicCanvas() {
     done: (image: Blob | null) => void;
   } | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+  const theme = useThemeStore((s) => s.theme);
+  // An exported image goes in a report, on white: it is always drawn in the light colours.
+  const canvasColors = PALETTES[exporting ? "light" : theme];
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
   /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
@@ -292,6 +298,16 @@ export function SchematicCanvas() {
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
   const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  /** Unconnected pin names of each component: the only pins that keep their square. */
+  const freePinsByComp = useMemo(() => {
+    const byComp = new Map<string, Set<string>>();
+    for (const p of freePins) {
+      const pins = byComp.get(p.comp) ?? new Set<string>();
+      pins.add(p.pin);
+      byComp.set(p.comp, pins);
+    }
+    return byComp;
+  }, [freePins]);
   /** What is drawn as selected (nothing in an exported image). */
   const shownSelection = exporting ? [] : selection;
 
@@ -750,151 +766,156 @@ export function SchematicCanvas() {
         onMouseMove={onMouseMove}
         onMouseLeave={() => setPointer(null)}
       >
-        <Layer listening={false} visible={!exporting}>
-          <Grid viewport={viewport} width={size.width} height={size.height} />
-        </Layer>
-        <Layer ref={contentRef}>
-          <Wires
-            doc={doc}
-            selection={shownSelection}
-            part={tool.kind === "select" && !exporting ? wirePart : null}
-            segments={tool.kind === "select" && !exporting ? segments : []}
-            onSelect={tool.kind === "select" ? selectItem : undefined}
-            onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
-            onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
-          />
-          {doc.components.map((c) => (
-            <ComponentSymbol
-              key={c.id}
-              component={c}
-              selected={shownSelection.includes(c.id)}
-              draggable={tool.kind === "select"}
-              onSelect={(e) => selectItem(c.id, e)}
-              onContextPress={() => {
-                rightPressed.current = c.id;
-              }}
-              onDrag={(position, detach) =>
-                dragTo(c, deltaFrom(storeComponent(c), position), detach)
-              }
-              onMove={(position, detach) =>
-                dropAt(c, deltaFrom(storeComponent(c), position), detach)
-              }
-              onDoubleClick={
-                tool.kind === "select"
-                  ? () => {
-                      select([c.id]);
-                      // A component with no value to type (ground) goes to the panel instead.
-                      if (mainParam(getDef(c.type), c.params)) setEditing(c.id);
-                      else focusInspector();
+        <CanvasColorsContext value={canvasColors}>
+          <Layer listening={false} visible={!exporting}>
+            <Grid viewport={viewport} width={size.width} height={size.height} />
+          </Layer>
+          <Layer ref={contentRef}>
+            <Wires
+              doc={doc}
+              selection={shownSelection}
+              part={tool.kind === "select" && !exporting ? wirePart : null}
+              segments={tool.kind === "select" && !exporting ? segments : []}
+              onSelect={tool.kind === "select" ? selectItem : undefined}
+              onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
+              onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
+            />
+            {doc.components.map((c) => (
+              <ComponentSymbol
+                key={c.id}
+                component={c}
+                selected={shownSelection.includes(c.id)}
+                markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
+                draggable={tool.kind === "select"}
+                onSelect={(e) => selectItem(c.id, e)}
+                onContextPress={() => {
+                  rightPressed.current = c.id;
+                }}
+                onDrag={(position, detach) =>
+                  dragTo(c, deltaFrom(storeComponent(c), position), detach)
+                }
+                onMove={(position, detach) =>
+                  dropAt(c, deltaFrom(storeComponent(c), position), detach)
+                }
+                onDoubleClick={
+                  tool.kind === "select"
+                    ? () => {
+                        select([c.id]);
+                        // A component with no value to type (ground) goes to the panel instead.
+                        if (mainParam(getDef(c.type), c.params)) setEditing(c.id);
+                        else focusInspector();
+                      }
+                    : undefined
+                }
+                onPinMouseDown={
+                  tool.kind === "select"
+                    ? (pin) => {
+                        startWireFrom(pinPosition(c, pin));
+                        trackPointer();
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {doc.texts.map((t) => (
+              <FreeText
+                key={t.id}
+                text={t}
+                selected={shownSelection.includes(t.id)}
+                draggable={tool.kind === "select"}
+                onSelect={(e) => selectItem(t.id, e)}
+                onContextPress={() => {
+                  rightPressed.current = t.id;
+                }}
+                onDrag={(position, detach) => dragTo(t, deltaFrom(storeText(t), position), detach)}
+                onMove={(position, detach) => dropAt(t, deltaFrom(storeText(t), position), detach)}
+                onDoubleClick={
+                  tool.kind === "select"
+                    ? () => {
+                        select([t.id]);
+                        focusInspector();
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {!drag &&
+              valueLabels.map((l) => {
+                const width = 80;
+                const x = l.position.x * GRID;
+                const y = l.position.y * GRID;
+                const at = {
+                  above: { x: x - width / 2, y: y - 16, align: "center" },
+                  below: { x: x - width / 2, y: y + 4, align: "center" },
+                  right: { x: x + 6, y: y - 6, align: "left" },
+                  left: { x: x - width - 2, y: y - 6, align: "right" },
+                }[l.side];
+                return (
+                  <Text
+                    key={l.key}
+                    text={l.text}
+                    {...at}
+                    width={width}
+                    fontSize={11}
+                    fontStyle="bold"
+                    fill={
+                      l.kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel
                     }
-                  : undefined
-              }
-              onPinMouseDown={
-                tool.kind === "select"
-                  ? (pin) => {
-                      startWireFrom(pinPosition(c, pin));
-                      trackPointer();
-                    }
-                  : undefined
-              }
-            />
-          ))}
-          {doc.texts.map((t) => (
-            <FreeText
-              key={t.id}
-              text={t}
-              selected={shownSelection.includes(t.id)}
-              draggable={tool.kind === "select"}
-              onSelect={(e) => selectItem(t.id, e)}
-              onContextPress={() => {
-                rightPressed.current = t.id;
-              }}
-              onDrag={(position, detach) => dragTo(t, deltaFrom(storeText(t), position), detach)}
-              onMove={(position, detach) => dropAt(t, deltaFrom(storeText(t), position), detach)}
-              onDoubleClick={
-                tool.kind === "select"
-                  ? () => {
-                      select([t.id]);
-                      focusInspector();
-                    }
-                  : undefined
-              }
-            />
-          ))}
-          {!drag &&
-            valueLabels.map((l) => {
-              const width = 80;
-              const x = l.position.x * GRID;
-              const y = l.position.y * GRID;
-              const at = {
-                above: { x: x - width / 2, y: y - 16, align: "center" },
-                below: { x: x - width / 2, y: y + 4, align: "center" },
-                right: { x: x + 6, y: y - 6, align: "left" },
-                left: { x: x - width - 2, y: y - 6, align: "right" },
-              }[l.side];
-              return (
-                <Text
-                  key={l.key}
-                  text={l.text}
-                  {...at}
-                  width={width}
-                  fontSize={11}
-                  fontStyle="bold"
-                  fill={l.kind === "voltage" ? "#7c3aed" : "#b45309"}
-                  listening={false}
-                />
-              );
-            })}
-          {freePins.map((p) => (
-            <Circle
-              key={`${p.comp}/${p.pin}`}
-              x={p.position.x * GRID}
-              y={p.position.y * GRID}
-              radius={UNCONNECTED_RADIUS * GRID}
-              fill="rgba(220, 38, 38, 0.15)"
-              stroke={COLORS.pin}
-              strokeWidth={1.5}
-              listening={false}
-            />
-          ))}
-          {ghost && !exporting && <ComponentSymbol component={ghost} ghost />}
-          {pasteGhost && !exporting && (
-            <>
-              <Group opacity={0.5} listening={false}>
-                <Wires doc={pasteGhost} selection={[]} />
-              </Group>
-              {pasteGhost.components.map((c) => (
-                <ComponentSymbol key={c.id} component={c} ghost />
-              ))}
-              {pasteGhost.texts.map((t) => (
-                <FreeText key={t.id} text={t} ghost />
-              ))}
-            </>
+                    listening={false}
+                  />
+                );
+              })}
+            {freePins.map((p) => (
+              <Circle
+                key={`${p.comp}/${p.pin}`}
+                x={p.position.x * GRID}
+                y={p.position.y * GRID}
+                radius={UNCONNECTED_RADIUS * GRID}
+                fill={canvasColors.freePinFill}
+                stroke={canvasColors.pin}
+                strokeWidth={1.5}
+                listening={false}
+              />
+            ))}
+            {ghost && !exporting && <ComponentSymbol component={ghost} ghost />}
+            {pasteGhost && !exporting && (
+              <>
+                <Group opacity={0.5} listening={false}>
+                  <Wires doc={pasteGhost} selection={[]} />
+                </Group>
+                {pasteGhost.components.map((c) => (
+                  <ComponentSymbol key={c.id} component={c} ghost />
+                ))}
+                {pasteGhost.texts.map((t) => (
+                  <FreeText key={t.id} text={t} ghost />
+                ))}
+              </>
+            )}
+            {tool.kind === "text" && pointer && !exporting && (
+              <FreeText text={{ id: "ghost", position: pointer, content: NEW_TEXT }} ghost />
+            )}
+            {band && !exporting && (
+              // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
+              <Rect
+                x={band.rect.min.x * GRID}
+                y={band.rect.min.y * GRID}
+                width={(band.rect.max.x - band.rect.min.x) * GRID}
+                height={(band.rect.max.y - band.rect.min.y) * GRID}
+                fill={band.touching ? canvasColors.bandTouchFill : canvasColors.bandFill}
+                stroke={band.touching ? canvasColors.bandTouch : canvasColors.selected}
+                strokeWidth={1 / viewport.scale}
+                dash={band.touching ? [4 / viewport.scale, 4 / viewport.scale] : undefined}
+                listening={false}
+              />
+            )}
+            {tool.kind === "wire" && !exporting && (
+              <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
+            )}
+          </Layer>
+          {animation.on && simulation && animatable(simulation) && (
+            <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
           )}
-          {tool.kind === "text" && pointer && !exporting && (
-            <FreeText text={{ id: "ghost", position: pointer, content: NEW_TEXT }} ghost />
-          )}
-          {band && !exporting && (
-            // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
-            <Rect
-              x={band.rect.min.x * GRID}
-              y={band.rect.min.y * GRID}
-              width={(band.rect.max.x - band.rect.min.x) * GRID}
-              height={(band.rect.max.y - band.rect.min.y) * GRID}
-              fill={band.touching ? "rgba(22, 163, 74, 0.08)" : "rgba(37, 99, 235, 0.08)"}
-              stroke={band.touching ? "#16a34a" : COLORS.selected}
-              strokeWidth={1 / viewport.scale}
-              dash={band.touching ? [4 / viewport.scale, 4 / viewport.scale] : undefined}
-              listening={false}
-            />
-          )}
-          {tool.kind === "wire" && !exporting && (
-            <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
-          )}
-        </Layer>
-        {animation.on && simulation && animatable(simulation) && (
-          <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
-        )}
+        </CanvasColorsContext>
       </Stage>
       <ErrorBubbles
         doc={doc}
@@ -927,7 +948,7 @@ export function SchematicCanvas() {
             padding: "1px 8px",
             border: `1px solid ${UI.border}`,
             borderRadius: 4,
-            background: "#ffffff",
+            background: UI.surface,
             color: COLORS.text,
             cursor: "pointer",
           }}

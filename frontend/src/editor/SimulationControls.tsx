@@ -1,18 +1,28 @@
 // Simulation group of the toolbar (#100): the analysis and its settings, the Simulate button; and
 // the report of the last simulation shown in the results panel (errors, values).
 
-import type { CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 
-import { formatSI, freshSimulation, useEditorStore, type AnalysisKind } from "../store";
+import {
+  analysisSources,
+  chosenSource,
+  dcRangeFor,
+  formatSI,
+  freshSimulation,
+  useEditorStore,
+  type AnalysisKind,
+  type AnalysisSettings,
+  type AnalysisSource,
+} from "../store";
 import { runSimulation } from "./simulationActions";
-import { UI } from "./theme";
+import { COLORS, UI } from "./theme";
 
 const CONTROL: CSSProperties = {
   padding: "4px 8px",
-  border: "1px solid #e5e7eb",
+  border: `1px solid ${UI.border}`,
   borderRadius: 5,
-  background: "#ffffff",
-  color: "#374151",
+  background: UI.surface,
+  color: COLORS.text,
   font: "inherit",
   fontSize: 12,
 };
@@ -20,13 +30,94 @@ const CONTROL: CSSProperties = {
 const ANALYSES: { kind: AnalysisKind; label: string }[] = [
   { kind: "op", label: "Point de fonctionnement (.op)" },
   { kind: "tran", label: "Transitoire (.tran)" },
+  { kind: "ac", label: "Fréquentielle (.ac)" },
+  { kind: "dc", label: "Balayage DC (.dc)" },
 ];
+
+const LABEL: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 };
+
+/** A setting of the analysis typed as text, with its caption and unit. */
+function Field(props: {
+  caption: string;
+  label: string;
+  title: string;
+  unit?: string;
+  setting: keyof Omit<AnalysisSettings, "kind">;
+  placeholder?: string;
+  width?: number;
+}) {
+  const value = useEditorStore((s) => s.analysis[props.setting]);
+  const simulating = useEditorStore((s) => s.simulating);
+  const setAnalysis = useEditorStore((s) => s.setAnalysis);
+  return (
+    <label style={LABEL}>
+      {props.caption}
+      <input
+        aria-label={props.label}
+        title={props.title}
+        placeholder={props.placeholder}
+        value={value}
+        disabled={simulating}
+        onChange={(e) => setAnalysis({ [props.setting]: e.target.value })}
+        spellCheck={false}
+        style={{ ...CONTROL, width: props.width ?? 56 }}
+      />
+      {props.unit}
+    </label>
+  );
+}
+
+/** Choice of the source that `.ac` excites or `.dc` sweeps. */
+function SourceSelect(props: {
+  caption: string;
+  label: string;
+  title: string;
+  sources: AnalysisSource[];
+  setting: "acSource" | "dcSource";
+}) {
+  const value = useEditorStore((s) => s.analysis[props.setting]);
+  const simulating = useEditorStore((s) => s.simulating);
+  const setAnalysis = useEditorStore((s) => s.setAnalysis);
+  const chosen = chosenSource(props.sources, value);
+  return (
+    <label style={LABEL}>
+      {props.caption}
+      <select
+        aria-label={props.label}
+        title={props.sources.length > 0 ? props.title : "Pose d'abord une source sur le schéma"}
+        value={chosen?.id ?? ""}
+        disabled={simulating || props.sources.length === 0}
+        onChange={(e) => {
+          const id = e.target.value;
+          const unit = props.sources.find((s) => s.id === id)?.unit;
+          // A swept source of another unit takes the default range of its unit.
+          const range =
+            props.setting === "dcSource" && unit
+              ? dcRangeFor(useEditorStore.getState().analysis, unit)
+              : {};
+          setAnalysis({ [props.setting]: id, ...range });
+        }}
+        style={CONTROL}
+      >
+        {props.sources.length === 0 && <option value="">aucune source</option>}
+        {props.sources.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 /** Analysis, its settings and the Simulate / Stop button. */
 export function SimulationControls() {
   const analysis = useEditorStore((s) => s.analysis);
   const simulating = useEditorStore((s) => s.simulating);
   const setAnalysis = useEditorStore((s) => s.setAnalysis);
+  const doc = useEditorStore((s) => s.doc);
+  const sources = useMemo(() => analysisSources(doc), [doc]);
+  const dcUnit = chosenSource(sources, analysis.dcSource)?.unit ?? "V";
 
   return (
     <>
@@ -35,7 +126,12 @@ export function SimulationControls() {
         title="Analyse à lancer"
         value={analysis.kind}
         disabled={simulating}
-        onChange={(e) => setAnalysis({ kind: e.target.value as AnalysisKind })}
+        onChange={(e) => {
+          const kind = e.target.value as AnalysisKind;
+          const unit = chosenSource(sources, analysis.dcSource)?.unit;
+          // Sweeping a current source: start from milliamperes, not from volts as amperes.
+          setAnalysis({ kind, ...(kind === "dc" && unit ? dcRangeFor(analysis, unit) : {}) });
+        }}
         style={CONTROL}
       >
         {ANALYSES.map((a) => (
@@ -46,33 +142,89 @@ export function SimulationControls() {
       </select>
       {analysis.kind === "tran" && (
         <>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-            Durée
-            <input
-              aria-label="Durée de la simulation (s)"
-              title="Fin de la simulation, en secondes (10m = 10 ms)"
-              value={analysis.stopTime}
-              disabled={simulating}
-              onChange={(e) => setAnalysis({ stopTime: e.target.value })}
-              spellCheck={false}
-              style={{ ...CONTROL, width: 56 }}
-            />
-            s
-          </label>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-            Pas max
-            <input
-              aria-label="Pas maximal (s)"
-              title="Plus grand pas de calcul, en secondes ; vide : automatique"
-              placeholder="auto"
-              value={analysis.maxStep}
-              disabled={simulating}
-              onChange={(e) => setAnalysis({ maxStep: e.target.value })}
-              spellCheck={false}
-              style={{ ...CONTROL, width: 56 }}
-            />
-            s
-          </label>
+          <Field
+            caption="Durée"
+            label="Durée de la simulation (s)"
+            title="Fin de la simulation, en secondes (10m = 10 ms)"
+            unit="s"
+            setting="stopTime"
+          />
+          <Field
+            caption="Pas max"
+            label="Pas maximal (s)"
+            title="Plus grand pas de calcul, en secondes ; vide : automatique"
+            unit="s"
+            setting="maxStep"
+            placeholder="auto"
+          />
+        </>
+      )}
+      {analysis.kind === "ac" && (
+        <>
+          <SourceSelect
+            caption="Entrée"
+            label="Source d'entrée"
+            title="Source qui excite le circuit ; son signal alternatif est réglé automatiquement"
+            sources={sources}
+            setting="acSource"
+          />
+          <Field
+            caption="De"
+            label="Fréquence de début (Hz)"
+            title="Première fréquence, en hertz (1k = 1 kHz)"
+            unit="Hz"
+            setting="acStart"
+          />
+          <Field
+            caption="à"
+            label="Fréquence de fin (Hz)"
+            title="Dernière fréquence, en hertz (100k = 100 kHz, 1Meg = 1 MHz)"
+            unit="Hz"
+            setting="acStop"
+          />
+          <Field
+            caption="Points"
+            label="Points par décade"
+            title="Nombre de points calculés entre une fréquence et dix fois cette fréquence"
+            unit="/ déc."
+            setting="acPoints"
+            width={36}
+          />
+        </>
+      )}
+      {analysis.kind === "dc" && (
+        <>
+          <SourceSelect
+            caption="Source"
+            label="Source balayée"
+            title="Source dont la valeur continue varie pendant le balayage"
+            sources={sources}
+            setting="dcSource"
+          />
+          <Field
+            caption="De"
+            label={`Valeur de début (${dcUnit})`}
+            title="Première valeur de la source"
+            unit={dcUnit}
+            setting="dcStart"
+            width={44}
+          />
+          <Field
+            caption="à"
+            label={`Valeur de fin (${dcUnit})`}
+            title="Dernière valeur de la source"
+            unit={dcUnit}
+            setting="dcStop"
+            width={44}
+          />
+          <Field
+            caption="Pas"
+            label={`Pas du balayage (${dcUnit})`}
+            title="Écart entre deux valeurs calculées (100m = 0,1)"
+            unit={dcUnit}
+            setting="dcStep"
+            width={44}
+          />
         </>
       )}
       <button
@@ -81,10 +233,10 @@ export function SimulationControls() {
         onClick={() => void runSimulation()}
         style={{
           padding: "5px 12px",
-          border: `1px solid ${simulating ? "#b91c1c" : "#16a34a"}`,
+          border: `1px solid ${simulating ? UI.danger : UI.success}`,
           borderRadius: 5,
-          background: simulating ? "#b91c1c" : "#16a34a",
-          color: "#ffffff",
+          background: simulating ? UI.danger : UI.success,
+          color: UI.onAccent,
           fontWeight: 600,
           font: "inherit",
           cursor: "pointer",
@@ -135,7 +287,7 @@ export function SimulationReport() {
         </>
       )}
       {warnings.length > 0 && (
-        <ul style={{ color: "#b45309", paddingLeft: 18 }}>
+        <ul style={{ color: UI.warning, paddingLeft: 18 }}>
           {warnings.map((d, i) => (
             <li key={i}>{d.message}</li>
           ))}

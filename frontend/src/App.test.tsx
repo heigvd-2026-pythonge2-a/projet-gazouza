@@ -31,20 +31,10 @@ afterEach(() => {
 const button = (name: string | RegExp) => screen.getByRole("button", { name });
 
 describe("App", () => {
-  it("shows the backend state", async () => {
+  it("has no header bar above the toolbar (#209)", () => {
     render(<App />);
-    expect(await screen.findByText("Backend : ok")).toBeInTheDocument();
-  });
-
-  it("says when the backend cannot be reached", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new TypeError("Failed to fetch");
-      }),
-    );
-    render(<App />);
-    expect(await screen.findByText("Backend : injoignable")).toBeInTheDocument();
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Backend :/)).not.toBeInTheDocument();
   });
 
   it("shows the schematic or the results in full screen, and Escape comes back", async () => {

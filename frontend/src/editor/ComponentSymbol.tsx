@@ -12,7 +12,7 @@ import {
   type SymbolShape,
 } from "../store";
 import { arcPoints } from "./symbolGeometry";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 const STROKE = 2;
 const TEXT_WIDTH = 80;
@@ -128,6 +128,11 @@ interface ComponentSymbolProps {
   onPinMouseDown?: (pin: string) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /**
+   * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
+   * ones, so a connected pin does not leave a square behind.
+   */
+  markedPins?: ReadonlySet<string>;
 }
 
 /**
@@ -145,9 +150,11 @@ export function ComponentSymbol({
   onMove,
   onPinMouseDown,
   onDoubleClick,
+  markedPins,
 }: ComponentSymbolProps) {
+  const colors = useCanvasColors();
   const def = getDef(c.type);
-  const color = selected ? COLORS.selected : COLORS.symbol;
+  const color = selected ? colors.selected : colors.symbol;
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
@@ -194,25 +201,27 @@ export function ComponentSymbol({
           width={(bounds.max.x - bounds.min.x + 2 * pad) * GRID}
           height={(bounds.max.y - bounds.min.y + 2 * pad) * GRID}
           fill="rgba(0,0,0,0)"
-          stroke={selected ? COLORS.selected : undefined}
+          stroke={selected ? colors.selected : undefined}
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
         {def.symbol.map((shape, i) => (
           <SymbolShapeNode key={i} shape={shape} color={color} />
         ))}
-        {def.pins.map((pin) => (
-          <Rect
-            key={pin.name}
-            x={(pin.x - PIN_SIZE / 2) * GRID}
-            y={(pin.y - PIN_SIZE / 2) * GRID}
-            width={PIN_SIZE * GRID}
-            height={PIN_SIZE * GRID}
-            stroke={COLORS.pin}
-            strokeWidth={1}
-            listening={false}
-          />
-        ))}
+        {def.pins
+          .filter((pin) => !markedPins || markedPins.has(pin.name))
+          .map((pin) => (
+            <Rect
+              key={pin.name}
+              x={(pin.x - PIN_SIZE / 2) * GRID}
+              y={(pin.y - PIN_SIZE / 2) * GRID}
+              width={PIN_SIZE * GRID}
+              height={PIN_SIZE * GRID}
+              stroke={colors.pin}
+              strokeWidth={1}
+              listening={false}
+            />
+          ))}
         {onPinMouseDown &&
           def.pins.map((pin) => (
             <Rect
@@ -242,7 +251,7 @@ export function ComponentSymbol({
           width={TEXT_WIDTH}
           align={textBox.align}
           fontSize={FONT_SIZE}
-          fill={selected ? COLORS.selected : COLORS.text}
+          fill={selected ? colors.selected : colors.text}
           listening={false}
         />
       )}

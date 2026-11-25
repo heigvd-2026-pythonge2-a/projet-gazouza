@@ -153,6 +153,25 @@ describe("drawing wires", () => {
     ]);
   });
 
+  it("connects a wire drawn across a pin instead of going around it (#244)", () => {
+    const r = dropResistor({ x: 5, y: 2 });
+    const pin = pinPosition(r, "1");
+    expect(pin).toEqual({ x: 5, y: 0 });
+    store().startWiring();
+    store().wireClick({ x: 0, y: 0 });
+    store().wireClick({ x: 10, y: 0 });
+    store().wireClick({ x: 10, y: 0 });
+
+    const wires = store().doc.wires;
+    expect(wires).toHaveLength(2);
+    for (const w of wires) expect(wirePath(store().doc, w).every((p) => p.y === 0)).toBe(true);
+    const onPin = wires.flatMap((w) => [w.from, w.to]).filter((e) => "comp" in e);
+    expect(onPin).toEqual([
+      { comp: r.id, pin: "1" },
+      { comp: r.id, pin: "1" },
+    ]);
+  });
+
   it("goes back to the select tool after a wire started from a pin", () => {
     const a = dropResistor({ x: 0, y: 0 });
     store().startWireFrom(pinPosition(a, "1"));
@@ -288,6 +307,20 @@ describe("files and simulation", () => {
     store().openDocument(fixtureDoc("rc_tran"));
     expect(store().history.past).toEqual([]);
     expect(isUnsaved(store())).toBe(false);
+  });
+
+  it("keeps the analysis on New and Open, but not the sources chosen in the old document", () => {
+    store().setAnalysis({ kind: "ac", acStop: "1Meg", acSource: "c1", dcSource: "c1" });
+    store().openDocument(fixtureDoc("rc_tran"));
+    expect(store().analysis).toMatchObject({
+      kind: "ac",
+      acStop: "1Meg",
+      acSource: "",
+      dcSource: "",
+    });
+    store().setAnalysis({ dcSource: "c1" });
+    store().newDocument();
+    expect(store().analysis.dcSource).toBe("");
   });
 
   it("only shows a result while the document it was run on is shown", () => {

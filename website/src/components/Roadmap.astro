@@ -130,6 +130,10 @@ const label: Record<Status, string> = { done: 'Terminé', active: 'En cours', ne
 	.status.done {
 		color: #22c55e;
 	}
+	/* Green 500 is too light on white (2.3:1): green 700 keeps the 4.5:1 of WCAG AA. */
+	:global(:root[data-theme='light']) .status.done {
+		color: #15803d;
+	}
 	.status.active {
 		color: var(--sl-color-accent);
 	}

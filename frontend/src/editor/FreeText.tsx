@@ -8,7 +8,7 @@ import {
   type EditorText,
   type GridPoint,
 } from "../store";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 /** Shown instead of an empty text, so it can still be seen and selected. */
 const EMPTY = "(texte vide)";
@@ -45,6 +45,7 @@ export function FreeText({
   onMove,
   onDoubleClick,
 }: FreeTextProps) {
+  const colors = useCanvasColors();
   const empty = t.content === "";
   const box = textBounds(empty ? { ...t, content: EMPTY } : t);
   const width = (box.max.x - box.min.x + 2 * PAD) * GRID;
@@ -85,7 +86,7 @@ export function FreeText({
         width={width}
         height={height}
         fill="rgba(0,0,0,0)"
-        stroke={selected ? COLORS.selected : undefined}
+        stroke={selected ? colors.selected : undefined}
         strokeWidth={selected ? 1 : 0}
         dash={[4, 4]}
       />
@@ -93,7 +94,7 @@ export function FreeText({
         text={empty ? EMPTY : t.content}
         fontSize={TEXT_FONT_SIZE * GRID}
         lineHeight={TEXT_LINE_HEIGHT / TEXT_FONT_SIZE}
-        fill={selected ? COLORS.selected : COLORS.text}
+        fill={selected ? colors.selected : colors.text}
         fontStyle={empty ? "italic" : "normal"}
         opacity={empty ? 0.6 : 1}
         listening={false}

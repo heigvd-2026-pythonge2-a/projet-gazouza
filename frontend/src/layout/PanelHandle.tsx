@@ -1,5 +1,7 @@
 import { useRef, type PointerEvent } from "react";
 
+import { COLORS, UI } from "../store";
+
 /** Thickness of a handle, in pixels. */
 export const HANDLE_SIZE = 24;
 /** A press on a handle that moves more than this (pixels) opens the panel, like a click. */
@@ -58,9 +60,9 @@ export function PanelHandle({ panel, opens, onOpen }: Props) {
         padding: vertical ? "10px 0" : "0 10px",
         border: 0,
         [vertical ? "borderLeft" : opens === "up" ? "borderTop" : "borderBottom"]:
-          "1px solid #e5e7eb",
-        background: "#f3f4f6",
-        color: "#374151",
+          `1px solid ${UI.border}`,
+        background: UI.handle,
+        color: COLORS.text,
         font: "inherit",
         fontSize: 12,
         fontWeight: 600,
