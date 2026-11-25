@@ -42,6 +42,13 @@ function point(v: unknown, what: string): GridPoint {
   return { x: v.x as number, y: v.y as number };
 }
 
+/** Where a text of a component was moved by hand: absent (or unreadable) means automatic. */
+function offset(v: unknown): GridPoint | undefined {
+  if (!isObject(v) || typeof v.x !== "number" || typeof v.y !== "number") return undefined;
+  if (!Number.isFinite(v.x) || !Number.isFinite(v.y)) return undefined;
+  return { x: v.x, y: v.y };
+}
+
 function component(v: unknown): PlacedComponent {
   if (!isObject(v) || typeof v.id !== "string" || typeof v.type !== "string") {
     return fail("composant sans identifiant ou sans type");
@@ -73,7 +80,16 @@ function component(v: unknown): PlacedComponent {
     rotation,
     mirror: v.mirror === true,
     params,
+    ...offsets(v),
   };
+}
+
+function offsets(
+  v: Record<string, unknown>,
+): Pick<PlacedComponent, "name_offset" | "value_offset"> {
+  const name = offset(v.name_offset);
+  const value = offset(v.value_offset);
+  return { ...(name ? { name_offset: name } : {}), ...(value ? { value_offset: value } : {}) };
 }
 
 function wireEnd(v: unknown, doc: { comps: Map<string, string>; junctions: Set<string> }): WireEnd {

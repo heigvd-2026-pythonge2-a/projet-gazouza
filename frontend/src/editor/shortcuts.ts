@@ -46,6 +46,11 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
       { keys: "M", action: "Miroir" },
+      {
+        keys: "Glisser un nom ou une valeur",
+        action: "Déplacer ce texte seul (demi-case, près de son composant)",
+      },
+      { keys: "O", action: "Replacer automatiquement les textes de la sélection" },
       { keys: "Suppr", action: "Supprimer" },
       { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },

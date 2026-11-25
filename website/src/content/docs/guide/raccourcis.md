@@ -35,6 +35,8 @@ afficher cette liste à tout moment.
 | Flèches | Déplacer la sélection d'un pas |
 | <kbd>R</kbd> | Tourner |
 | <kbd>M</kbd> | Miroir |
+| Glisser un nom ou une valeur | Déplacer ce texte seul (demi-case, près de son composant) |
+| <kbd>O</kbd> | Replacer automatiquement les textes de la sélection |
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |

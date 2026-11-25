@@ -27,6 +27,13 @@ export interface PlacedComponent {
   rotation: Rotation;
   mirror: boolean;
   params: Record<string, string>;
+  /**
+   * Centre of the name (or of a label's net name) and of the value, when moved by hand: in grid
+   * units, relative to the component, in its own frame (before mirror and rotation). Absent:
+   * placed automatically (see `captions.ts`).
+   */
+  name_offset?: GridPoint;
+  value_offset?: GridPoint;
 }
 
 export type WireEnd = { comp: string; pin: string } | { junction: string } | GridPoint;
