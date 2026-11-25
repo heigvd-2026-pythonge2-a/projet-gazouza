@@ -5,11 +5,13 @@ import {
   exportImage,
   exportTransparent,
   newFile,
+  openExample,
   openFile,
   saveFile,
   saveFileAs,
   setExportTransparent,
 } from "./fileActions";
+import { EXAMPLES, type Example } from "./examples";
 import { exportNetlist } from "./simulationActions";
 import { COLORS, UI } from "./theme";
 import { fitView, zoomIn, zoomOut } from "./viewCommands";
@@ -20,6 +22,8 @@ const SOON = "Bientôt disponible";
 const ICONS = {
   new: "M4 1.5h5.5l3 3v10H4z M9.5 1.5v3h3",
   open: "M1.5 3.5h4.5l1.5 1.5h7v8.5h-13z",
+  examples:
+    "M8 3.5c-1.5-1-3.5-1.5-6-1.5v10.5c2.5 0 4.5.5 6 1.5c1.5-1 3.5-1.5 6-1.5V2c-2.5 0-4.5.5-6 1.5z M8 3.5V14",
   save: "M2.5 2.5h9l2 2v9h-11z M5 2.5v3.5h5V2.5 M5 13.5v-4h6v4",
   saveAs: "M2.5 2.5h9l2 2v3 M2.5 2.5v11h5 M5 2.5v3.5h5V2.5 M9.5 13.5l4-4 1 1-4 4h-1z",
   import: "M8 1.5v8 M5 6.5l3 3 3-3 M2.5 10.5v3h11v-3",
@@ -67,9 +71,12 @@ function ToolButton(props: {
   badge?: boolean;
   /** Set for a button that opens a panel: whether it is open. */
   expanded?: boolean;
+  /** What that panel is: a dialog (default) or a menu. */
+  popup?: "dialog" | "menu";
   onClick?: () => void;
 }) {
-  const { label, icon, disabled = false, badge = false, expanded, onClick } = props;
+  const { label, icon, disabled = false, badge = false, expanded, popup = "dialog" } = props;
+  const { onClick } = props;
   return (
     // The wrapper shows the tooltip even when the button is disabled (no mouse events then).
     <span title={label} style={{ display: "inline-flex", position: "relative" }}>
@@ -77,7 +84,7 @@ function ToolButton(props: {
         type="button"
         aria-label={label}
         disabled={disabled}
-        aria-haspopup={expanded === undefined ? undefined : "dialog"}
+        aria-haspopup={expanded === undefined ? undefined : popup}
         aria-expanded={expanded}
         onClick={onClick}
         style={{
@@ -218,6 +225,124 @@ function ExportButton() {
   );
 }
 
+/** One circuit of the Examples menu: its title, and what it shows below. */
+function ExampleItem(props: {
+  example: Example;
+  buttonRef: (el: HTMLButtonElement | null) => void;
+  onChoose: () => void;
+}) {
+  const { example, buttonRef, onChoose } = props;
+  const [active, setActive] = useState(false);
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      role="menuitem"
+      onClick={onChoose}
+      // The focus follows the mouse, so the highlighted item is always the one Enter opens.
+      onMouseEnter={(e) => e.currentTarget.focus()}
+      onFocus={() => setActive(true)}
+      onBlur={() => setActive(false)}
+      style={{
+        padding: "6px 8px",
+        border: 0,
+        borderRadius: 4,
+        background: active ? UI.activeBackground : "transparent",
+        color: COLORS.symbol,
+        font: "inherit",
+        textAlign: "left",
+        cursor: "pointer",
+        outline: "none",
+      }}
+    >
+      {example.title}
+      <span style={{ display: "block", fontSize: 12, color: UI.muted }}>{example.description}</span>
+    </button>
+  );
+}
+
+/**
+ * "Exemples" button (#226): a menu of reference circuits ready to simulate. Arrows move between
+ * them, Enter or a click opens one, Escape or a press outside closes the menu.
+ */
+function ExamplesButton() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const items = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    items.current[0]?.focus();
+    const outside = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", outside, true);
+    return () => window.removeEventListener("pointerdown", outside, true);
+  }, [open]);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // The editor's shortcuts must not also see the keys pressed in the menu.
+    e.stopPropagation();
+    if (e.key === "Escape") setOpen(false);
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const at = items.current.findIndex((b) => b === document.activeElement);
+    const next = (at + (e.key === "ArrowDown" ? 1 : -1) + EXAMPLES.length) % EXAMPLES.length;
+    items.current[next]?.focus();
+  };
+
+  const choose = (name: string) => {
+    setOpen(false);
+    openExample(name);
+  };
+
+  return (
+    <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+      <ToolButton
+        label="Ouvrir un exemple prêt à simuler"
+        icon="examples"
+        expanded={open}
+        popup="menu"
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && (
+        <div
+          role="menu"
+          aria-label="Exemples"
+          onKeyDown={onKeyDown}
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            zIndex: 20,
+            display: "flex",
+            flexDirection: "column",
+            width: 290,
+            padding: 4,
+            background: UI.surface,
+            border: `1px solid ${UI.border}`,
+            borderRadius: 6,
+            boxShadow: `0 4px 12px ${UI.shadow}`,
+            fontSize: 13,
+            color: COLORS.symbol,
+          }}
+        >
+          {EXAMPLES.map((example, i) => (
+            <ExampleItem
+              key={example.name}
+              example={example}
+              buttonRef={(b) => {
+                items.current[i] = b;
+              }}
+              onChoose={() => choose(example.name)}
+            />
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
 /** Buttons of one kind of action, separated from the next group by a thin line. */
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -264,6 +389,7 @@ export function EditorToolbar() {
       <Group label="Fichier">
         <ToolButton label="Nouveau schéma (Ctrl+N)" icon="new" onClick={newFile} />
         <ToolButton label="Ouvrir un schéma (Ctrl+O)" icon="open" onClick={openFile} />
+        <ExamplesButton />
         <ToolButton
           label={
             unsaved
