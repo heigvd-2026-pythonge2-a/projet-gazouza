@@ -64,15 +64,30 @@ interface FlowStep {
 export interface FlowPlan {
   /** Edges whose current is given. */
   known: readonly string[];
-  /** Wires with both ends at the same point: they carry nothing worth showing. */
+  /**
+   * Edges set to 0 A: wires with both ends at the same point, and one edge of each loop made only
+   * of wires (and links), where the split is unknown.
+   */
   zero: readonly string[];
   steps: readonly FlowStep[];
+}
+
+/** Length of an edge's path, in grid units (0 for a link). */
+function pathLength(e: FlowEdge): number {
+  let length = 0;
+  for (let i = 0; i + 1 < e.path.length; i++) {
+    const a = e.path[i] as GridPoint;
+    const b = e.path[i + 1] as GridPoint;
+    length += Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+  }
+  return length;
 }
 
 /**
  * Plans the deduction of the currents of `edges` when those of `knownIds` are given. Kirchhoff's
  * current law is applied again and again at each node where a single current is unknown. In a
- * loop made only of wires the split is unknown: those wires are left out.
+ * loop made only of wires (and links), the split is unknown (#258): the longest edge of each such
+ * loop carries nothing, so the current goes the shortest way and stays visible from end to end.
  */
 export function flowPlan(edges: readonly FlowEdge[], knownIds: ReadonlySet<string>): FlowPlan {
   const known: string[] = [];
@@ -83,6 +98,28 @@ export function flowPlan(edges: readonly FlowEdge[], knownIds: ReadonlySet<strin
     else if (e.from === e.to) zero.push(e.id);
     else continue;
     solved.add(e.id);
+  }
+  // A spanning forest of the unknown edges, shortest first: an edge closing a loop is set to 0,
+  // and the forest left is solved node by node below.
+  const parent = new Map<string, string>();
+  const find = (n: string): string => {
+    let root = n;
+    while (parent.has(root)) root = parent.get(root) as string;
+    return root;
+  };
+  const unknown = edges
+    .filter((e) => !solved.has(e.id))
+    .map((e, i) => ({ e, i, length: pathLength(e) }))
+    .sort((a, b) => a.length - b.length || a.i - b.i);
+  for (const { e } of unknown) {
+    const a = find(e.from);
+    const b = find(e.to);
+    if (a === b) {
+      zero.push(e.id);
+      solved.add(e.id);
+    } else {
+      parent.set(a, b);
+    }
   }
   const byNode = new Map<string, FlowEdge[]>();
   for (const e of edges) {
