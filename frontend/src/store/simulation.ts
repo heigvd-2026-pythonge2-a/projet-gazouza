@@ -18,8 +18,8 @@ export function toSchematic(doc: EditorDoc): Schematic {
 
 // --- Analysis chosen by the user ----------------------------------------------------------------
 
-/** Analyses offered by the Simulate button (#100). */
-export type AnalysisKind = "op" | "tran";
+/** Analyses offered by the Simulate button (#100, #222). */
+export type AnalysisKind = "op" | "tran" | "ac" | "dc";
 
 /** The analysis as set in the toolbar: values as typed, with SPICE suffixes. */
 export interface AnalysisSettings {
@@ -28,9 +28,61 @@ export interface AnalysisSettings {
   stopTime: string;
   /** Transient: largest time step, in seconds; empty for automatic. */
   maxStep: string;
+  /** AC: id of the input source; empty or gone: the first source of the schematic. */
+  acSource: string;
+  /** AC: first and last frequency, in hertz ("10", "100k"). */
+  acStart: string;
+  acStop: string;
+  /** AC: number of points per decade. */
+  acPoints: string;
+  /** DC sweep: id of the swept source; empty or gone: the first source of the schematic. */
+  dcSource: string;
+  /** DC sweep: first and last value, and step, in volts or amperes. */
+  dcStart: string;
+  dcStop: string;
+  dcStep: string;
 }
 
-export const DEFAULT_ANALYSIS: AnalysisSettings = { kind: "op", stopTime: "10m", maxStep: "" };
+export const DEFAULT_ANALYSIS: AnalysisSettings = {
+  kind: "op",
+  stopTime: "10m",
+  maxStep: "",
+  acSource: "",
+  acStart: "10",
+  acStop: "100k",
+  acPoints: "20",
+  dcSource: "",
+  dcStart: "0",
+  dcStop: "5",
+  dcStep: "100m",
+};
+
+/** Component types that `.ac` can excite and `.dc` can sweep. */
+const SOURCE_TYPES: Record<string, "V" | "A"> = { voltage_source: "V", current_source: "A" };
+
+/** A source of the schematic, as offered for `.ac` and `.dc`. */
+export interface AnalysisSource {
+  id: string;
+  name: string;
+  /** Unit of its value: "V" for a voltage source, "A" for a current source. */
+  unit: "V" | "A";
+}
+
+/** The independent sources of the document, in drawing order. */
+export function analysisSources(doc: EditorDoc): AnalysisSource[] {
+  return doc.components.flatMap((c) => {
+    const unit = SOURCE_TYPES[c.type];
+    return unit ? [{ id: c.id, name: c.name ?? c.id, unit }] : [];
+  });
+}
+
+/** The source chosen for `.ac` or `.dc`: the one set if it still exists, else the first one. */
+export function chosenSource(sources: AnalysisSource[], id: string): AnalysisSource | undefined {
+  return sources.find((s) => s.id === id) ?? sources[0];
+}
+
+/** Largest number of points of a DC sweep: beyond, the step is surely a typing mistake. */
+const MAX_DC_POINTS = 100_000;
 
 /** Power of ten of each SPICE suffix. */
 const SUFFIXES: Record<string, number> = {
@@ -57,11 +109,16 @@ export function parseSpiceNumber(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** The analysis of the request, or the reason why the settings cannot be simulated. */
-export function toAnalysis(
-  s: AnalysisSettings,
-): { analysis: SimulationRequest["analysis"] } | { error: string } {
+type AnalysisOrError = { analysis: SimulationRequest["analysis"] } | { error: string };
+
+/**
+ * The analysis of the request, or the reason why the settings cannot be simulated. `sources` are
+ * the sources of the schematic (`analysisSources`), needed by `.ac` and `.dc` only.
+ */
+export function toAnalysis(s: AnalysisSettings, sources: AnalysisSource[] = []): AnalysisOrError {
   if (s.kind === "op") return { analysis: { kind: "op" } };
+  if (s.kind === "ac") return toAc(s, sources);
+  if (s.kind === "dc") return toDc(s, sources);
   const stop = parseSpiceNumber(s.stopTime);
   if (stop === null || stop <= 0) {
     return { error: "Durée de la simulation invalide : par exemple 10m (10 millisecondes)." };
@@ -73,6 +130,61 @@ export function toAnalysis(
   }
   if (step >= stop) return { error: "Le pas maximal doit être plus petit que la durée." };
   return { analysis: { kind: "tran", stop_time: stop, max_step: step } };
+}
+
+function toAc(s: AnalysisSettings, sources: AnalysisSource[]): AnalysisOrError {
+  const source = chosenSource(sources, s.acSource);
+  if (!source) {
+    return { error: "L'analyse fréquentielle a besoin d'une source de tension ou de courant." };
+  }
+  const start = parseSpiceNumber(s.acStart);
+  if (start === null || start <= 0) {
+    return { error: "Fréquence de début invalide : par exemple 10 (10 Hz) ou 1k (1 kHz)." };
+  }
+  const stop = parseSpiceNumber(s.acStop);
+  if (stop === null || stop <= 0) {
+    return { error: "Fréquence de fin invalide : par exemple 100k (100 kHz)." };
+  }
+  if (stop <= start) {
+    return { error: "La fréquence de fin doit être plus grande que la fréquence de début." };
+  }
+  const points = Number(s.acPoints.trim());
+  if (!Number.isInteger(points) || points <= 0 || points > 1000) {
+    return {
+      error: "Points par décade invalides : un nombre entier entre 1 et 1000, par exemple 20.",
+    };
+  }
+  return {
+    analysis: {
+      kind: "ac",
+      input_source_id: source.id,
+      start_frequency: start,
+      stop_frequency: stop,
+      points_per_decade: points,
+    },
+  };
+}
+
+function toDc(s: AnalysisSettings, sources: AnalysisSource[]): AnalysisOrError {
+  const source = chosenSource(sources, s.dcSource);
+  if (!source) return { error: "Le balayage DC a besoin d'une source de tension ou de courant." };
+  const unit = source.unit === "V" ? "5 (5 V)" : "10m (10 mA)";
+  const start = parseSpiceNumber(s.dcStart);
+  if (start === null) return { error: `Valeur de début invalide : par exemple 0 ou ${unit}.` };
+  const stop = parseSpiceNumber(s.dcStop);
+  if (stop === null) return { error: `Valeur de fin invalide : par exemple ${unit}.` };
+  if (stop <= start) return { error: "La valeur de fin doit être plus grande que celle de début." };
+  const step = parseSpiceNumber(s.dcStep);
+  if (step === null || step <= 0) {
+    return { error: "Pas du balayage invalide : un nombre positif, par exemple 100m." };
+  }
+  if (step > stop - start) {
+    return { error: "Le pas du balayage doit être plus petit que l'écart entre début et fin." };
+  }
+  if ((stop - start) / step > MAX_DC_POINTS) {
+    return { error: "Le pas du balayage est trop petit : plus de 100 000 points à calculer." };
+  }
+  return { analysis: { kind: "dc", source_id: source.id, start, stop, step } };
 }
 
 // --- Operating point shown on the schematic (#102) ----------------------------------------------

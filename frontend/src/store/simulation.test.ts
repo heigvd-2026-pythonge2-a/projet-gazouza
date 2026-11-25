@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import schematic from "../../../shared/fixtures/divider_op/schematic.json";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
 import {
+  analysisSources,
   formatSI,
   operatingPointLabels,
   parseSpiceNumber,
@@ -40,7 +41,7 @@ describe("analysis settings", () => {
 
   it("builds the analysis of the request, or says what is wrong", () => {
     expect(toAnalysis(DEFAULT_ANALYSIS)).toEqual({ analysis: { kind: "op" } });
-    const tran = { kind: "tran", stopTime: "10m", maxStep: "" } as const;
+    const tran = { ...DEFAULT_ANALYSIS, kind: "tran", stopTime: "10m", maxStep: "" } as const;
     expect(toAnalysis(tran)).toEqual({ analysis: { kind: "tran", stop_time: 0.01 } });
     expect(toAnalysis({ ...tran, maxStep: "10u" })).toEqual({
       analysis: { kind: "tran", stop_time: 0.01, max_step: 1e-5 },
@@ -52,6 +53,58 @@ describe("analysis settings", () => {
     expect(toAnalysis({ ...tran, maxStep: "1" })).toEqual({
       error: expect.stringMatching(/plus petit/),
     });
+  });
+});
+
+describe("AC and DC analyses (#222)", () => {
+  const sources = analysisSources(fixtureDoc("lowpass_ac"));
+  const ac = { ...DEFAULT_ANALYSIS, kind: "ac" } as const;
+  const dc = { ...DEFAULT_ANALYSIS, kind: "dc" } as const;
+
+  it("lists the sources of the schematic", () => {
+    expect(sources).toEqual([{ id: "c1", name: "V1", unit: "V" }]);
+    expect(analysisSources(fixtureDoc("divider_op")).every((s) => s.unit === "V")).toBe(true);
+  });
+
+  it("builds an .ac analysis on the chosen source, or the first one", () => {
+    const expected = {
+      kind: "ac",
+      input_source_id: "c1",
+      start_frequency: 10,
+      stop_frequency: 1e5,
+      points_per_decade: 20,
+    };
+    expect(toAnalysis(ac, sources)).toEqual({ analysis: expected });
+    // A source that was deleted since: the first one of the schematic.
+    expect(toAnalysis({ ...ac, acSource: "gone" }, sources)).toEqual({ analysis: expected });
+    expect(toAnalysis(ac, [])).toEqual({ error: expect.stringMatching(/source/) });
+  });
+
+  it("says what is wrong in the .ac settings", () => {
+    const error = (patch: object) => toAnalysis({ ...ac, ...patch }, sources);
+    expect(error({ acStart: "0" })).toEqual({ error: expect.stringMatching(/début/) });
+    expect(error({ acStop: "x" })).toEqual({ error: expect.stringMatching(/fin/) });
+    expect(error({ acStart: "1k", acStop: "100" })).toEqual({
+      error: expect.stringMatching(/plus grande/),
+    });
+    expect(error({ acPoints: "2.5" })).toEqual({ error: expect.stringMatching(/Points/) });
+    expect(error({ acPoints: "0" })).toEqual({ error: expect.stringMatching(/Points/) });
+  });
+
+  it("builds a .dc sweep, or says what is wrong", () => {
+    expect(toAnalysis(dc, sources)).toEqual({
+      analysis: { kind: "dc", source_id: "c1", start: 0, stop: 5, step: 0.1 },
+    });
+    expect(toAnalysis({ ...dc, dcStart: "-5" }, sources)).toEqual({
+      analysis: { kind: "dc", source_id: "c1", start: -5, stop: 5, step: 0.1 },
+    });
+    const error = (patch: object) => toAnalysis({ ...dc, ...patch }, sources);
+    expect(toAnalysis(dc, [])).toEqual({ error: expect.stringMatching(/source/) });
+    expect(error({ dcStart: "a" })).toEqual({ error: expect.stringMatching(/début/) });
+    expect(error({ dcStop: "-1" })).toEqual({ error: expect.stringMatching(/plus grande/) });
+    expect(error({ dcStep: "0" })).toEqual({ error: expect.stringMatching(/Pas/) });
+    expect(error({ dcStep: "10" })).toEqual({ error: expect.stringMatching(/plus petit/) });
+    expect(error({ dcStep: "1u" })).toEqual({ error: expect.stringMatching(/trop petit/) });
   });
 });
 

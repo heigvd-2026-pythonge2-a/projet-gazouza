@@ -16,15 +16,20 @@ pas dedans : le même circuit peut être simulé de plusieurs façons.
 | Fréquentielle | `.ac` | La réponse **en fréquence** (Bode) | Gain et phase en fonction de *f* |
 | Balayage DC | `.dc` | Le point de fonctionnement pour **une source qui varie** | Des courbes en fonction de la source |
 
-Le moteur (génération de netlist et ngspice) prend en charge les quatre analyses. Dans
-l'interface, le menu **Analyse** de la barre d'outils propose pour l'instant `.op` et `.tran` ;
-`.ac` et `.dc` arrivent ensuite.
+Les quatre analyses se choisissent dans le menu **Analyse** de la barre d'outils. Le panneau
+**Résultats** affiche pour l'instant les valeurs du `.op` ; les courbes du `.tran`, le diagramme
+de Bode du `.ac` et les courbes du `.dc` arrivent avec le visualiseur.
 
 ## Lancer une simulation
 
-1. Choisis l'analyse dans le menu **Analyse** de la barre d'outils. Pour `.tran`, tape la
-   **Durée** et, si tu veux, le **Pas max** (vide : automatique), avec les suffixes habituels
-   (`5m` = 5 ms, `10u` = 10 µs).
+1. Choisis l'analyse dans le menu **Analyse** de la barre d'outils, puis tape ses réglages à côté,
+   avec les suffixes habituels (`5m` = 5 ms, `10u` = 10 µs, `100k` = 100 kHz, `1Meg` = 1 MHz) :
+   - `.tran` : la **Durée** et, si tu veux, le **Pas max** (vide : automatique) ;
+   - `.ac` : la source d'**Entrée**, les fréquences de début et de fin, et les **Points** par
+     décade ;
+   - `.dc` : la **Source** balayée, ses valeurs de début et de fin, et le **Pas**.
+
+   Un réglage invalide (fin plus petite que le début, pas nul…) est signalé avant le calcul.
 2. Clique sur **▶ Simuler**. Pendant le calcul, le bouton devient **■ Arrêter**.
 3. Le panneau **Résultats** affiche le résultat, ou les erreurs en français. Après un `.op`, les
    **tensions des nœuds** (en violet) et les **courants** des composants (en orange) s'affichent
@@ -86,16 +91,16 @@ sinusoïdale, fréquence par fréquence.
 | Réglage | Unité | Rôle |
 |---|---|---|
 | Source d'entrée | — | La source qui excite le circuit |
-| Fréquence de départ | Hz | Début du balayage |
-| Fréquence de fin | Hz | Fin du balayage |
-| Points par décade | — | 20 par défaut |
+| Fréquence de début | Hz | Début du balayage (10 Hz par défaut) |
+| Fréquence de fin | Hz | Fin du balayage, plus grande que le début (100 kHz par défaut) |
+| Points par décade | — | Nombre entier, 20 par défaut |
 
 Tu n'as **rien à régler sur la source** : Psice ajoute lui-même `AC 1` à la source d'entrée
 choisie, et à elle seule.
 
 ```
 V1 in 0 DC 0 AC 1
-.ac dec 100 10 100k
+.ac dec 20 10 100k
 ```
 
 </TabItem>
@@ -107,8 +112,11 @@ pour tracer la caractéristique d'une diode.
 | Réglage | Unité | Rôle |
 |---|---|---|
 | Source balayée | — | La source de tension ou de courant qui varie |
-| Début, fin | V ou A | Bornes du balayage |
-| Pas | V ou A | Écart entre deux points |
+| Début, fin | V ou A | Bornes du balayage, la fin plus grande que le début (0 à 5 par défaut) |
+| Pas | V ou A | Écart entre deux points (100m par défaut) |
+
+L'unité suit la source choisie : des volts pour une source de tension, des ampères pour une source
+de courant.
 
 ```
 .dc V1 0 10 1
@@ -120,7 +128,9 @@ pour tracer la caractéristique d'une diode.
 ## Désigner une source
 
 Les analyses `.ac` et `.dc` désignent leur source par son **identifiant interne**, pas par son
-nom. Tu peux donc renommer `V1` en `Vin` sans casser l'analyse.
+nom. Tu peux donc renommer `V1` en `Vin` sans casser l'analyse. Le menu de la source propose les
+sources de tension et de courant du schéma ; si tu supprimes la source choisie, Psice prend la
+première qui reste.
 
 ## Pendant la simulation
 
