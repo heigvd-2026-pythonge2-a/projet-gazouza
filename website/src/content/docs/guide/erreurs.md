@@ -12,7 +12,16 @@ Pendant que tu dessines, les broches non reliées sont déjà marquées en **rou
 dans la barre d'état. Un nom ou une valeur mal saisis (`10l` au lieu de `10k`, un nom en double…)
 affichent une **bulle** sous le composant concerné : rouge pour une erreur, orange pour un
 avertissement. Clique sur la bulle pour sélectionner le composant et aller directement au champ
-à corriger. Le surlignage des autres erreurs arrive avec le panneau de simulation.
+à corriger.
+:::
+
+:::tip[Retrouver l'élément fautif après une simulation]
+Quand la simulation échoue (ou signale un avertissement), les éléments concernés sont
+**surlignés sur le schéma** : les fils du nœud fautif, les composants, la broche, le fil ou la
+jonction en cause. Une bulle sur l'élément reprend le message ; clique dessus pour sélectionner
+ce qui est surligné. Dans le panneau **Résultats**, clique sur le message pour que la vue se
+place sur ces éléments. C'est utile quand le message nomme un nœud automatique comme `n1`, qui
+n'apparaît nulle part sur le schéma. Le surlignage disparaît dès que tu modifies le schéma.
 :::
 
 - Une **erreur** bloque la simulation : il faut la corriger.
@@ -72,8 +81,8 @@ c'est presque toujours un **oubli de câblage** : Psice préfère t'arrêter.
 ## Erreurs de simulation
 
 Ces erreurs viennent de **ngspice** : le schéma est correct, mais le circuit ne peut pas être
-calculé. Psice traduit le message de ngspice et, quand c'est possible, désigne le nœud ou le
-composant en cause.
+calculé. Psice traduit le message de ngspice et, quand c'est possible, surligne sur le schéma le
+nœud ou les composants en cause.
 
 | Code | Cause habituelle | Comment corriger |
 |---|---|---|

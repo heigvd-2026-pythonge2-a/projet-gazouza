@@ -6,6 +6,7 @@ import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 import {
   animatable,
   clipAnchor,
+  diagnosticMarks,
   docBounds,
   freshSimulation,
   getDef,
@@ -31,9 +32,10 @@ import { AnimationControls } from "./AnimationControls";
 import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { DiagnosticHalos } from "./DiagnosticHalos";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
-import { fitViewport } from "./fitView";
+import { fitViewport, showViewport } from "./fitView";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
@@ -263,6 +265,11 @@ export function SchematicCanvas() {
       showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
     [showValues, simulation, nets, storeDoc],
   );
+  // What the errors and warnings of the simulation point at (#253).
+  const marks = useMemo(
+    () => (simulation ? diagnosticMarks(storeDoc, simulation, nets ?? {}) : []),
+    [simulation, nets, storeDoc],
+  );
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
@@ -373,6 +380,7 @@ export function SchematicCanvas() {
       zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
       zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
       fit: fitView,
+      show: (area) => setViewport((v) => showViewport(v, area, size.width, size.height)),
       exportImage: (options) => new Promise((done) => setExporting({ options, done })),
     });
   }, [size, zoomAt, fitView]);
@@ -731,6 +739,8 @@ export function SchematicCanvas() {
             <Grid viewport={viewport} width={size.width} height={size.height} />
           </Layer>
           <Layer ref={contentRef}>
+            {/* Hidden while something is dragged: the marks are those of the document simulated. */}
+            {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
             <Wires
               doc={doc}
               selection={shownSelection}
@@ -863,6 +873,8 @@ export function SchematicCanvas() {
           select([comp]);
           focusInspector({ param });
         }}
+        marks={doc === storeDoc ? marks : []}
+        onPickMark={(m) => select([...m.components, ...m.wires, ...m.junctions])}
       />
       <AnimationControls />
       <div
