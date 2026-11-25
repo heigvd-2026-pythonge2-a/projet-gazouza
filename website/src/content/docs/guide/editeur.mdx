@@ -58,6 +58,9 @@ Deux composants peuvent quand même se toucher par **une** broche : ils sont alo
   les trois fils sont alors reliés.
 - Partir du **bout libre** d'un fil (ou y arriver) le prolonge : les deux ne forment plus qu'un
   seul fil.
+- Un fil qui relierait deux points **déjà reliés par des fils** (un fil par-dessus un autre, un
+  détour entre deux points d'un même fil, un fil qui revient sur lui-même par un point de
+  connexion) n'est pas ajouté : il ne relierait rien de plus. La barre d'état l'explique.
 
 Un **point de connexion** bleu est dessiné partout où **au moins trois connexions** se
 rejoignent : trois fils sur une jonction, deux fils sur une broche, ou trois composants qui se
@@ -65,7 +68,9 @@ touchent par une broche. Là où deux fils se suivent, ou là où un fil arrive 
 en a pas.
 
 Quand tu déplaces un composant, ses fils **restent accrochés** et suivent ; s'ils passeraient
-à travers un autre composant, ils sont retracés autour. Avec <kbd>Ctrl</kbd> enfoncé pendant le
+à travers un autre composant, ils sont retracés autour. Un composant qui glisse le long d'un fil
+peut dépasser un autre composant branché sur ce même fil : le fil reste droit et se recoupe dans
+le nouvel ordre, sans fil en double. Avec <kbd>Ctrl</kbd> enfoncé pendant le
 glisser, les fils restent sur place et se détachent du composant. Deux composants reliés broche
 contre broche le restent aussi : un fil apparaît entre eux quand tu les écartes.
 

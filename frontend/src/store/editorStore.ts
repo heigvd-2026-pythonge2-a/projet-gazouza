@@ -20,10 +20,12 @@ import {
   itemsTouchingRect,
   mirrorComponents,
   moveComponent,
+  closesWireLoop,
   moveWirePart,
   normalizeContacts,
   nudgeFree,
   pasteClip,
+  removeHiddenWires,
   renameComponent,
   rotateComponents,
   rotateCw,
@@ -133,6 +135,11 @@ interface EditorState {
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
   savedDoc: EditorDoc;
+  /**
+   * Why the last gesture did nothing (a wire refused...), in French, for the status bar. Cleared
+   * by the next change of the document, of the tool, or the next click with the wire tool.
+   */
+  notice: string | null;
 
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
@@ -286,12 +293,20 @@ export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
  * the same field into one undo step. No change, no step.
  */
 function change(s: EditorState, edited: EditorDoc, key: string | null = null) {
-  // Whatever the edit, what touches on the schematic is connected for the simulation (#256).
-  const doc = normalizeContacts(edited);
+  const doc = tidy(edited);
   if (doc === s.doc) return {};
   // The wire sections are kept by index: once the wires change, they may point elsewhere.
-  return { doc, history: record(s.history, s.doc, key), segments: [] };
+  return { doc, history: record(s.history, s.doc, key), segments: [], notice: null };
 }
+
+/**
+ * The document after any edit: what touches on the schematic is connected for the simulation
+ * (#256), and the duplicate wires an edit may leave under others are removed (#259).
+ */
+const tidy = (doc: EditorDoc): EditorDoc => removeHiddenWires(normalizeContacts(doc));
+
+/** Why a wire is not added (see `closesWireLoop`), shown in the status bar (#257). */
+export const WIRE_LOOP_NOTICE = "Fil non ajouté : ces deux points sont déjà reliés par des fils.";
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
 function existing(doc: EditorDoc, selection: string[]): string[] {
@@ -310,9 +325,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   analysis: DEFAULT_ANALYSIS,
   simulating: false,
   simulationError: null,
+  notice: null,
   showValues: true,
 
-  setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [] }),
+  setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [], notice: null }),
 
   startPlacing: (type) =>
     set({
@@ -387,7 +403,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => {
       if (s.tool.kind !== "wire") return {};
       const draft = s.draft;
-      if (!draft) return { draft: { points: [{ ...position }], returnToSelect: false } };
+      if (!draft) {
+        return { draft: { points: [{ ...position }], returnToSelect: false }, notice: null };
+      }
 
       const last = draft.points[draft.points.length - 1] ?? position;
       const doubleClick = samePoint(last, position);
@@ -396,9 +414,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
       const added = addWire(s.doc, routeThrough(s.doc, points));
       const doc = added && connectPinsOnWires(added.doc, { wires: new Set([added.id]) });
+      // A wire only closing a loop of wires connects nothing new: refuse it, and say why (#257).
+      const loop =
+        added !== null && doc !== null && closesWireLoop(normalizeContacts(doc), added.id);
       return {
-        ...(doc ? change(s, doc) : {}),
+        ...(doc && !loop ? change(s, doc) : {}),
         draft: null,
+        notice: loop ? WIRE_LOOP_NOTICE : null,
         ...(draft.returnToSelect ? { tool: { kind: "select" } as const } : {}),
       };
     }),
@@ -481,8 +503,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
   // An older file may have pins touching without a wire: connect them, without marking it changed.
-  openDocument: (doc) =>
-    set((s) => ({ ...freshDocument(normalizeContacts(doc)), analysis: forgetSources(s) })),
+  openDocument: (doc) => set((s) => ({ ...freshDocument(tidy(doc)), analysis: forgetSources(s) })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 

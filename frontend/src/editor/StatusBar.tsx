@@ -109,6 +109,7 @@ export function StatusBar() {
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
   const segments = useEditorStore((s) => s.segments.length);
+  const notice = useEditorStore((s) => s.notice);
 
   const unconnected = useMemo(() => unconnectedPins(doc).length, [doc]);
 
@@ -145,7 +146,16 @@ export function StatusBar() {
         overflow: "hidden",
       }}
     >
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      {notice ? (
+        <span
+          role="status"
+          style={{ overflow: "hidden", textOverflow: "ellipsis", color: UI.warning }}
+        >
+          {notice}
+        </span>
+      ) : (
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      )}
       <span style={{ marginLeft: "auto" }}>{selected}</span>
       {unconnected > 0 && (
         <span
