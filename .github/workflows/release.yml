@@ -9,8 +9,6 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
-    # TEMPORARY: test run of this workflow before it is on main. Remove before merging.
-    branches: [chore/ci-windows-release]
 
 permissions:
   contents: read
