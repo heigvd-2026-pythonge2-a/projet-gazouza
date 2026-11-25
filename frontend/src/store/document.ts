@@ -1262,6 +1262,41 @@ export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
 }
 
 /**
+ * `clip` turned as a whole around `centre` (grid point), before it is pasted (#260): "rotate"
+ * turns it a quarter clockwise, "mirror" flips it left to right (x -> -x). Components, junctions,
+ * bends and free wire ends all move together, so wires stay attached and orthogonal.
+ */
+export function turnClip(clip: Clip, centre: GridPoint, turn: "rotate" | "mirror"): Clip {
+  const move = (p: GridPoint): GridPoint => {
+    const x = p.x - centre.x;
+    const y = p.y - centre.y;
+    // Same quarter turn as `toWorld`; `+ 0` turns -0 into 0.
+    return turn === "rotate"
+      ? { x: centre.x - y + 0, y: centre.y + x + 0 }
+      : { x: centre.x - x + 0, y: p.y };
+  };
+  const end = (e: WireEnd): WireEnd => ("comp" in e || "junction" in e ? { ...e } : move(e));
+  return {
+    // Turning the group then the symbol: one more quarter turn. Flipping it: mirror x -> -x after
+    // a rotation r is the same as a rotation -r after the mirror.
+    components: clip.components.map((c) => ({
+      ...structuredClone(c),
+      position: move(c.position),
+      ...(turn === "rotate"
+        ? { rotation: rotateCw(c.rotation) }
+        : { rotation: ((360 - c.rotation) % 360) as Rotation, mirror: !c.mirror }),
+    })),
+    junctions: clip.junctions.map((j) => ({ ...j, position: move(j.position) })),
+    wires: clip.wires.map((w) => ({
+      ...w,
+      from: end(w.from),
+      to: end(w.to),
+      points: w.points.map(move),
+    })),
+  };
+}
+
+/**
  * Adds a copy of `clip`, moved by `offset`, with new ids and new SPICE names (R1 becomes R3 if R1
  * and R2 exist), so the netlist never gets two components with the same name. Returns the new
  * doc and the ids of the pasted items.

@@ -10,7 +10,7 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer · F : ajuster la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
-  paste: "Clic : poser la copie · Échap ou clic droit : annuler",
+  paste: "Clic : poser la copie · R : tourner · M : miroir · Échap ou clic droit : annuler",
 };
 
 /** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */

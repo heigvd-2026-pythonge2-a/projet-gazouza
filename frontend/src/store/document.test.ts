@@ -17,11 +17,13 @@ import {
   pinPosition,
   simplifyPath,
   toWorld,
+  turnClip,
   unconnectedPins,
   wirePath,
   type EditorDoc,
   type GridPoint,
 } from "./document";
+import { getDef } from "./library";
 import { fixtureDoc } from "./testFixtures";
 
 /** A resistor at `position` (pins 2 grid units above and below when not rotated). */
@@ -268,6 +270,32 @@ describe("copy and paste", () => {
     const clip = copyItems(doc, new Set(["c3"]));
     expect(clip.components).toHaveLength(1);
     expect(clip.wires).toEqual([]);
+  });
+
+  it("turns a copy as a whole, pins and wires together (#260)", () => {
+    const centre = { x: 3, y: -1 };
+    const turns = {
+      rotate: (p: GridPoint) => ({ x: centre.x - (p.y - centre.y), y: centre.y + p.x - centre.x }),
+      mirror: (p: GridPoint) => ({ x: 2 * centre.x - p.x, y: p.y }),
+    };
+    const pins = (doc: EditorDoc) =>
+      doc.components.map((c) => getDef(c.type).pins.map((pin) => pinPosition(c, pin.name)));
+    let clip: EditorDoc = fixtureDoc("divider_op");
+    // Turns mixed so that mirrored and rotated components are turned again.
+    for (const turn of ["rotate", "mirror", "rotate", "rotate", "mirror", "rotate"] as const) {
+      const move = turns[turn];
+      const turned = turnClip(clip, centre, turn);
+      expect(pins(turned)).toEqual(pins(clip).map((ps) => ps.map(move)));
+      expect(turned.wires.map((w) => wirePath(turned, w))).toEqual(
+        clip.wires.map((w) => wirePath(clip, w).map(move)),
+      );
+      expect(turned.junctions.map((j) => j.position)).toEqual(
+        clip.junctions.map((j) => move(j.position)),
+      );
+      clip = turned;
+    }
+    // Four quarter turns and two flips: back where it started.
+    expect(clip).toEqual(fixtureDoc("divider_op"));
   });
 });
 
