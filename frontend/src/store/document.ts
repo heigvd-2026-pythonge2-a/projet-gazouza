@@ -189,26 +189,23 @@ export interface UnconnectedPin {
 }
 
 /**
- * Pins connected to nothing: no wire ends on them and no other component has a pin at the same
- * point. A wire merely passing over a pin does not connect it (wires only connect at their ends),
- * and a node label counts like any other component: its net name connects nothing by itself.
+ * Pins connected to nothing: no wire end attached to them, as the backend sees it, once what
+ * touches them is connected (`normalizeContacts`): a pin against another pin, on a junction or
+ * under a free wire end counts as connected, even in a document not normalized yet (the one shown
+ * while dragging). A wire merely passing over a pin does not connect it (wires only connect at
+ * their ends), and a node label counts like any other component: its net name connects nothing
+ * by itself.
  */
 export function unconnectedPins(doc: EditorDoc): UnconnectedPin[] {
+  const normalized = normalizeContacts(doc);
   const wired = new Set<string>();
-  for (const w of doc.wires) {
+  for (const w of normalized.wires) {
     for (const end of [w.from, w.to]) if ("comp" in end) wired.add(`${end.comp}/${end.pin}`);
   }
-  const pins = doc.components.flatMap((c) =>
-    getDef(c.type).pins.map((pin) => ({ comp: c.id, pin: pin.name, position: toWorld(pin, c) })),
-  );
-  const pinsAt = new Map<string, number>();
-  for (const p of pins) {
-    const key = `${p.position.x},${p.position.y}`;
-    pinsAt.set(key, (pinsAt.get(key) ?? 0) + 1);
-  }
-  return pins.filter(
-    (p) =>
-      !wired.has(`${p.comp}/${p.pin}`) && (pinsAt.get(`${p.position.x},${p.position.y}`) ?? 0) < 2,
+  return normalized.components.flatMap((c) =>
+    getDef(c.type)
+      .pins.filter((pin) => !wired.has(`${c.id}/${pin.name}`))
+      .map((pin) => ({ comp: c.id, pin: pin.name, position: toWorld(pin, c) })),
   );
 }
 
@@ -858,6 +855,91 @@ export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>, keep?: 
   return out;
 }
 
+/** A wire of zero length: both ends at the same point, no bend in between. */
+const isPoint = (doc: EditorDoc, w: EditorWire): boolean =>
+  wirePath(doc, w).every((p, _, path) => samePoint(p, path[0] as GridPoint));
+
+/**
+ * Turns every point contact of the schematic into a connection of the document (#255, #256).
+ * The backend only knows wire ends attached to a pin or a junction (no geometry, see
+ * docs/format-schema.md), so what touches on screen must be attached:
+ * - a junction lying on a pin: its wires are attached to the pin instead, and it goes;
+ * - a junction lying on another junction: both become one;
+ * - a free wire end lying on a pin or a junction: attached to it (a pin first);
+ * - a pin lying on another pin: a wire of zero length joins them, unless a wire already does
+ *   (the same contact wire as `moveItems` adds, #124).
+ * A wire then joining a point to itself, or of zero length with a free end, connects nothing and
+ * is removed. Wires merely passing over a pin are left alone (see `connectPinsOnWires`). Returns
+ * `doc` itself when nothing touches without being connected.
+ */
+export function normalizeContacts(doc: EditorDoc): EditorDoc {
+  const key = (p: GridPoint) => `${p.x},${p.y}`;
+  /** Pins by position, in the order of the components. */
+  const pinsAt = new Map<string, { comp: string; pin: string }[]>();
+  for (const c of doc.components) {
+    for (const pin of getDef(c.type).pins) {
+      const k = key(toWorld(pin, c));
+      pinsAt.set(k, [...(pinsAt.get(k) ?? []), { comp: c.id, pin: pin.name }]);
+    }
+  }
+  // 1. Junctions on a pin or on an earlier junction: what replaces them.
+  const replaced = new Map<string, WireEnd>();
+  const junctionAt = new Map<string, string>();
+  for (const j of doc.junctions) {
+    const k = key(j.position);
+    const pin = pinsAt.get(k)?.[0];
+    const first = junctionAt.get(k);
+    if (pin) replaced.set(j.id, pin);
+    else if (first) replaced.set(j.id, { junction: first });
+    else junctionAt.set(k, j.id);
+  }
+  // 2. Ends attached to a replaced junction, or free on a pin or a junction.
+  const attach = (end: WireEnd): WireEnd => {
+    if ("junction" in end) return replaced.get(end.junction) ?? end;
+    if ("comp" in end) return end;
+    const k = key(end);
+    const pin = pinsAt.get(k)?.[0];
+    if (pin) return pin;
+    const junction = junctionAt.get(k);
+    return junction ? { junction } : end;
+  };
+  let changed = replaced.size > 0;
+  let wires = doc.wires.map((w) => {
+    const from = attach(w.from);
+    const to = attach(w.to);
+    if (from === w.from && to === w.to) return w;
+    changed = true;
+    return { ...w, from, to };
+  });
+  // 3. Pins on pins: join each one to the first pin there.
+  const taken = allIds(doc);
+  const joined = (a: WireEnd, b: WireEnd) =>
+    wires.some(
+      (w) => (sameEnd(w.from, a) && sameEnd(w.to, b)) || (sameEnd(w.from, b) && sameEnd(w.to, a)),
+    );
+  for (const [first, ...others] of pinsAt.values()) {
+    for (const other of others) {
+      if (!first || joined(first, other)) continue;
+      const id = nextIndexed("w", taken);
+      taken.push(id);
+      wires = [...wires, { id, from: first, to: other, points: [] }];
+      changed = true;
+    }
+  }
+  // 4. Wires that connect nothing any more.
+  const junctions = doc.junctions.filter((j) => !replaced.has(j.id));
+  const attached = { ...doc, junctions, wires };
+  const free = (end: WireEnd) => !("comp" in end) && !("junction" in end);
+  const useless = (w: EditorWire) =>
+    sameEnd(w.from, w.to) || (isPoint(attached, w) && (free(w.from) || free(w.to)));
+  const dropped = wires.filter(useless);
+  if (dropped.length === 0) return changed ? attached : doc;
+  return cleanJunctions(
+    { ...attached, wires: wires.filter((w) => !useless(w)) },
+    junctionsOf(dropped),
+  );
+}
+
 /**
  * Removes several segments (see `deleteSegment`), of one or several wires. They are found again
  * by their end points after each cut, since cutting a wire changes the indexes of its parts.
@@ -983,8 +1065,9 @@ function moveWithWires(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridPoin
     const a0 = shift(endPosition(doc, old.from), offset);
     const b0 = shift(endPosition(doc, old.to), offset);
     if (samePoint(a0, a1) && samePoint(b0, b1)) return [carried ? { ...w, points: bends } : w];
-    // Two pins brought together connect directly: the wire between them is not needed.
-    if ("comp" in w.from && "comp" in w.to && samePoint(a1, b1)) return [];
+    // Two pins brought together touch: the wire between them shrinks to a point and keeps them
+    // connected (the backend only knows wires, #256).
+    if ("comp" in w.from && "comp" in w.to && samePoint(a1, b1)) return [{ ...w, points: [] }];
     return [realignWire(after, w, bends, a0, b0)];
   });
   return { ...after, wires };

@@ -6,6 +6,7 @@ import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 import {
   animatable,
   clipAnchor,
+  connectPinsOnWires,
   diagnosticMarks,
   docBounds,
   freshSimulation,
@@ -297,7 +298,21 @@ export function SchematicCanvas() {
     : partTarget && wirePart
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
-  const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  // While dragging, the free pins are those left once dropped: a pin landing on a wire is cut in
+  // as the drop would do, and what touches is connected (see `unconnectedPins`).
+  const freePins = useMemo(() => {
+    if (exporting) return [];
+    if (drag) {
+      const dropped = connectPinsOnWires(connectPinsOnWires(doc, { comps: drag.ids }), {
+        wires: new Set(drag.ids),
+      });
+      return unconnectedPins(dropped);
+    }
+    if (partTarget && wirePart) {
+      return unconnectedPins(connectPinsOnWires(doc, { wires: new Set([wirePart.wire]) }));
+    }
+    return unconnectedPins(doc);
+  }, [doc, exporting, drag, partTarget, wirePart]);
   /** Unconnected pin names of each component: the only pins that keep their square. */
   const freePinsByComp = useMemo(() => {
     const byComp = new Map<string, Set<string>>();

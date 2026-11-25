@@ -21,6 +21,7 @@ import {
   mirrorComponents,
   moveComponent,
   moveWirePart,
+  normalizeContacts,
   nudgeFree,
   pasteClip,
   renameComponent,
@@ -284,7 +285,9 @@ export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
  * State update for a document change, recorded in the history. `key` merges consecutive edits of
  * the same field into one undo step. No change, no step.
  */
-function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
+function change(s: EditorState, edited: EditorDoc, key: string | null = null) {
+  // Whatever the edit, what touches on the schematic is connected for the simulation (#256).
+  const doc = normalizeContacts(edited);
   if (doc === s.doc) return {};
   // The wire sections are kept by index: once the wires change, they may point elsewhere.
   return { doc, history: record(s.history, s.doc, key), segments: [] };
@@ -477,7 +480,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
-  openDocument: (doc) => set((s) => ({ ...freshDocument(doc), analysis: forgetSources(s) })),
+  // An older file may have pins touching without a wire: connect them, without marking it changed.
+  openDocument: (doc) =>
+    set((s) => ({ ...freshDocument(normalizeContacts(doc)), analysis: forgetSources(s) })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 

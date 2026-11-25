@@ -70,17 +70,24 @@ describe("direct pin-to-pin connections (#124)", () => {
     expect(moveItems(doc, new Set([b]), p(3, 0), { detach: true }).wires).toEqual([]);
   });
 
-  it("leaves no wire when the pins touch again, and undoes in one step", () => {
-    const { doc, b } = stacked();
+  it("keeps a wire of zero length when the pins touch again, and undoes in one step", () => {
+    const { doc, a, b } = stacked();
     store().openDocument(doc);
+    // The touching pins are joined by a wire of zero length: the backend only follows wires (#256).
+    const opened = store().doc;
+    expect(opened.wires).toEqual([
+      { id: "w1", from: { comp: a, pin: "2" }, to: { comp: b, pin: "1" }, points: [] },
+    ]);
     store().select([b]);
     store().moveSelection(p(3, 0));
     expect(store().doc.wires).toHaveLength(1);
     store().moveSelection(p(-3, 0));
-    expect(store().doc.wires).toEqual([]);
+    const [w] = store().doc.wires;
+    expect(store().doc.wires).toHaveLength(1);
+    expect(wirePath(store().doc, w!)).toEqual([p(0, 2), p(0, 2)]);
     store().undo();
     store().undo();
-    expect(store().doc).toBe(doc);
+    expect(store().doc).toBe(opened);
   });
 });
 
