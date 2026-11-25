@@ -32,6 +32,7 @@ import {
   samePoint,
   segmentsInRect,
   setParam,
+  turnClip,
   type Clip,
   type EditorDoc,
   type GridPoint,
@@ -50,7 +51,10 @@ export type Tool =
   | { kind: "select" }
   | { kind: "place"; type: string; rotation: Rotation; mirror: boolean }
   | { kind: "wire" }
-  /** Pasted or duplicated items follow the mouse until a click drops them (#166). */
+  /**
+   * Pasted or duplicated items follow the mouse until a click drops them (#166). R and M turn
+   * `clip` before it is dropped (#260).
+   */
   | { kind: "paste"; clip: Clip };
 
 /**
@@ -174,9 +178,9 @@ interface EditorState {
   removeLastBend: () => void;
   /** Drops the wire being drawn. */
   cancelDraft: () => void;
-  /** Rotates the selection, or the component about to be placed. */
+  /** Rotates the selection, or the component or the copy about to be placed. */
   rotate: () => void;
-  /** Mirrors the selection, or the component about to be placed. */
+  /** Mirrors the selection, or the component or the copy about to be placed. */
   mirror: () => void;
   deleteSelection: () => void;
   select: (ids: string[]) => void;
@@ -443,18 +447,22 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
-        : s.selection.length > 0
-          ? change(s, rotateComponents(s.doc, new Set(s.selection)))
-          : {},
+        : s.tool.kind === "paste"
+          ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "rotate") } }
+          : s.selection.length > 0
+            ? change(s, rotateComponents(s.doc, new Set(s.selection)))
+            : {},
     ),
 
   mirror: () =>
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, mirror: !s.tool.mirror } }
-        : s.selection.length > 0
-          ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
-          : {},
+        : s.tool.kind === "paste"
+          ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "mirror") } }
+          : s.selection.length > 0
+            ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
+            : {},
     ),
 
   deleteSelection: () =>

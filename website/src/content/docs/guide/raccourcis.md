@@ -38,7 +38,7 @@ afficher cette liste à tout moment.
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
-| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris |
+| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris (<kbd>R</kbd> / <kbd>M</kbd> avant : la tourner / la retourner) |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Double-clic sur un composant | Changer sa valeur sur le schéma |
 | Clic droit sur un composant | Menu des actions |

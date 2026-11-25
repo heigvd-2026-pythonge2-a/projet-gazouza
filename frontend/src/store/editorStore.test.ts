@@ -266,6 +266,41 @@ describe("selection, clipboard and deletion", () => {
     expect(after.wires).toHaveLength(2 * before.wires.length);
   });
 
+  it("turns the copy before it is dropped, its wires attached (#260)", () => {
+    const a = dropResistor({ x: 0, y: 0 });
+    const b = dropResistor({ x: 4, y: 0 });
+    store().startWireFrom(pinPosition(a, "2"));
+    store().wireClick(pinPosition(b, "2"));
+    store().selectAll();
+    store().copy();
+    store().paste();
+    const steps = store().history.past.length;
+    store().rotate();
+    store().mirror();
+    // Turning the copy changes nothing in the document.
+    expect(store().history.past).toHaveLength(steps);
+    expect(store().doc.components).toHaveLength(2);
+    store().pasteAt({ x: 20, y: 20 });
+
+    const doc = store().doc;
+    const pasted = doc.components.slice(2);
+    expect(pasted.map((c) => [c.rotation, c.mirror])).toEqual([
+      [270, true],
+      [270, true],
+    ]);
+    // The copy stands upright: a quarter turn, then flipped left to right.
+    const [pa, pb] = pasted;
+    expect(pinPosition(pb!, "2").x).toBe(pinPosition(pa!, "2").x);
+    expect(pinPosition(pb!, "2").y).toBe(pinPosition(pa!, "2").y + 4);
+    const wire = doc.wires.find((w) => store().selection.includes(w.id))!;
+    expect(wire.from).toEqual({ comp: pa!.id, pin: "2" });
+    expect(wire.to).toEqual({ comp: pb!.id, pin: "2" });
+    const path = wirePath(doc, wire);
+    expect(path.every((p, i) => i === 0 || p.x === path[i - 1]!.x || p.y === path[i - 1]!.y)).toBe(
+      true,
+    );
+  });
+
   it("deletes the whole wire of a bend selected on its own", () => {
     store().startWiring();
     for (const p of [
