@@ -39,6 +39,7 @@ import {
   type Rotation,
   type WirePart,
 } from "./document";
+import { moveCaption, releaseCoveredCaptions, resetCaptions, type CaptionKind } from "./captions";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
 import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
@@ -173,6 +174,10 @@ interface EditorState {
   placeText: (position: GridPoint) => void;
   /** Changes the content of a free text (one undo step per field edit, like the other fields). */
   setTextContent: (id: string, content: string) => void;
+  /** Moves the name or the value of a component: `centre` is where the text is drawn. */
+  moveCaption: (id: string, kind: CaptionKind, centre: GridPoint) => void;
+  /** Puts the texts of the selected components back to their automatic place. */
+  resetCaptions: () => void;
   /** Presses on a pin with the select tool: starts a wire there. */
   startWireFrom: (position: GridPoint) => void;
   /**
@@ -308,6 +313,14 @@ function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
   return { doc, history: record(s.history, s.doc, key), segments: [] };
 }
 
+/**
+ * After turning or mirroring components: their texts moved by hand turn with them, unless they
+ * would then cover something (they go back to their automatic place).
+ */
+function turned(doc: EditorDoc, selection: string[]): EditorDoc {
+  return releaseCoveredCaptions(doc, new Set(selection));
+}
+
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
 function existing(doc: EditorDoc, selection: string[]): string[] {
   const ids = new Set(docIds(doc));
@@ -402,6 +415,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setTextContent: (id, content) =>
     set((s) => change(s, setTextContent(s.doc, id, content), `text:${id}`)),
 
+  moveCaption: (id, kind, centre) => set((s) => change(s, moveCaption(s.doc, id, kind, centre))),
+
+  resetCaptions: () => set((s) => change(s, resetCaptions(s.doc, new Set(s.selection)))),
+
   startWireFrom: (position) =>
     set({
       tool: { kind: "wire" },
@@ -450,7 +467,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       s.tool.kind === "place"
         ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
         : s.selection.length > 0
-          ? change(s, rotateComponents(s.doc, new Set(s.selection)))
+          ? change(s, turned(rotateComponents(s.doc, new Set(s.selection)), s.selection))
           : {},
     ),
 
@@ -459,7 +476,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       s.tool.kind === "place"
         ? { tool: { ...s.tool, mirror: !s.tool.mirror } }
         : s.selection.length > 0
-          ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
+          ? change(s, turned(mirrorComponents(s.doc, new Set(s.selection)), s.selection))
           : {},
     ),
 

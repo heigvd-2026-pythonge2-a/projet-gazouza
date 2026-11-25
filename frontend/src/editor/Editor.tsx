@@ -9,10 +9,12 @@ import {
   docBounds,
   freshSimulation,
   getDef,
+  layoutCaptions,
   mainParam,
   moveItems,
   moveWirePart,
   operatingPointLabels,
+  resolveCaptionDrop,
   pinPosition,
   rectFrom,
   samePoint,
@@ -89,6 +91,12 @@ function componentMenu(selectionSize: number): MenuItem[] {
   return [
     { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
+    {
+      label: "Replacer les textes automatiquement",
+      shortcut: "O",
+      keys: ["o", "O"],
+      onSelect: () => s().resetCaptions(),
+    },
     {
       label: "Dupliquer",
       shortcut: "Ctrl+D",
@@ -178,6 +186,10 @@ function useKeyboardShortcuts() {
         case "M":
           s.mirror();
           break;
+        case "o":
+        case "O":
+          s.resetCaptions();
+          break;
         case "w":
         case "W":
           s.startWiring();
@@ -256,6 +268,7 @@ export function SchematicCanvas() {
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
+  const moveCaption = useEditorStore((s) => s.moveCaption);
   const draft = useEditorStore((s) => s.draft);
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
@@ -298,6 +311,8 @@ export function SchematicCanvas() {
       ? moveWirePart(storeDoc, wirePart, partTarget)
       : storeDoc;
   const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  // Names and values of the components: those placed automatically avoid what is around them.
+  const captions = useMemo(() => layoutCaptions(doc), [doc]);
   /** Unconnected pin names of each component: the only pins that keep their square. */
   const freePinsByComp = useMemo(() => {
     const byComp = new Map<string, Set<string>>();
@@ -786,6 +801,12 @@ export function SchematicCanvas() {
                 component={c}
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
+                captions={captions.get(c.id)}
+                onCaptionDrag={(kind, centre) => resolveCaptionDrop(doc, c.id, kind, centre)}
+                onCaptionMove={(kind, centre) => {
+                  if (!selection.includes(c.id)) select([c.id]);
+                  moveCaption(c.id, kind, centre);
+                }}
                 draggable={tool.kind === "select"}
                 onSelect={(e) => selectItem(c.id, e)}
                 onContextPress={() => {

@@ -110,6 +110,25 @@ décoratif** : la simulation l'ignore complètement.
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
 
+### Ranger le nom et la valeur d'un composant
+
+Le nom d'un composant (`R1`) et sa valeur (`1kΩ`) se placent tout seuls à côté du symbole, du
+premier côté où ils ne cachent rien (un autre composant, un fil, un texte). Quand ils gênent la
+lecture, fais glisser l'un ou l'autre : chacun se déplace **seul**, par demi-case.
+
+- Un texte ne peut pas être posé sur un composant, un fil ou un autre texte : il se met sur la
+  place libre la plus proche. Il ne peut pas non plus s'éloigner de plus de trois cases de son
+  composant, pour qu'on voie toujours à qui il appartient.
+- Il suit son composant quand on le déplace, et reste toujours droit, lisible. Quand on tourne
+  le composant, il tourne autour avec lui (il reste du même côté) ; s'il tombait alors sur
+  quelque chose, il reprend sa place automatique.
+- Si un autre objet vient ensuite le recouvrir, il s'affiche en rouge, sans rien bloquer.
+- <kbd>O</kbd>, ou **Replacer les textes automatiquement** dans le menu du clic droit, remet les
+  textes des composants sélectionnés à leur place automatique.
+
+La position des textes est enregistrée avec le schéma, et <kbd>Ctrl+Z</kbd> annule un
+déplacement.
+
 ## Modifier les paramètres
 
 Double-clique sur un composant : un petit champ s'ouvre juste au-dessus de lui, avec sa valeur
