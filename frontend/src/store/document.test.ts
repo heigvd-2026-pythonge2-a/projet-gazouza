@@ -4,6 +4,7 @@ import {
   addComponent,
   addWire,
   anchorAt,
+  connectionDots,
   copyItems,
   componentsOverlap,
   deleteItems,
@@ -115,6 +116,40 @@ describe("wires", () => {
     });
   });
 
+  it("merges a wire drawn from the free end of another one, keeping the new id (#245)", () => {
+    const first = addWire(emptyDoc(), [
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+    ])!.doc;
+    const bent = addWire(first, [
+      { x: 5, y: 0 },
+      { x: 5, y: 5 },
+    ])!;
+    expect(bent.doc.junctions).toEqual([]);
+    expect(bent.doc.wires.map((w) => w.id)).toEqual([bent.id]);
+    expect(wirePath(bent.doc, bent.doc.wires[0]!)).toEqual([
+      { x: 0, y: 0 },
+      { x: 5, y: 0 },
+      { x: 5, y: 5 },
+    ]);
+
+    // In line with it, and between two free ends: one straight wire.
+    const second = addWire(first, [
+      { x: 10, y: 0 },
+      { x: 15, y: 0 },
+    ])!.doc;
+    const bridged = addWire(second, [
+      { x: 5, y: 0 },
+      { x: 10, y: 0 },
+    ])!;
+    expect(bridged.doc.junctions).toEqual([]);
+    expect(bridged.doc.wires.map((w) => w.id)).toEqual([bridged.id]);
+    expect(wirePath(bridged.doc, bridged.doc.wires[0]!)).toEqual([
+      { x: 0, y: 0 },
+      { x: 15, y: 0 },
+    ]);
+  });
+
   it("detaches wire ends, in place, from deleted items", () => {
     let doc = withResistor(emptyDoc(), { x: 0, y: 0 }).doc;
     const c = doc.components[0]!;
@@ -210,10 +245,103 @@ describe("copy and paste", () => {
     }
   });
 
+  it("does not copy a junction without the wires it joins (#245)", () => {
+    let doc = addWire(emptyDoc(), [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+    ])!.doc;
+    const branch = addWire(doc, [
+      { x: 5, y: 0 },
+      { x: 5, y: 5 },
+    ])!;
+    doc = branch.doc;
+    const clip = copyItems(doc, new Set([doc.junctions[0]!.id, branch.id]));
+    expect(clip.junctions).toEqual([]);
+    expect(clip.wires).toEqual([
+      { id: branch.id, from: { x: 5, y: 0 }, to: { x: 5, y: 5 }, points: [] },
+    ]);
+    expect(copyItems(doc, new Set([doc.junctions[0]!.id]))).toEqual(emptyDoc());
+  });
+
   it("leaves out wires going outside the copy", () => {
     const doc = fixtureDoc("divider_op");
     const clip = copyItems(doc, new Set(["c3"]));
     expect(clip.components).toHaveLength(1);
     expect(clip.wires).toEqual([]);
+  });
+});
+
+describe("connection dots (#245)", () => {
+  /** Two horizontal resistors touching by a pin at (2, 0). */
+  const touching = () => {
+    let doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: { x: 0, y: 0 },
+      rotation: 90,
+      mirror: false,
+    }).doc;
+    doc = addComponent(doc, {
+      type: "resistor",
+      position: { x: 4, y: 0 },
+      rotation: 90,
+      mirror: false,
+    }).doc;
+    expect(pinPosition(doc.components[0]!, "1")).toEqual({ x: 2, y: 0 });
+    return doc;
+  };
+  const contact = { x: 2, y: 0 };
+
+  it("draws a dot where three pins meet, none where two do", () => {
+    const doc = touching();
+    expect(connectionDots(doc)).toEqual([]);
+    // A capacitor below, its pin on the contact.
+    const probe = addComponent(emptyDoc(), {
+      type: "capacitor",
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      mirror: false,
+    }).doc.components[0]!;
+    const top = pinPosition(probe, "1");
+    const withCap = addComponent(doc, {
+      type: "capacitor",
+      position: { x: contact.x - top.x, y: contact.y - top.y },
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    expect(connectionDots(withCap)).toEqual([{ id: "dot-2,0", position: contact }]);
+  });
+
+  it("counts the wires attached to a pin, not the free ends", () => {
+    const doc = touching();
+    const wired = addWire(doc, [contact, { x: 2, y: 5 }])!.doc;
+    expect(connectionDots(wired)).toEqual([{ id: "dot-2,0", position: contact }]);
+
+    // A resistor pin at (2, 0) and its wire: no dot. A free end lying there does not count.
+    const r = withResistor(emptyDoc(), { x: 2, y: 2 }).doc;
+    const pin = pinPosition(r.components[0]!, "1");
+    expect(pin).toEqual(contact);
+    const one = addWire(r, [pin, { x: 6, y: 0 }])!.doc;
+    expect(connectionDots(one)).toEqual([]);
+    const free = { id: "w9", from: { ...contact }, to: { x: -3, y: 0 }, points: [] };
+    expect(connectionDots({ ...one, wires: [...one.wires, free] })).toEqual([]);
+    // A second wire attached to the pin: three connections.
+    const two = addWire(one, [pin, { x: -3, y: 0 }])!.doc;
+    expect(connectionDots(two)).toEqual([{ id: "dot-2,0", position: contact }]);
+  });
+
+  it("draws a dot on a junction of three wires only", () => {
+    let doc = addWire(emptyDoc(), [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+    ])!.doc;
+    doc = addWire(doc, [
+      { x: 5, y: 0 },
+      { x: 5, y: 5 },
+    ])!.doc;
+    const j = doc.junctions[0]!;
+    expect(connectionDots(doc)).toEqual([{ id: j.id, position: j.position, junction: j.id }]);
+    // A junction of two wires (older files) gets no dot.
+    const two = { ...doc, wires: doc.wires.slice(0, 2) };
+    expect(connectionDots(two)).toEqual([]);
   });
 });

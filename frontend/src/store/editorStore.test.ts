@@ -153,6 +153,25 @@ describe("drawing wires", () => {
     ]);
   });
 
+  it("connects a wire drawn across a pin instead of going around it (#244)", () => {
+    const r = dropResistor({ x: 5, y: 2 });
+    const pin = pinPosition(r, "1");
+    expect(pin).toEqual({ x: 5, y: 0 });
+    store().startWiring();
+    store().wireClick({ x: 0, y: 0 });
+    store().wireClick({ x: 10, y: 0 });
+    store().wireClick({ x: 10, y: 0 });
+
+    const wires = store().doc.wires;
+    expect(wires).toHaveLength(2);
+    for (const w of wires) expect(wirePath(store().doc, w).every((p) => p.y === 0)).toBe(true);
+    const onPin = wires.flatMap((w) => [w.from, w.to]).filter((e) => "comp" in e);
+    expect(onPin).toEqual([
+      { comp: r.id, pin: "1" },
+      { comp: r.id, pin: "1" },
+    ]);
+  });
+
   it("goes back to the select tool after a wire started from a pin", () => {
     const a = dropResistor({ x: 0, y: 0 });
     store().startWireFrom(pinPosition(a, "1"));

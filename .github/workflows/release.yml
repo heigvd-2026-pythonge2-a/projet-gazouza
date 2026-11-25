@@ -1,0 +1,111 @@
+name: Application Windows
+
+# Builds the portable Windows application (build.ps1) and checks that the zip starts.
+# - Run by hand (Actions tab, "Run workflow"): the app is kept as a workflow artifact,
+#   to test the build before a delivery.
+# - A pushed tag vX.Y.Z: the zip is published in a GitHub release of that tag.
+# The release rules are in AGENTS.md ("Releases").
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build de l'application (build.ps1)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v7
+
+      - name: Installation de uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Configuration de Python 3.12
+        run: uv python install 3.12
+
+      # La version de pnpm est lue dans le champ "packageManager" de frontend/package.json.
+      - name: Installation de pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Configuration de Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # -Verify extracts dist/Psice.zip and runs Psice.exe --self-check from it: frontend
+      # files, /api/health, component library and an offline RC simulation with ngspice.
+      - name: Build et vérification du zip
+        shell: pwsh
+        run: ./build.ps1 -Verify
+
+      # An artifact name cannot contain "/" (branch names such as feat/x).
+      - name: Nom de l'artefact
+        id: artifact
+        shell: bash
+        env:
+          REF: ${{ github.ref_name }}
+        run: echo "name=Psice-${REF//\//-}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # The folder, not the zip: the artifact is already downloaded as a zip.
+      - name: Envoi de l'application (artefact)
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: dist/Psice/
+          if-no-files-found: error
+
+      - name: Envoi du zip pour la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-zip
+          path: dist/Psice.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publication de la release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Récupération du zip
+        uses: actions/download-artifact@v8
+        with:
+          name: release-zip
+
+      # The asset keeps the name Psice.zip in every release, so that
+      # releases/latest/download/Psice.zip always points to the latest version.
+      # A tag with a suffix (v1.0.0-rc.1) is published as a pre-release.
+      - name: Création de la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" Psice.zip \
+            --repo "${{ github.repository }}" \
+            --title "Psice $TAG" \
+            --generate-notes \
+            --verify-tag \
+            $prerelease

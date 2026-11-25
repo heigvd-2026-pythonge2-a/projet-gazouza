@@ -79,11 +79,12 @@ export interface WireDraft {
 
 /**
  * Route from `a` to `b` as seen while drawing: around the components (see `routeAround`),
- * straight or as an L when nothing is in the way. Returns the points after `a` (the corners,
+ * straight or as an L when nothing is in the way. Pins do not get in the way: a wire drawn across
+ * one stays straight and is connected there (#244). Returns the points after `a` (the corners,
  * then `b`).
  */
 export function routeTo(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
-  return routeAround(doc, a, b);
+  return routeAround(doc, a, b, { throughPins: true });
 }
 
 /** Full path through the clicked points, with the corners `routeTo` adds between them. */
