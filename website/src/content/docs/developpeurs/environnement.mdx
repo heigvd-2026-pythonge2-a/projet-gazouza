@@ -168,3 +168,8 @@ circuits de référence s'ouvrent avec `?demo=<circuit>`, avec leur résultat et
 `pages.yml` reconstruit la démo à chaque fusion sur `main` qui touche `frontend/` ou
 `shared/fixtures/`, et la CI vérifie qu'elle se construit sur chaque PR. Pour la voir en local,
 lance `pnpm build:demo` dans `frontend/` avant `pnpm dev` dans `website/`.
+
+La capture de l'application sur la page d'accueil (`website/src/assets/psice-app.png`) est prise
+dans cette démo. Quand l'interface change, refais-la avec `.\scripts\capture-app.ps1` dans
+`website/`, après `pnpm build:demo` : Edge (fourni avec Windows) ouvre la démo, simule le diviseur
+de tension et enregistre l'image.
