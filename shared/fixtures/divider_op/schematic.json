@@ -71,10 +71,10 @@
       "id": "c6",
       "type": "label",
       "position": {
-        "x": 0,
-        "y": -3
+        "x": -1,
+        "y": -2
       },
-      "rotation": 0,
+      "rotation": 180,
       "mirror": false,
       "params": {
         "net": "in"
@@ -84,8 +84,8 @@
       "id": "c7",
       "type": "label",
       "position": {
-        "x": 8,
-        "y": -3
+        "x": 9,
+        "y": -2
       },
       "rotation": 0,
       "mirror": false,
