@@ -29,6 +29,9 @@ export const demoNames = (): string[] =>
   [...new Set(Object.keys(files).map((k) => k.split("/").at(-2) ?? ""))].sort();
 
 const SUFFIXES: [number, string][] = [
+  [1e9, "g"],
+  [1e6, "Meg"],
+  [1e3, "k"],
   [1, ""],
   [1e-3, "m"],
   [1e-6, "u"],
@@ -36,23 +39,44 @@ const SUFFIXES: [number, string][] = [
   [1e-12, "p"],
 ];
 
-/** A time as typed in the toolbar: 0.005 -> "5m", 1e-5 -> "10u". */
-export function spiceTime(seconds: number): string {
-  const [factor, suffix] = SUFFIXES.find(([f]) => seconds >= f) ?? SUFFIXES.at(-1) ?? [1, ""];
-  return `${Number((seconds / factor).toPrecision(6))}${suffix}`;
+/** A number as typed in the toolbar: 0.005 -> "5m", 1e-5 -> "10u", 1e5 -> "100k", 0 -> "0". */
+export function spiceNumber(value: number): string {
+  if (value === 0) return "0";
+  const abs = Math.abs(value);
+  const [factor, suffix] = SUFFIXES.find(([f]) => abs >= f) ?? SUFFIXES.at(-1) ?? [1, ""];
+  return `${Number((value / factor).toPrecision(6))}${suffix}`;
 }
 
-/** The toolbar settings of a fixture's analysis, or null if the toolbar does not offer it. */
+/** The toolbar settings of a fixture's analysis. */
 export function analysisSettings(
   analysis: SimulationRequest["analysis"],
-): Partial<AnalysisSettings> | null {
-  if (analysis.kind === "op") return { kind: "op" };
-  if (analysis.kind !== "tran") return null;
-  return {
-    kind: "tran",
-    stopTime: spiceTime(analysis.stop_time),
-    maxStep: analysis.max_step ? spiceTime(analysis.max_step) : "",
-  };
+): Partial<AnalysisSettings> {
+  switch (analysis.kind) {
+    case "op":
+      return { kind: "op" };
+    case "tran":
+      return {
+        kind: "tran",
+        stopTime: spiceNumber(analysis.stop_time),
+        maxStep: analysis.max_step ? spiceNumber(analysis.max_step) : "",
+      };
+    case "ac":
+      return {
+        kind: "ac",
+        acSource: analysis.input_source_id,
+        acStart: spiceNumber(analysis.start_frequency),
+        acStop: spiceNumber(analysis.stop_frequency),
+        acPoints: String(analysis.points_per_decade ?? 20),
+      };
+    case "dc":
+      return {
+        kind: "dc",
+        dcSource: analysis.source_id,
+        dcStart: spiceNumber(analysis.start),
+        dcStop: spiceNumber(analysis.stop),
+        dcStep: spiceNumber(analysis.step),
+      };
+  }
 }
 
 /** Opens fixture `name` and its result as if it had just been simulated. */
