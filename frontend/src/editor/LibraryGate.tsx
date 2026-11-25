@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { isLibraryLoaded, loadLibrary } from "../store";
+import { COLORS, isLibraryLoaded, loadLibrary } from "../store";
 
 type Status = "loading" | "ready" | "error";
 
@@ -14,7 +14,7 @@ const screenStyle = {
   gap: 12,
   fontFamily: '"Segoe UI", system-ui, sans-serif',
   fontSize: 13,
-  color: "#1f2937",
+  color: COLORS.symbol,
 } as const;
 
 /**

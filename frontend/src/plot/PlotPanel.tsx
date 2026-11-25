@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { SimulationResult } from "../api/client";
-import { COLORS, UI } from "../editor/theme";
-import { useEditorStore } from "../store";
+import { COLORS, UI, useEditorStore } from "../store";
 import { TranChart } from "./TranChart";
 import { buildTranPlotData, type TranPlotData } from "./plotData";
 import { formatSI } from "./siFormat";
@@ -20,8 +19,8 @@ function DiagnosticsList({ result }: { result: SimulationResult }) {
           style={{
             padding: "6px 8px",
             borderRadius: 4,
-            border: "1px solid #fecaca",
-            background: "#fef2f2",
+            border: `1px solid ${UI.error}`,
+            background: UI.errorBackground,
             color: UI.error,
           }}
         >
@@ -34,9 +33,9 @@ function DiagnosticsList({ result }: { result: SimulationResult }) {
           style={{
             padding: "6px 8px",
             borderRadius: 4,
-            border: "1px solid #fde68a",
-            background: "#fffbeb",
-            color: "#92400e",
+            border: `1px solid ${UI.warning}`,
+            background: UI.warningBackground,
+            color: UI.warning,
           }}
         >
           <strong>Avertissement :</strong> {warn.message}
@@ -145,7 +144,7 @@ function TranPlotSection({ plotData }: { plotData: TranPlotData }) {
                 padding: "2px 8px",
                 borderRadius: 999,
                 border: `1px solid ${checked ? s.color : UI.border}`,
-                background: checked ? "#ffffff" : UI.panel,
+                background: checked ? UI.surface : UI.panel,
                 color: checked ? COLORS.text : UI.muted,
                 cursor: "pointer",
                 userSelect: "none",
@@ -218,12 +217,18 @@ export function PlotPanel() {
 
       {result.analysis === "op" && <OperatingPointTable result={result} />}
 
-      {result.analysis !== "op" && plotData && (
+      {result.analysis === "tran" && plotData && (
         <TranPlotSection key={traceKey} plotData={plotData} />
       )}
 
-      {result.analysis !== "op" && !plotData && (result.errors ?? []).length === 0 && (
+      {result.analysis === "tran" && !plotData && (result.errors ?? []).length === 0 && (
         <p style={{ color: UI.muted }}>Aucune courbe à afficher.</p>
+      )}
+
+      {result.analysis !== "op" && result.analysis !== "tran" && (
+        <p style={{ color: UI.muted }}>
+          L'affichage des courbes d'analyse .{result.analysis} est à venir.
+        </p>
       )}
     </div>
   );

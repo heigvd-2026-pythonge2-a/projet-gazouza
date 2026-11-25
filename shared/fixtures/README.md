@@ -11,6 +11,11 @@ développer sa partie contre ces fichiers sans attendre les autres :
 | `netlist.cir` | texte SPICE | Netlist (Damien) | ngspice (Antoine) |
 | `netlist.json` | `NetlistResult` | Netlist (Damien) | Moteur (Antoine), sondes (Noémi) |
 | `result.json` | `SimulationResult` | Moteur (Antoine) | Courbes et sondes (Noémi) |
+| `circuit.asc` | schéma LTspice | Import (Damien) | Import `.asc` (Damien) |
+
+`circuit.asc` est le même circuit dessiné dans LTspice. Le test `test_asc_gives_the_reference_netlist`
+(`backend/tests/test_import_asc.py`) vérifie que son import donne exactement `analysis.json` et
+`netlist.cir`, et `test_imported_asc_simulates` qu'il se simule sans erreur.
 
 À la racine, `library.json` est la réponse exacte de `GET /api/library` (liste de
 `LibraryComponent`), produite par la bibliothèque du backend (Damien) et utilisée par les tests
@@ -37,5 +42,8 @@ Les mêmes circuits sont expliqués pas à pas dans
 
 - Les fichiers `result.json` des quatre circuits (`divider_op`, `rc_tran`, `lowpass_ac` et
   `loaded_divider_dc`) contiennent les vraies sorties produites par `ngspice-47`.
-- Les positions des composants et les coudes des fils sont indicatifs : ils dépendront des
-  positions de broches définies dans la bibliothèque. La netlist ne s'en sert pas.
+- Les schémas sont dessinés comme dans l'éditeur (ils s'ouvrent tels quels avec `?demo=<circuit>`,
+  et dans la démo en ligne du site) : fils horizontaux ou verticaux, qui ne traversent aucun
+  symbole et ne passent pas sur une broche. Le test `frontend/src/store/fixtureDrawings.test.ts`
+  le vérifie. La netlist ne se sert pas des positions : les redessiner ne change ni
+  `netlist.cir` ni `result.json`.

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
-import { COLORS, UI } from "../editor/theme";
 import { useElementSize } from "../layout";
+import { COLORS, PALETTES, UI, useThemeStore } from "../store";
 import {
   CURSOR_COLORS,
   computeCursorReadout,
@@ -25,7 +25,7 @@ const BTN: CSSProperties = {
   borderStyle: "solid",
   borderColor: UI.border,
   borderRadius: 4,
-  background: "#ffffff",
+  background: UI.surface,
   color: COLORS.text,
   cursor: "pointer",
 };
@@ -124,6 +124,7 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
   const [boxRef, boxSize] = useElementSize<HTMLDivElement>();
   const chartHostRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
+  const theme = useThemeStore((s) => s.theme);
 
   const pointCount = plotData.xValues.length;
   const defaultC1 = Math.floor(pointCount * 0.2);
@@ -167,10 +168,11 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
     import("uplot").then(({ default: UPlot }) => {
       if (cancelled) return;
 
+      const palette = PALETTES[theme];
       const width = Math.max(260, Math.floor(boxSize.width || host.clientWidth || 480));
       const height = 240;
       // uPlot Axis.Side values (avoid ambient const enum under verbatimModuleSyntax): 1=Right, 2=Bottom, 3=Left.
-      const currentSide = hasVisibleVoltage ? 1 : 3;
+      const currentSide = plotData.hasVoltage ? 1 : 3;
 
       const opts: uPlot.Options = {
         width,
@@ -196,9 +198,9 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
             size: 28,
             font: "11px system-ui, sans-serif",
             labelFont: "600 11px system-ui, sans-serif",
-            stroke: COLORS.text,
-            grid: { stroke: "#e5e7eb", width: 1 },
-            ticks: { stroke: "#d1d5db", width: 1 },
+            stroke: palette.text,
+            grid: { stroke: palette.border, width: 1 },
+            ticks: { stroke: palette.inputBorder, width: 1 },
             values: (_u, splits) => splits.map((v) => formatAxisTick(v, plotData.xUnit)),
           },
           {
@@ -210,9 +212,9 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
             size: 58,
             font: "11px system-ui, sans-serif",
             labelFont: "600 11px system-ui, sans-serif",
-            stroke: COLORS.text,
-            grid: { stroke: "#e5e7eb", width: 1 },
-            ticks: { stroke: "#d1d5db", width: 1 },
+            stroke: palette.text,
+            grid: { stroke: palette.border, width: 1 },
+            ticks: { stroke: palette.inputBorder, width: 1 },
             values: (_u, splits) => splits.map((v) => formatAxisTick(v, "V")),
           },
           {
@@ -224,9 +226,9 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
             size: 58,
             font: "11px system-ui, sans-serif",
             labelFont: "600 11px system-ui, sans-serif",
-            stroke: COLORS.text,
-            grid: { show: !hasVisibleVoltage, stroke: "#e5e7eb", width: 1 },
-            ticks: { stroke: "#d1d5db", width: 1 },
+            stroke: palette.text,
+            grid: { show: !plotData.hasVoltage, stroke: palette.border, width: 1 },
+            ticks: { stroke: palette.inputBorder, width: 1 },
             values: (_u, splits) => splits.map((v) => formatAxisTick(v, "A")),
           },
         ],
@@ -279,7 +281,8 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
         if (st.showCursors && (st.mode === "c1" || st.mode === "c2")) {
           draggingCursor = st.mode;
           setCursorIndex(st.mode, indexFromClientX(e.clientX));
-          e.stopPropagation();
+          // Stop immediate propagation so uPlot's own mousedown listener on `over` does not start a drag-zoom.
+          e.stopImmediatePropagation();
           e.preventDefault();
           return;
         }
@@ -292,7 +295,7 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
           const hitThresholdPx = 8;
           if (Math.min(d1, d2) <= hitThresholdPx) {
             draggingCursor = d1 <= d2 ? "c1" : "c2";
-            e.stopPropagation();
+            e.stopImmediatePropagation();
             e.preventDefault();
           }
         }
@@ -355,9 +358,9 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
       cancelled = true;
       teardown?.();
     };
-    // Rebuild uPlot when the dataset or which Y-axis sides are shown changes.
+    // Rebuild uPlot only when the dataset or color theme changes so toggling traces keeps the zoom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plotData, hasVisibleVoltage, hasVisibleCurrent]);
+  }, [plotData, theme]);
 
   // Resize existing uPlot instance smoothly without losing zoom state.
   useEffect(() => {
@@ -366,15 +369,17 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
     instance.setSize({ width: Math.max(260, Math.floor(boxSize.width)), height: 240 });
   }, [boxSize.width]);
 
-  // Toggle individual series visibility and redraw cursors whenever cursor state changes.
+  // Toggle individual series and Y-axis visibility, and redraw cursors without losing zoom.
   useEffect(() => {
     const instance = uplotRef.current;
     if (!instance) return;
+    if (instance.axes[1]) instance.axes[1].show = hasVisibleVoltage;
+    if (instance.axes[2]) instance.axes[2].show = hasVisibleCurrent;
     for (const s of plotData.series) {
       instance.setSeries(s.seriesIndex, { show: visibleNames.has(s.name) }, false);
     }
-    instance.redraw(false, false);
-  }, [plotData, visibleNames, showCursors, c1Index, c2Index]);
+    instance.redraw(false, true);
+  }, [plotData, visibleNames, hasVisibleVoltage, hasVisibleCurrent, showCursors, c1Index, c2Index]);
 
   const readout = useMemo(
     () => computeCursorReadout(plotData, c1Index, c2Index, visibleNames),
@@ -457,7 +462,7 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
           minHeight: 240,
           border: `1px solid ${UI.border}`,
           borderRadius: 6,
-          background: "#ffffff",
+          background: UI.surface,
           overflow: "hidden",
         }}
       >

@@ -1,22 +1,16 @@
-## Development
+# Site web — instructions pour les assistants IA
 
-When starting the dev server, use background mode:
+Complète le fichier [`AGENTS.md`](../AGENTS.md) à la racine.
 
-```
-astro dev --background
-```
+## Périmètre
 
-Manage the background server with `astro dev stop`, `astro dev status`, and `astro dev logs`.
+Ce dossier contient le site de documentation Starlight (Astro).
+Toutes les commandes sont à lancer avec **pnpm** depuis `website/`.
 
-## Documentation
+- `pnpm dev` : lance le serveur local de prévisualisation (http://localhost:4321/projet-gazouza/).
+- `pnpm build` : vérifie la compilation du site avant commit ou PR.
+- La page « Essayer en ligne » affiche l'app construite dans `public/demo/` (ignoré par git) par
+  `pnpm build:demo` dans `frontend/` : lance-le avant `pnpm dev` pour voir la démo en local.
 
-Full documentation: https://docs.astro.build
-
-Consult these guides before working on related tasks:
-
-- [Adding pages, dynamic routes, or middleware](https://docs.astro.build/en/guides/routing/)
-- [Working with Astro components](https://docs.astro.build/en/basics/astro-components/)
-- [Using React, Vue, Svelte, or other framework components](https://docs.astro.build/en/guides/framework-components/)
-- [Adding or managing content](https://docs.astro.build/en/guides/content-collections/)
-- [Adding styles or using Tailwind](https://docs.astro.build/en/guides/styling/)
-- [Supporting multiple languages](https://docs.astro.build/en/guides/internationalization/)
+Les pages de documentation sont rédigées en français dans `src/content/docs/` (Markdown / MDX).
+Le déploiement est assuré automatiquement par [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).

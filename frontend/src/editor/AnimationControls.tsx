@@ -12,7 +12,7 @@ const control: CSSProperties = {
   padding: "0 8px",
   border: `1px solid ${UI.border}`,
   borderRadius: 4,
-  background: "#ffffff",
+  background: UI.surface,
   color: COLORS.text,
   cursor: "pointer",
 };
@@ -104,7 +104,7 @@ export function AnimationControls() {
     padding: "4px 6px",
     border: `1px solid ${UI.border}`,
     borderRadius: 6,
-    background: "rgba(255, 255, 255, 0.92)",
+    background: UI.surfaceTranslucent,
     fontSize: 12,
     color: COLORS.text,
   };

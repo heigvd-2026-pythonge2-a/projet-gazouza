@@ -23,6 +23,9 @@ export function parseLayout(raw: unknown): Layout {
     sideWidth: isNumber(v.sideWidth) ? v.sideWidth : d.sideWidth,
     inspectorFraction: isFraction(v.inspectorFraction) ? v.inspectorFraction : d.inspectorFraction,
     resultsFraction: isFraction(v.resultsFraction) ? v.resultsFraction : d.resultsFraction,
+    resultsVisible: typeof v.resultsVisible === "boolean" ? v.resultsVisible : d.resultsVisible,
+    inspectorVisible:
+      typeof v.inspectorVisible === "boolean" ? v.inspectorVisible : d.inspectorVisible,
   };
 }
 

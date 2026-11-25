@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "vite build --mode demo --base ./ --outDir ../website/public/demo --emptyOutDir",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -18,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "konva": "^10.9.1",
+    "konva": "^10.10.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-konva": "^19.3.2",
@@ -44,7 +45,7 @@
     "openapi-typescript": "^7.13.0",
     "prettier": "^3.10.1",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.72.2",
+    "typescript-eslint": "^8.73.0",
     "vite": "^8.3.8",
     "vitest": "^5.1.1"
   }

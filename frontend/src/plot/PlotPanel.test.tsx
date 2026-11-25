@@ -12,6 +12,7 @@ const mockInstances: Array<{
   opts: unknown;
   data: unknown;
   over: HTMLDivElement;
+  axes: Array<{ show?: boolean }>;
   scales: Record<string, { min: number; max: number }>;
   setScale: ReturnType<typeof vi.fn>;
   setSeries: ReturnType<typeof vi.fn>;
@@ -25,6 +26,7 @@ vi.mock("uplot", () => {
     opts: unknown;
     data: number[][];
     over: HTMLDivElement;
+    axes: Array<{ show?: boolean }>;
     scales: Record<string, { min: number; max: number }>;
     setScale = vi.fn((key: string, limits: { min: number; max: number }) => {
       this.scales[key] = limits;
@@ -38,6 +40,7 @@ vi.mock("uplot", () => {
       this.opts = opts;
       this.data = data;
       const xVals = data[0] ?? [0, 1];
+      this.axes = [{ show: true }, { show: true }, { show: true }];
       this.scales = {
         x: { min: xVals[0] ?? 0, max: xVals[xVals.length - 1] ?? 1 },
       };
@@ -134,9 +137,69 @@ describe("PlotPanel", () => {
     fireEvent.mouseUp(window);
     expect(within(table).getByText(/997[.,]617 µs/)).toBeInTheDocument();
 
+    // Hiding all voltage traces toggles the V axis in place without recreating uPlot (keeps zoom).
+    await user.click(within(legend).getByLabelText("v(in)"));
+    await user.click(within(legend).getByLabelText("v(out)"));
+    expect(mockInstances).toHaveLength(1);
+    expect(chart.axes[1]?.show).toBe(false);
+
     // Hiding cursors removes the readout table.
     await user.click(screen.getByRole("button", { name: "Masquer les curseurs" }));
     expect(screen.queryByRole("table", { name: "Mesures des curseurs" })).not.toBeInTheDocument();
+  });
+
+  it("dragging C1 directly on its line does not trigger uPlot drag-zoom", async () => {
+    const user = userEvent.setup();
+    act(() => editorState().setSimulation(rcResult));
+    render(<PlotPanel />);
+
+    await waitFor(() => expect(mockInstances).toHaveLength(1));
+    const chart = mockInstances[0]!;
+    const uplotOwnListener = vi.fn();
+    chart.over.addEventListener("mousedown", uplotOwnListener);
+
+    // Place C1 at 80 px (~1 ms) first, then switch back to zoom mode and drag C1 directly.
+    await user.click(screen.getByRole("button", { name: "Placer C1" }));
+    fireEvent.mouseDown(chart.over, { button: 0, clientX: 80 });
+    fireEvent.mouseUp(window);
+
+    await user.click(screen.getByRole("button", { name: "Zoom (glisser)" }));
+    uplotOwnListener.mockClear();
+    chart.setScale.mockClear();
+
+    // Grab near C1 (at 80 px after placement) and drag to 200 px (~2.5 ms).
+    fireEvent.mouseDown(chart.over, { button: 0, clientX: 80 });
+    fireEvent.mouseMove(window, { clientX: 200 });
+    fireEvent.mouseUp(window);
+
+    expect(uplotOwnListener).not.toHaveBeenCalled();
+    expect(chart.setScale).not.toHaveBeenCalled();
+    const table = screen.getByRole("table", { name: "Mesures des curseurs" });
+    expect(within(table).getByText(/2[.,]498 ms|2[.,]5 ms/)).toBeInTheDocument();
+  });
+
+  it("shows a coming-soon message for non-.tran axis analyses (.ac/.dc)", () => {
+    act(() =>
+      editorState().setSimulation({
+        analysis: "ac",
+        axis: { name: "frequency", unit: "Hz", values: [10, 100, 1000] },
+        traces: [
+          {
+            name: "v(out)",
+            kind: "voltage",
+            unit: "V",
+            net: "out",
+            values: [1, 0.7, 0.1],
+            imag: [0, -0.5, -0.3],
+          },
+        ],
+      }),
+    );
+    render(<PlotPanel />);
+    expect(
+      screen.getByText(/L'affichage des courbes d'analyse \.ac est à venir/),
+    ).toBeInTheDocument();
+    expect(mockInstances).toHaveLength(0);
   });
 
   it("renders operating point results as a table", () => {

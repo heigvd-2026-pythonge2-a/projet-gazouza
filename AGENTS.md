@@ -22,7 +22,39 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
 | `backend/app/models/`, `netlist/`, `importers/`, `api/` | Damien Bignens |
 | `backend/app/engines/`, `backend/vendor/ngspice/`, `launcher.py`, `build.ps1` | Antoine Bezençon |
 | `shared/fixtures/` | Tous (chaque fichier a un producteur, voir `shared/fixtures/README.md`) |
-| `frontend/src/api/client.ts`, `frontend/src/App.tsx`, CI, configs racine | À coordonner en équipe |
+| `website/` | Noé Guenin |
+| `.github/` (CI, modèles), configs racine, réglages du dépôt (labels, milestones, règles) | Noé Guenin (gère le dépôt ; changement à annoncer à l'équipe) |
+| `frontend/src/api/client.ts`, `frontend/src/App.tsx` | À coordonner en équipe |
+
+[`.github/CODEOWNERS`](.github/CODEOWNERS) reprend ce tableau : GitHub demande la relecture du
+propriétaire sur chaque PR qui touche son module. Garde les deux à jour ensemble.
+
+## Documentation
+
+Ne lis pas toute la documentation : lis seulement celle de la zone que tu vas toucher. Les
+fichiers `AGENTS.md` de `backend/`, `frontend/` et `website/` sont chargés automatiquement
+quand tu travailles dans ces dossiers. Le reste se lit à la demande :
+
+| Fichier | Contenu | À lire avant de toucher |
+|---|---|---|
+| [`docs/format-schema.md`](docs/format-schema.md) | Format `.psice.json` (v2), traduction en netlist, erreurs (`Diagnostic`), réponse du backend, questions ouvertes | `backend/app/models/`, `netlist/`, `importers/`, la sérialisation dans `frontend/src/store/` |
+| [`docs/exemples-netlist.md`](docs/exemples-netlist.md) | Exemples complets entrée → netlist → réponse, dont un circuit faux | `backend/app/netlist/`, une nouvelle fixture |
+| [`shared/fixtures/README.md`](shared/fixtures/README.md) | Circuits de référence et producteur de chaque fichier | `shared/fixtures/`, les tests qui s'en servent |
+| [`docs/plan-damien.md`](docs/plan-damien.md) | Plan du backend par phase, décisions à prendre en équipe | une tâche backend, pour savoir ce qui est déjà prévu |
+| [`docs/logo.md`](docs/logo.md) | Fichiers, couleurs et animation du logo | une icône, le logo, l'animation de démarrage |
+
+Le site (`website/src/content/docs/`) décrit l'application à l'utilisateur. Quand ta tâche change
+ce qu'il décrit, mets la page à jour **dans la même PR** :
+
+| Page | Quand ta tâche change… |
+|---|---|
+| `guide/composants.md` | un composant, ses broches ou ses paramètres |
+| `guide/erreurs.md` | un message d'erreur ou d'avertissement, ou son code |
+| `guide/editeur.mdx`, `guide/raccourcis.md` | un geste ou un raccourci de l'éditeur |
+| `guide/analyses.mdx`, `guide/courbes-et-sondes.md` | une analyse, le visualiseur, les sondes ou les mesures |
+| `guide/valeurs-et-unites.md`, `guide/import-ltspice.md` | la saisie des valeurs, l'import `.asc` |
+| `developpeurs/api.md`, `developpeurs/format-schema.md` | une route de l'API, le format de schéma (résumé de `docs/format-schema.md`) |
+| `developpeurs/environnement.mdx`, `developpeurs/contribuer.md` | une commande, un outil, une convention de ce fichier |
 
 ## Règles importantes
 
@@ -65,6 +97,26 @@ Si c'est nécessaire, arrête-toi et signale-le à l'humain (il en parlera au pr
   l'humain, ferme-la depuis la PR (`Closes #N`) et reprends sa milestone ; si ta tâche n'en
   couvre qu'une partie, écris `Refs #N` et indique ce qui reste. N'ouvre une nouvelle issue que
   si aucune ne correspond, et ne crée jamais de doublon.
+- **Statut des issues** : les issues ont un statut GitHub (`Todo`, `In progress`, `In review`,
+  `Done`…, onglet « Active » de la liste). Dès qu'une session commence à travailler sur une
+  branche qui traite une ou plusieurs issues, passe chacune en `In progress`, avant le premier
+  commit, pour que l'équipe voie ce qui est pris. Ensuite, le workflow
+  [`issue-status.yml`](.github/workflows/issue-status.yml) s'occupe des issues fermées par la
+  PR (`Closes #N`, lu aussi dans la description pour une PR empilée sur une autre branche,
+  que GitHub ne relie pas à l'issue) : `In review` quand la PR est ouverte, `In progress` si elle repasse en
+  brouillon, `Todo` si elle est fermée sans fusion ; la fusion ferme l'issue et la passe en
+  `Done`. Il ne voit pas les issues seulement citées (`Refs #N`) : remets-les en `Todo` toi-même
+  si personne ne continue la suite, ou si tu abandonnes la branche avant d'ouvrir une PR.
+  `gh issue edit` ne sait pas changer ce statut, il faut passer par l'API :
+
+  ```powershell
+  gh api graphql -f query='mutation($i:ID!,$s:ID!){setIssueStatus(input:{issueId:$i,statusId:$s}){clientMutationId}}' -f i=$(gh issue view <N> --json id -q .id) -f s=<statut>
+  ```
+
+  avec `<statut>` = `IS_kgAD` (Todo), `IS_kgAE` (In progress) ou `IS_kgAI` (In review). La
+  liste complète :
+  `gh api graphql -f query='query($o:String!,$r:String!){repository(owner:$o,name:$r){planningStatuses(first:20){nodes{id name}}}}' -f o=heigvd-2026-pythonge2-a -f r=projet-gazouza`.
+  Ne mets pas `Done` à la main : c'est la PR fusionnée qui termine l'issue.
 - **Modèles d'issue et de PR** : quand tu crées une issue ou une PR (par ex. avec `gh`),
   suis la structure du modèle correspondant et remplis toutes ses sections :
   - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,
@@ -95,7 +147,13 @@ pnpm dev                                      # http://localhost:5173 (proxy /ap
 pnpm test                                     # tests unitaires (vitest)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
+pnpm build:demo                               # démo en ligne du site (website/public/demo/)
 pnpm gen:api                                  # régénérer les types depuis shared/openapi.json
+
+# Site web et documentation (dans website/)
+pnpm install
+pnpm dev                                      # http://localhost:4321/projet-gazouza/
+pnpm build                                    # build du site statique (Astro)
 ```
 
 Avant de considérer une tâche terminée : tests, lint et formatage doivent passer pour la partie

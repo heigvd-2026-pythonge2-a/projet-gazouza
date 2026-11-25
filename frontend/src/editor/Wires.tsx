@@ -13,7 +13,7 @@ import {
   type GridPoint,
   type WirePart,
 } from "../store";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 const WIRE_WIDTH = 2;
 /** Clickable width of a wire, in pixels. */
@@ -48,6 +48,8 @@ interface WiresProps {
   selection: readonly string[];
   /** Bend or segment selected on its own, highlighted. */
   part?: WirePart | null;
+  /** Wire sections selected with the selection rectangle, highlighted. */
+  segments?: readonly WirePart[];
   /** Left press on a wire or junction, with the select tool. */
   onSelect?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   /** Left press on a wire (instead of `onSelect`), to pick one of its bends or segments. */
@@ -61,11 +63,13 @@ export function Wires({
   doc,
   selection,
   part = null,
+  segments = [],
   onSelect,
   onWirePress,
   onWireDoubleClick,
 }: WiresProps) {
-  const color = (id: string) => (selection.includes(id) ? COLORS.selected : COLORS.wire);
+  const colors = useCanvasColors();
+  const color = (id: string) => (selection.includes(id) ? colors.selected : colors.wire);
   const press = (id: string) => (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 0) onSelect?.(id, e);
   };
@@ -93,10 +97,23 @@ export function Wires({
           }}
         />
       ))}
+      {segments.map((seg) => {
+        const points = wirePartPoints(doc, seg);
+        return points ? (
+          <Line
+            key={`${seg.wire}/${seg.index}`}
+            points={flat(points)}
+            stroke={colors.selected}
+            strokeWidth={WIRE_WIDTH + 1}
+            lineCap="round"
+            listening={false}
+          />
+        ) : null;
+      })}
       {partPoints?.length === 2 && (
         <Line
           points={flat(partPoints)}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={WIRE_WIDTH + 1}
           lineCap="round"
           listening={false}
@@ -120,8 +137,8 @@ export function Wires({
           y={partPoints[0].y * GRID - HANDLE / 2}
           width={HANDLE}
           height={HANDLE}
-          fill="#ffffff"
-          stroke={COLORS.selected}
+          fill={colors.background}
+          stroke={colors.selected}
           strokeWidth={1.5}
           listening={false}
         />
@@ -139,6 +156,7 @@ interface WireDraftProps {
 
 /** Wire being drawn (dashed), and a ring on what its end would attach to under the pointer. */
 export function WireDraft({ doc, points, pointer }: WireDraftProps) {
+  const colors = useCanvasColors();
   // Routing goes around the components: only redo it when the clicks or the document change,
   // and for the last segment when the pointer moves to another grid point.
   const path = useMemo(() => (points ? routeThrough(doc, points) : []), [doc, points]);
@@ -157,7 +175,7 @@ export function WireDraft({ doc, points, pointer }: WireDraftProps) {
       {preview && (
         <Line
           points={flat(preview)}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={WIRE_WIDTH}
           dash={[6, 4]}
           lineCap="round"
@@ -169,7 +187,7 @@ export function WireDraft({ doc, points, pointer }: WireDraftProps) {
           x={pointer.x * GRID}
           y={pointer.y * GRID}
           radius={DOT_RADIUS + 3}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={1.5}
         />
       )}

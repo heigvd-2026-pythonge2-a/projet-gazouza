@@ -3,6 +3,13 @@
 on:
   push:
     branches: ["main"]
+    paths:
+      - "website/**"
+      # The site embeds a demo of the app ("Essayer en ligne"), rebuilt with the frontend.
+      - "frontend/**"
+      - "shared/fixtures/**"
+      - ".github/workflows/pages.yml"
+  # Pull requests build the site in ci.yml (job "Site web"), behind the "CI OK" check.
   workflow_dispatch:
 
 permissions:
@@ -19,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Installation de pnpm
         uses: pnpm/action-setup@v6
@@ -31,7 +38,16 @@ jobs:
         with:
           node-version: "24"
           cache: "pnpm"
-          cache-dependency-path: website/pnpm-lock.yaml
+          cache-dependency-path: |
+            website/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+
+      # Online demo of the app, built into website/public/demo/ (served at /demo/).
+      - name: Build de la démo de l'app
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:demo
 
       - name: Install dependencies
         working-directory: website
@@ -42,14 +58,17 @@ jobs:
         run: pnpm build
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: "website/dist"
 
   deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -58,4 +77,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
