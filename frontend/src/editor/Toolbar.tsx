@@ -238,6 +238,8 @@ function ExampleItem(props: {
       ref={buttonRef}
       type="button"
       role="menuitem"
+      // The arrows move between the items; Tab leaves the menu.
+      tabIndex={-1}
       onClick={onChoose}
       // The focus follows the mouse, so the highlighted item is always the one Enter opens.
       onMouseEnter={(e) => e.currentTarget.focus()}
@@ -283,7 +285,12 @@ function ExamplesButton() {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     // The editor's shortcuts must not also see the keys pressed in the menu.
     e.stopPropagation();
-    if (e.key === "Escape") setOpen(false);
+    if (e.key === "Escape") {
+      setOpen(false);
+      // Back to the button that opened the menu, not to the page.
+      ref.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]")?.focus();
+      return;
+    }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     const at = items.current.findIndex((b) => b === document.activeElement);
@@ -310,6 +317,10 @@ function ExamplesButton() {
           role="menu"
           aria-label="Exemples"
           onKeyDown={onKeyDown}
+          // Tab out of the menu closes it, like a press outside.
+          onBlur={(e) => {
+            if (!ref.current?.contains(e.relatedTarget)) setOpen(false);
+          }}
           style={{
             position: "absolute",
             top: "calc(100% + 4px)",

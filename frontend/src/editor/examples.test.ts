@@ -10,8 +10,11 @@ const analyses = import.meta.glob<unknown>("../../../shared/fixtures/*/analysis.
 });
 
 describe("examples (#226)", () => {
-  it("offers every reference circuit", () => {
-    expect(EXAMPLES.map((e) => e.name).sort()).toEqual(fixtureNames());
+  it("offers reference circuits only, each once", () => {
+    // Not every fixture has to be an example (a circuit made to fail, for instance).
+    const names = EXAMPLES.map((e) => e.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(fixtureNames()).toContain(name);
   });
 
   it.each(EXAMPLES.map((e) => e.name))(

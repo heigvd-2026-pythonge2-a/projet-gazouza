@@ -158,5 +158,14 @@ describe("EditorToolbar", () => {
     expect(screen.getByRole("menu", { name: "Exemples" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
+    expect(button("Ouvrir un exemple prêt à simuler")).toHaveFocus();
+  });
+
+  it("closes the examples menu when the focus leaves it", async () => {
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    await user.click(button("Ouvrir un exemple prêt à simuler"));
+    await user.tab();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
