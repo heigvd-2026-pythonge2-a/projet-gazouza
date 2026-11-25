@@ -19,6 +19,18 @@ const MAX_EXPANSIONS = 50_000;
 const key = (p: GridPoint) => `${p.x},${p.y}`;
 
 const obstacleCache = new WeakMap<EditorDoc, Set<string>>();
+const pinCache = new WeakMap<EditorDoc, Set<string>>();
+
+/** Grid points of every component pin. Cached per document. */
+function pinPoints(doc: EditorDoc): Set<string> {
+  const cached = pinCache.get(doc);
+  if (cached) return cached;
+  const pins = new Set<string>();
+  for (const c of doc.components)
+    for (const pin of getDef(c.type).pins) pins.add(key(toWorld(pin, c)));
+  pinCache.set(doc, pins);
+  return pins;
+}
 
 /**
  * Box of what a wire must go around: the symbol without its leads (the straight lines that join
@@ -216,19 +228,35 @@ function search(
   return null;
 }
 
+export interface RouteOptions {
+  /**
+   * The plain L route may go through pins (#244): a wire drawn across a pin stays on its line and
+   * gets connected there (see `connectPinsOnWires`). A detour still avoids every pin, so that a
+   * wire going around a component is never connected to it by chance.
+   */
+  throughPins?: boolean;
+}
+
 /**
  * Route from `a` to `b` while drawing a wire: orthogonal, on the grid, around the components
  * (`a` and `b` themselves may be pins). The plain L route (horizontal then vertical) is kept when
  * it is free; otherwise the shortest route with few bends; if there is none, the plain L route
  * anyway, so the user is never blocked. Returns the points after `a` (the corners, then `b`).
  */
-export function routeAround(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
+export function routeAround(
+  doc: EditorDoc,
+  a: GridPoint,
+  b: GridPoint,
+  { throughPins = false }: RouteOptions = {},
+): GridPoint[] {
   const routes = lRoutes(a, b);
   const plain = routes[0] as GridPoint[];
   if (samePoint(a, b)) return [b];
   const blocked = obstacles(doc);
   const free = (p: GridPoint) => samePoint(p, a) || samePoint(p, b) || !blocked.has(key(p));
-  const freeRoute = routes.find((r) => isFree(a, r, free));
+  const pins = throughPins ? pinPoints(doc) : null;
+  const freeOrPin = (p: GridPoint) => free(p) || (pins?.has(key(p)) ?? false);
+  const freeRoute = routes.find((r) => isFree(a, r, freeOrPin));
   if (freeRoute) return freeRoute;
 
   // Search area: the end points and every obstacle, with some room around them.
