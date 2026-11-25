@@ -57,8 +57,8 @@ const pickers = (): FilePickers | null =>
  */
 let currentFile: { name: string; handle: FileSystemFileHandle | null } | null = null;
 
-/** True while a save is being written (a second Ctrl+S then does nothing). */
-let saving = false;
+/** The save being written, if any (a second Ctrl+S then waits for it instead of saving again). */
+let saving: Promise<boolean> | null = null;
 
 /** The user closed a file dialog without choosing a file. */
 const isCancel = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
@@ -183,10 +183,13 @@ export function saveRescueCopy() {
  * Saves the schematic, even without changes (its file may have been deleted meanwhile, #94). The
  * first time, or with `askWhere` (Save as), asks where (system dialog); then writes to the same
  * file. If that file cannot be written any more, asks for another one.
+ *
+ * Resolves to true once the schematic is written, false if the user closed the file dialog or the
+ * file could not be written (the user is told). A call during a save waits for that save.
  */
-export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
+export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}): Promise<boolean> {
   const s = useEditorStore.getState();
-  if (saving) return;
+  if (saving) return saving;
   const doc = s.doc;
   const content = serializeDoc(doc);
   const api = pickers();
@@ -195,15 +198,14 @@ export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
     download(name, content);
     currentFile = { name, handle: null };
     s.markSaved(doc);
-    return;
+    return Promise.resolve(true);
   }
-  saving = true;
   const pick = () =>
     api.showSaveFilePicker({
       types: PICKER_TYPES,
       suggestedName: currentFile?.name ?? DEFAULT_FILE_NAME,
     });
-  void (async () => {
+  saving = (async () => {
     try {
       let handle = askWhere ? null : (currentFile?.handle ?? null);
       if (handle) {
@@ -220,12 +222,15 @@ export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
       }
       currentFile = { name: handle.name, handle };
       useEditorStore.getState().markSaved(doc);
+      return true;
     } catch (error: unknown) {
       if (!isCancel(error)) window.alert("Impossible d'enregistrer le schéma dans ce fichier.");
+      return false;
     } finally {
-      saving = false;
+      saving = null;
     }
   })();
+  return saving;
 }
 
 /** Saves the schematic in a file chosen by the user (Ctrl+Shift+S). */

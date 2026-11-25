@@ -28,6 +28,7 @@ import {
   type WirePart,
 } from "../store";
 import { AnimationControls } from "./AnimationControls";
+import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { ErrorBubbles } from "./ErrorBubbles";
@@ -904,6 +905,7 @@ export function SchematicCanvas() {
           onClose={closeMenu}
         />
       )}
+      <CloseDialog />
     </div>
   );
 }
