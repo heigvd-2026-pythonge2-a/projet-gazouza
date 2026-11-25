@@ -151,11 +151,10 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "ground",
     category: "connection",
+    // Signal ground (masse): a triangle pointing down, not the three bars of the earth (terre).
     symbol: [
       { kind: "line", points: [0, 0, 0, 0.5] },
-      { kind: "line", points: [-0.8, 0.5, 0.8, 0.5] },
-      { kind: "line", points: [-0.5, 0.8, 0.5, 0.8] },
-      { kind: "line", points: [-0.2, 1.1, 0.2, 1.1] },
+      { kind: "line", points: [-0.8, 0.5, 0.8, 0.5, 0, 1.3, -0.8, 0.5] },
     ],
   },
   {
