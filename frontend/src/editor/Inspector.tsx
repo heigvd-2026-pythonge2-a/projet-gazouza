@@ -15,7 +15,7 @@ import { FIELD_ATTR, INSPECTOR_ID, NAME_FIELD, VALUE_FIELD_ATTR } from "./inspec
 import { COLORS, UI } from "./theme";
 
 /** Colour of a warning (a value that works, but probably not as meant). */
-const WARNING = "#b45309";
+const WARNING = UI.warning;
 
 /** Components with at least this many fields show them on two columns, when there is room. */
 const TWO_COLUMNS_FROM = 4;
@@ -71,7 +71,7 @@ function Field(props: {
     <div style={{ marginBottom: 8, minWidth: 0, ...(wide ? { gridColumn: "1 / -1" } : {}) }}>
       <label
         htmlFor={id}
-        style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 3 }}
+        style={{ display: "block", fontSize: 12, color: UI.label, marginBottom: 3 }}
       >
         {label}
       </label>
@@ -79,9 +79,9 @@ function Field(props: {
         style={{
           display: "flex",
           alignItems: "center",
-          border: `1px solid ${problem ? problemColor : "#d1d5db"}`,
+          border: `1px solid ${problem ? problemColor : UI.inputBorder}`,
           borderRadius: 4,
-          background: "#ffffff",
+          background: UI.surface,
         }}
       >
         {options ? (
@@ -120,7 +120,7 @@ function Field(props: {
             style={controlStyle}
           />
         )}
-        {unit && <span style={{ padding: "0 8px", color: "#9ca3af" }}>{unit}</span>}
+        {unit && <span style={{ padding: "0 8px", color: UI.faint }}>{unit}</span>}
       </div>
       {problem && (
         <p id={`${id}-problem`} style={{ margin: "3px 0 0", fontSize: 12, color: problemColor }}>

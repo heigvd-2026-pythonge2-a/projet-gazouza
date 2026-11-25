@@ -8,3 +8,4 @@ export * from "./library";
 export * from "./routing";
 export * from "./simulation";
 export * from "./values";
+export * from "./theme";

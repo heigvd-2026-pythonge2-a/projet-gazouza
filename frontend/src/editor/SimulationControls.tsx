@@ -5,14 +5,14 @@ import type { CSSProperties } from "react";
 
 import { formatSI, freshSimulation, useEditorStore, type AnalysisKind } from "../store";
 import { runSimulation } from "./simulationActions";
-import { UI } from "./theme";
+import { COLORS, UI } from "./theme";
 
 const CONTROL: CSSProperties = {
   padding: "4px 8px",
-  border: "1px solid #e5e7eb",
+  border: `1px solid ${UI.border}`,
   borderRadius: 5,
-  background: "#ffffff",
-  color: "#374151",
+  background: UI.surface,
+  color: COLORS.text,
   font: "inherit",
   fontSize: 12,
 };
@@ -81,10 +81,10 @@ export function SimulationControls() {
         onClick={() => void runSimulation()}
         style={{
           padding: "5px 12px",
-          border: `1px solid ${simulating ? "#b91c1c" : "#16a34a"}`,
+          border: `1px solid ${simulating ? UI.danger : UI.success}`,
           borderRadius: 5,
-          background: simulating ? "#b91c1c" : "#16a34a",
-          color: "#ffffff",
+          background: simulating ? UI.danger : UI.success,
+          color: UI.onAccent,
           fontWeight: 600,
           font: "inherit",
           cursor: "pointer",
@@ -135,7 +135,7 @@ export function SimulationReport() {
         </>
       )}
       {warnings.length > 0 && (
-        <ul style={{ color: "#b45309", paddingLeft: 18 }}>
+        <ul style={{ color: UI.warning, paddingLeft: 18 }}>
           {warnings.map((d, i) => (
             <li key={i}>{d.message}</li>
           ))}

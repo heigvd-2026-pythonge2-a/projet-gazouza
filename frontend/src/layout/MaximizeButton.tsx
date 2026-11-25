@@ -1,3 +1,5 @@
+import { COLORS, UI } from "../store";
+
 type Props = {
   /** Whether this panel is the one shown in full screen. */
   maximized: boolean;
@@ -22,10 +24,10 @@ export function MaximizeButton({ maximized, panel, onClick }: Props) {
         width: 24,
         height: 24,
         padding: 0,
-        border: "1px solid #e5e7eb",
+        border: `1px solid ${UI.border}`,
         borderRadius: 5,
-        background: maximized ? "#eff6ff" : "#ffffff",
-        color: maximized ? "#2563eb" : "#4b5563",
+        background: maximized ? UI.activeBackground : UI.surface,
+        color: maximized ? COLORS.selected : UI.label,
         cursor: "pointer",
       }}
     >

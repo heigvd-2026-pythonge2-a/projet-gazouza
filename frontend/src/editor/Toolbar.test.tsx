@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useThemeStore } from "../store";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
 import { TRANSPARENT_EXPORT_KEY } from "./fileActions";
 import { EditorToolbar } from "./Toolbar";
@@ -119,5 +120,15 @@ describe("EditorToolbar", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(exportImage).toHaveBeenCalledTimes(2);
     unregister();
+  });
+
+  it("switches between the light and the night-blue theme", async () => {
+    useThemeStore.setState({ theme: "light", chosen: false });
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    await user.click(button("Passer au thème bleu nuit"));
+    expect(useThemeStore.getState()).toMatchObject({ theme: "dark", chosen: true });
+    await user.click(button("Passer au thème clair"));
+    expect(useThemeStore.getState().theme).toBe("light");
   });
 });

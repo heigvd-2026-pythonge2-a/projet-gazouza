@@ -17,7 +17,7 @@ const tileStyle = (active: boolean): CSSProperties => ({
   padding: "6px 2px 4px",
   border: `1px solid ${active ? COLORS.selected : UI.border}`,
   borderRadius: 6,
-  background: active ? UI.activeBackground : "#ffffff",
+  background: active ? UI.activeBackground : UI.surface,
   color: active ? COLORS.selected : COLORS.symbol,
   lineHeight: 1.2,
   textAlign: "center",
