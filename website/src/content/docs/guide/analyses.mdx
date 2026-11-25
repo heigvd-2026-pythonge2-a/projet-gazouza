@@ -112,11 +112,13 @@ pour tracer la caractéristique d'une diode.
 | Réglage | Unité | Rôle |
 |---|---|---|
 | Source balayée | — | La source de tension ou de courant qui varie |
-| Début, fin | V ou A | Bornes du balayage, la fin plus grande que le début (0 à 5 par défaut) |
-| Pas | V ou A | Écart entre deux points (100m par défaut) |
+| Début, fin | V ou A | Bornes du balayage, la fin plus grande que le début (0 à 5 V par défaut, 0 à 10 mA pour une source de courant) |
+| Pas | V ou A | Écart entre deux points (100m par défaut, 100u pour une source de courant) |
 
 L'unité suit la source choisie : des volts pour une source de tension, des ampères pour une source
-de courant.
+de courant. Si tu n'as pas encore touché aux bornes, elles prennent celles de l'unité de la source
+choisie ; des bornes que tu as tapées restent telles quelles. Ce balayage va toujours vers le haut :
+la fin doit être plus grande que le début.
 
 ```
 .dc V1 0 10 1

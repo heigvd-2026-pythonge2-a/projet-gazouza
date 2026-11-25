@@ -4,6 +4,8 @@ import schematic from "../../../shared/fixtures/divider_op/schematic.json";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
 import {
   analysisSources,
+  DC_DEFAULTS,
+  dcRangeFor,
   formatSI,
   operatingPointLabels,
   parseSpiceNumber,
@@ -89,6 +91,13 @@ describe("AC and DC analyses (#222)", () => {
     });
     expect(error({ acPoints: "2.5" })).toEqual({ error: expect.stringMatching(/Points/) });
     expect(error({ acPoints: "0" })).toEqual({ error: expect.stringMatching(/Points/) });
+  });
+
+  it("gives a current source a range in milliamperes, but keeps a range typed by the user", () => {
+    expect(dcRangeFor(DC_DEFAULTS.V, "A")).toEqual(DC_DEFAULTS.A);
+    expect(dcRangeFor(DC_DEFAULTS.A, "V")).toEqual(DC_DEFAULTS.V);
+    expect(dcRangeFor(DC_DEFAULTS.V, "V")).toEqual({});
+    expect(dcRangeFor({ ...DC_DEFAULTS.V, dcStop: "10" }, "A")).toEqual({});
   });
 
   it("builds a .dc sweep, or says what is wrong", () => {

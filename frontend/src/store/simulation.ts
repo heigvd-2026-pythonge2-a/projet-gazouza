@@ -43,6 +43,26 @@ export interface AnalysisSettings {
   dcStep: string;
 }
 
+type DcRange = Pick<AnalysisSettings, "dcStart" | "dcStop" | "dcStep">;
+
+/** Default range of a DC sweep, by unit of the swept source: 0 to 5 V, or 0 to 10 mA. */
+export const DC_DEFAULTS: Record<"V" | "A", DcRange> = {
+  V: { dcStart: "0", dcStop: "5", dcStep: "100m" },
+  A: { dcStart: "0", dcStop: "10m", dcStep: "100u" },
+};
+
+/**
+ * The DC range to set when the swept source is in `unit`: the default of that unit if the range
+ * is still the default of the other one (5 A would be far too much for a current source), else
+ * nothing, so that a range typed by the user is kept.
+ */
+export function dcRangeFor(s: DcRange, unit: "V" | "A"): Partial<DcRange> {
+  const other = DC_DEFAULTS[unit === "V" ? "A" : "V"];
+  const untouched =
+    s.dcStart === other.dcStart && s.dcStop === other.dcStop && s.dcStep === other.dcStep;
+  return untouched ? { ...DC_DEFAULTS[unit] } : {};
+}
+
 export const DEFAULT_ANALYSIS: AnalysisSettings = {
   kind: "op",
   stopTime: "10m",
@@ -52,9 +72,7 @@ export const DEFAULT_ANALYSIS: AnalysisSettings = {
   acStop: "100k",
   acPoints: "20",
   dcSource: "",
-  dcStart: "0",
-  dcStop: "5",
-  dcStep: "100m",
+  ...DC_DEFAULTS.V,
 };
 
 /** Component types that `.ac` can excite and `.dc` can sweep. */

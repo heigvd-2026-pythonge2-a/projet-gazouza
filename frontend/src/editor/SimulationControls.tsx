@@ -6,6 +6,7 @@ import { useMemo, type CSSProperties } from "react";
 import {
   analysisSources,
   chosenSource,
+  dcRangeFor,
   formatSI,
   freshSimulation,
   useEditorStore,
@@ -86,7 +87,16 @@ function SourceSelect(props: {
         title={props.sources.length > 0 ? props.title : "Pose d'abord une source sur le schéma"}
         value={chosen?.id ?? ""}
         disabled={simulating || props.sources.length === 0}
-        onChange={(e) => setAnalysis({ [props.setting]: e.target.value })}
+        onChange={(e) => {
+          const id = e.target.value;
+          const unit = props.sources.find((s) => s.id === id)?.unit;
+          // A swept source of another unit takes the default range of its unit.
+          const range =
+            props.setting === "dcSource" && unit
+              ? dcRangeFor(useEditorStore.getState().analysis, unit)
+              : {};
+          setAnalysis({ [props.setting]: id, ...range });
+        }}
         style={CONTROL}
       >
         {props.sources.length === 0 && <option value="">aucune source</option>}
@@ -116,7 +126,12 @@ export function SimulationControls() {
         title="Analyse à lancer"
         value={analysis.kind}
         disabled={simulating}
-        onChange={(e) => setAnalysis({ kind: e.target.value as AnalysisKind })}
+        onChange={(e) => {
+          const kind = e.target.value as AnalysisKind;
+          const unit = chosenSource(sources, analysis.dcSource)?.unit;
+          // Sweeping a current source: start from milliamperes, not from volts as amperes.
+          setAnalysis({ kind, ...(kind === "dc" && unit ? dcRangeFor(analysis, unit) : {}) });
+        }}
         style={CONTROL}
       >
         {ANALYSES.map((a) => (
