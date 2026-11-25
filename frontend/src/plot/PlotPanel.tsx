@@ -2,8 +2,15 @@ import { useMemo, useState } from "react";
 
 import type { SimulationResult } from "../api/client";
 import { COLORS, UI, useEditorStore } from "../store";
+import { BodeChart } from "./BodeChart";
 import { TranChart } from "./TranChart";
-import { buildTranPlotData, type TranPlotData } from "./plotData";
+import {
+  buildBodePlotData,
+  buildPlotData,
+  type BodePlotData,
+  type PlotSeriesMeta,
+  type TranPlotData,
+} from "./plotData";
 import { formatSI } from "./siFormat";
 
 function DiagnosticsList({ result }: { result: SimulationResult }) {
@@ -109,12 +116,74 @@ function OperatingPointTable({ result }: { result: SimulationResult }) {
   );
 }
 
-function TranPlotSection({ plotData }: { plotData: TranPlotData }) {
+function TraceLegend({
+  series,
+  visibleNames,
+  onToggle,
+}: {
+  series: readonly PlotSeriesMeta[];
+  visibleNames: ReadonlySet<string>;
+  onToggle: (name: string) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Traces affichées"
+      style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 12 }}
+    >
+      {series.map((s) => {
+        const checked = visibleNames.has(s.name);
+        return (
+          <label
+            key={s.name}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              padding: "2px 8px",
+              borderRadius: 999,
+              border: `1px solid ${checked ? s.color : UI.border}`,
+              background: checked ? UI.surface : UI.panel,
+              color: checked ? COLORS.text : UI.muted,
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => onToggle(s.name)}
+              style={{ margin: 0, accentColor: s.color }}
+            />
+            <span
+              style={{
+                width: 10,
+                height: 3,
+                borderRadius: 2,
+                background: s.color,
+                opacity: checked ? 1 : 0.35,
+              }}
+            />
+            <span>{s.name}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function CurveSection({
+  series,
+  plotData,
+  bodeData,
+}: {
+  series: readonly PlotSeriesMeta[];
+  plotData: TranPlotData | null;
+  bodeData: BodePlotData | null;
+}) {
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
 
-  const visibleNames = new Set(
-    plotData.series.map((s) => s.name).filter((name) => !hidden.has(name)),
-  );
+  const visibleNames = new Set(series.map((s) => s.name).filter((name) => !hidden.has(name)));
 
   const toggleTrace = (name: string) => {
     setHidden((prev) => {
@@ -127,60 +196,27 @@ function TranPlotSection({ plotData }: { plotData: TranPlotData }) {
 
   return (
     <>
-      <div
-        role="group"
-        aria-label="Traces affichées"
-        style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 12 }}
-      >
-        {plotData.series.map((s) => {
-          const checked = visibleNames.has(s.name);
-          return (
-            <label
-              key={s.name}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "2px 8px",
-                borderRadius: 999,
-                border: `1px solid ${checked ? s.color : UI.border}`,
-                background: checked ? UI.surface : UI.panel,
-                color: checked ? COLORS.text : UI.muted,
-                cursor: "pointer",
-                userSelect: "none",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleTrace(s.name)}
-                style={{ margin: 0, accentColor: s.color }}
-              />
-              <span
-                style={{
-                  width: 10,
-                  height: 3,
-                  borderRadius: 2,
-                  background: s.color,
-                  opacity: checked ? 1 : 0.35,
-                }}
-              />
-              <span>{s.name}</span>
-            </label>
-          );
-        })}
-      </div>
-      <TranChart
-        key={`${plotData.xValues.length}:${plotData.xMin}:${plotData.xMax}`}
-        plotData={plotData}
-        visibleNames={visibleNames}
-      />
+      <TraceLegend series={series} visibleNames={visibleNames} onToggle={toggleTrace} />
+      {bodeData ? (
+        <BodeChart
+          key={`${bodeData.gain.xValues.length}:${bodeData.gain.xMin}:${bodeData.gain.xMax}`}
+          bode={bodeData}
+          visibleNames={visibleNames}
+        />
+      ) : plotData ? (
+        <TranChart
+          key={`${plotData.xValues.length}:${plotData.xMin}:${plotData.xMax}`}
+          plotData={plotData}
+          visibleNames={visibleNames}
+        />
+      ) : null}
     </>
   );
 }
 
 /**
- * Main Results panel content: displays simulation waveforms, trace legend, cursors and diagnostics.
+ * Main Results panel content: displays `.tran`, `.ac` (Bode), `.dc` waveforms,
+ * `.op` tables, interactive trace legends, cursors and diagnostics.
  */
 export function PlotPanel() {
   const simulation = useEditorStore((s) => s.simulation);
@@ -189,12 +225,24 @@ export function PlotPanel() {
   const result = simulation?.result ?? null;
   const isStale = simulation !== null && simulation.doc !== doc;
 
-  const plotData = useMemo(() => (result ? buildTranPlotData(result) : null), [result]);
-  const traceKey = plotData?.series.map((s) => s.name).join("\0") ?? "";
+  const bodeData = useMemo(
+    () => (result?.analysis === "ac" ? buildBodePlotData(result) : null),
+    [result],
+  );
+  const plotData = useMemo(
+    () =>
+      result && (result.analysis === "tran" || result.analysis === "dc")
+        ? buildPlotData(result)
+        : null,
+    [result],
+  );
 
   if (!result) {
     return <p style={{ color: UI.muted }}>Les courbes s'afficheront ici après une simulation.</p>;
   }
+
+  const series = bodeData ? bodeData.gain.series : (plotData?.series ?? []);
+  const traceKey = `${result.analysis}:${series.map((s) => s.name).join("\0")}`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
@@ -217,18 +265,12 @@ export function PlotPanel() {
 
       {result.analysis === "op" && <OperatingPointTable result={result} />}
 
-      {result.analysis === "tran" && plotData && (
-        <TranPlotSection key={traceKey} plotData={plotData} />
+      {result.analysis !== "op" && (plotData || bodeData) && (
+        <CurveSection key={traceKey} series={series} plotData={plotData} bodeData={bodeData} />
       )}
 
-      {result.analysis === "tran" && !plotData && (result.errors ?? []).length === 0 && (
+      {result.analysis !== "op" && !plotData && !bodeData && (result.errors ?? []).length === 0 && (
         <p style={{ color: UI.muted }}>Aucune courbe à afficher.</p>
-      )}
-
-      {result.analysis !== "op" && result.analysis !== "tran" && (
-        <p style={{ color: UI.muted }}>
-          L'affichage des courbes d'analyse .{result.analysis} est à venir.
-        </p>
       )}
     </div>
   );

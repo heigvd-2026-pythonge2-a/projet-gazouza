@@ -6,14 +6,21 @@ import { useElementSize } from "../layout";
 import { COLORS, PALETTES, UI, useThemeStore } from "../store";
 import {
   CURSOR_COLORS,
+  PLOT_TABLE_CELL,
   computeCursorReadout,
   computeZoomBounds,
   nearestIndex,
+  type CursorReadout,
   type TranPlotData,
 } from "./plotData";
 import { formatAxisTick, formatSI, formatSignedSI } from "./siFormat";
 
-type InteractionMode = "zoom" | "c1" | "c2";
+export type InteractionMode = "zoom" | "c1" | "c2";
+
+export interface XRange {
+  min: number;
+  max: number;
+}
 
 const BTN: CSSProperties = {
   fontFamily: "inherit",
@@ -38,17 +45,150 @@ const ACTIVE_BTN: CSSProperties = {
   fontWeight: 600,
 };
 
-const TABLE_CELL: CSSProperties = {
-  padding: "3px 8px",
-  borderBottom: `1px solid ${UI.border}`,
-  textAlign: "right",
-  fontVariantNumeric: "tabular-nums",
-  whiteSpace: "nowrap",
-};
+/** Shared zoom / cursor toolbar used above single and Bode charts. */
+export function PlotToolbar({
+  mode,
+  showCursors,
+  onModeChange,
+  onResetZoom,
+  onToggleCursors,
+  resetTitle = "Revenir à la vue complète",
+}: {
+  mode: InteractionMode;
+  showCursors: boolean;
+  onModeChange: (mode: InteractionMode) => void;
+  onResetZoom: () => void;
+  onToggleCursors: () => void;
+  resetTitle?: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12,
+      }}
+    >
+      <button
+        type="button"
+        style={mode === "zoom" ? ACTIVE_BTN : BTN}
+        onClick={() => onModeChange("zoom")}
+        title="Glisser sur le graphe pour zoomer (ou glisser directement une ligne de curseur)"
+      >
+        Zoom (glisser)
+      </button>
+      {showCursors && (
+        <>
+          <button
+            type="button"
+            style={
+              mode === "c1"
+                ? { ...ACTIVE_BTN, borderColor: CURSOR_COLORS.c1, color: CURSOR_COLORS.c1 }
+                : BTN
+            }
+            onClick={() => onModeChange(mode === "c1" ? "zoom" : "c1")}
+            title="Cliquer sur le graphe pour placer le curseur 1"
+          >
+            Placer C1
+          </button>
+          <button
+            type="button"
+            style={
+              mode === "c2"
+                ? { ...ACTIVE_BTN, borderColor: CURSOR_COLORS.c2, color: CURSOR_COLORS.c2 }
+                : BTN
+            }
+            onClick={() => onModeChange(mode === "c2" ? "zoom" : "c2")}
+            title="Cliquer sur le graphe pour placer le curseur 2"
+          >
+            Placer C2
+          </button>
+        </>
+      )}
+      <button type="button" style={BTN} onClick={onResetZoom} title={resetTitle}>
+        Réinitialiser le zoom
+      </button>
+      <button
+        type="button"
+        style={{ ...BTN, marginLeft: "auto" }}
+        aria-pressed={showCursors}
+        onClick={onToggleCursors}
+      >
+        {showCursors ? "Masquer les curseurs" : "Afficher les curseurs"}
+      </button>
+    </div>
+  );
+}
 
-interface TranChartProps {
-  plotData: TranPlotData;
-  visibleNames: ReadonlySet<string>;
+/** Cursor readout table for single-plot analyses (`.tran`, `.dc`). */
+export function CursorReadoutTable({
+  xLabel,
+  xUnit,
+  readout,
+}: {
+  xLabel: string;
+  xUnit: string;
+  readout: CursorReadout;
+}) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table
+        aria-label="Mesures des curseurs"
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 12,
+          background: UI.panel,
+          border: `1px solid ${UI.border}`,
+          borderRadius: 6,
+        }}
+      >
+        <thead>
+          <tr style={{ color: UI.muted }}>
+            <th style={{ ...PLOT_TABLE_CELL, textAlign: "left" }}>Signal</th>
+            <th style={{ ...PLOT_TABLE_CELL, color: CURSOR_COLORS.c1 }}>Curseur 1</th>
+            <th style={{ ...PLOT_TABLE_CELL, color: CURSOR_COLORS.c2 }}>Curseur 2</th>
+            <th style={PLOT_TABLE_CELL}>Écart (Δ)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ ...PLOT_TABLE_CELL, textAlign: "left", fontWeight: 600 }}>{xLabel}</td>
+            <td style={PLOT_TABLE_CELL}>{formatSI(readout.x1, xUnit)}</td>
+            <td style={PLOT_TABLE_CELL}>{formatSI(readout.x2, xUnit)}</td>
+            <td style={PLOT_TABLE_CELL}>
+              {formatSignedSI(readout.dx, xUnit)}
+              {readout.freqHz !== null ? ` (${formatSI(readout.freqHz, "Hz")})` : ""}
+            </td>
+          </tr>
+          {readout.traces.map((t) => (
+            <tr key={t.name}>
+              <td style={{ ...PLOT_TABLE_CELL, textAlign: "left" }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: t.color,
+                    marginRight: 6,
+                  }}
+                />
+                {t.name}
+              </td>
+              <td style={PLOT_TABLE_CELL}>{t.v1 !== null ? formatSI(t.v1, t.unit) : "—"}</td>
+              <td style={PLOT_TABLE_CELL}>{t.v2 !== null ? formatSI(t.v2, t.unit) : "—"}</td>
+              <td style={PLOT_TABLE_CELL}>
+                {t.delta !== null ? formatSignedSI(t.delta, t.unit) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /**
@@ -81,7 +221,6 @@ function drawCursors(
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Small tag at the top of the cursor line.
     const fontSize = Math.round(11 * pxRatio);
     ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
     const padX = 4 * pxRatio;
@@ -95,7 +234,6 @@ function drawCursors(
     ctx.textBaseline = "middle";
     ctx.fillText(label, tagX + padX, tagY + tagH / 2);
 
-    // Highlight intersection dots on every visible trace.
     for (const s of plotData.series) {
       if (!visibleNames.has(s.name)) continue;
       const yVal = plotData.data[s.seriesIndex]?.[idx];
@@ -117,35 +255,74 @@ function drawCursors(
   drawOne(x2Val, c2Index, CURSOR_COLORS.c2, "C2");
 }
 
+interface TranChartProps {
+  plotData: TranPlotData;
+  visibleNames: ReadonlySet<string>;
+  height?: number;
+  showControls?: boolean;
+  showReadout?: boolean;
+  xRange?: XRange | null;
+  onXRangeChange?: (range: XRange) => void;
+  controlledCursors?: {
+    showCursors: boolean;
+    mode: InteractionMode;
+    c1Index: number;
+    c2Index: number;
+    onCursorChange: (which: "c1" | "c2", idx: number) => void;
+  };
+}
+
 /**
- * Interactive transient/axis waveform viewer powered by uPlot with mouse zoom and dual cursors.
+ * Interactive waveform viewer powered by uPlot with mouse zoom and dual cursors.
+ * Supports `.tran`, `.dc`, and single Bode panes (with optional linked zoom and cursors).
  */
-export function TranChart({ plotData, visibleNames }: TranChartProps) {
+export function TranChart({
+  plotData,
+  visibleNames,
+  height = 240,
+  showControls = true,
+  showReadout = true,
+  xRange = null,
+  onXRangeChange,
+  controlledCursors,
+}: TranChartProps) {
   const [boxRef, boxSize] = useElementSize<HTMLDivElement>();
   const chartHostRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
+  const syncingScaleRef = useRef(false);
   const theme = useThemeStore((s) => s.theme);
 
   const pointCount = plotData.xValues.length;
   const defaultC1 = Math.floor(pointCount * 0.2);
   const defaultC2 = Math.max(defaultC1, Math.floor(pointCount * 0.75));
 
-  const [showCursors, setShowCursors] = useState(true);
-  const [mode, setMode] = useState<InteractionMode>("zoom");
-  const [c1Index, setC1Index] = useState(defaultC1);
-  const [c2Index, setC2Index] = useState(defaultC2);
+  const [localShowCursors, setLocalShowCursors] = useState(true);
+  const [localMode, setLocalMode] = useState<InteractionMode>("zoom");
+  const [localC1, setLocalC1] = useState(defaultC1);
+  const [localC2, setLocalC2] = useState(defaultC2);
 
-  const hasVisibleVoltage = useMemo(
-    () => plotData.series.some((s) => s.unit === "V" && visibleNames.has(s.name)),
-    [plotData.series, visibleNames],
+  const showCursors = controlledCursors ? controlledCursors.showCursors : localShowCursors;
+  const mode = controlledCursors ? controlledCursors.mode : localMode;
+  const c1Index = controlledCursors ? controlledCursors.c1Index : localC1;
+  const c2Index = controlledCursors ? controlledCursors.c2Index : localC2;
+
+  const leftScale = plotData.leftAxis?.scale;
+  const rightScale = plotData.rightAxis?.scale;
+
+  const hasVisibleLeft = useMemo(
+    () =>
+      leftScale !== undefined &&
+      plotData.series.some((s) => s.unit === leftScale && visibleNames.has(s.name)),
+    [plotData.series, visibleNames, leftScale],
   );
-  const hasVisibleCurrent = useMemo(
-    () => plotData.series.some((s) => s.unit === "A" && visibleNames.has(s.name)),
-    [plotData.series, visibleNames],
+  const hasVisibleRight = useMemo(
+    () =>
+      rightScale !== undefined &&
+      plotData.series.some((s) => s.unit === rightScale && visibleNames.has(s.name)),
+    [plotData.series, visibleNames, rightScale],
   );
 
-  // Keep latest interaction state in a ref so uPlot's canvas hooks/events stay up to date
-  // without recreating the uPlot instance on every cursor move.
+  // Keep latest interaction state in refs so uPlot hooks/listeners never go stale.
   const stateRef = useRef({
     plotData,
     visibleNames,
@@ -154,8 +331,16 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
     c1Index,
     c2Index,
   });
+  const callbacksRef = useRef({
+    onXRangeChange,
+    onCursorChange: controlledCursors?.onCursorChange,
+  });
   useEffect(() => {
     stateRef.current = { plotData, visibleNames, showCursors, mode, c1Index, c2Index };
+    callbacksRef.current = {
+      onXRangeChange,
+      onCursorChange: controlledCursors?.onCursorChange,
+    };
   });
 
   useEffect(() => {
@@ -170,9 +355,62 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
 
       const palette = PALETTES[theme];
       const width = Math.max(260, Math.floor(boxSize.width || host.clientWidth || 480));
-      const height = 240;
+
+      const scales: Record<string, uPlot.Scale> = {
+        x: plotData.xLog ? { time: false, distr: 3, log: 10 } : { time: false },
+      };
+      if (plotData.leftAxis) scales[plotData.leftAxis.scale] = { auto: true };
+      if (plotData.rightAxis) scales[plotData.rightAxis.scale] = { auto: true };
+
+      const makeYAxis = (
+        meta: NonNullable<TranPlotData["leftAxis"]>,
+        side: number,
+        show: boolean,
+        showGrid: boolean,
+      ): uPlot.Axis => ({
+        scale: meta.scale,
+        side,
+        show,
+        label: meta.label,
+        labelSize: 18,
+        size: 62,
+        font: "11px system-ui, sans-serif",
+        labelFont: "600 11px system-ui, sans-serif",
+        stroke: palette.text,
+        grid: { show: showGrid, stroke: palette.border, width: 1 },
+        ticks: { stroke: palette.inputBorder, width: 1 },
+        values: (_u, splits) => splits.map((v) => formatAxisTick(v, meta.scale)),
+      });
+
       // uPlot Axis.Side values (avoid ambient const enum under verbatimModuleSyntax): 1=Right, 2=Bottom, 3=Left.
-      const currentSide = plotData.hasVoltage ? 1 : 3;
+      const axes: uPlot.Axis[] = [
+        {
+          scale: "x",
+          side: 2,
+          label: plotData.xLabel,
+          labelSize: 18,
+          size: 28,
+          font: "11px system-ui, sans-serif",
+          labelFont: "600 11px system-ui, sans-serif",
+          stroke: palette.text,
+          grid: { stroke: palette.border, width: 1 },
+          ticks: { stroke: palette.inputBorder, width: 1 },
+          values: (_u, splits) => splits.map((v) => formatAxisTick(v, plotData.xUnit)),
+        },
+      ];
+      if (plotData.leftAxis) {
+        axes.push(makeYAxis(plotData.leftAxis, 3, hasVisibleLeft, true));
+      }
+      if (plotData.rightAxis) {
+        axes.push(
+          makeYAxis(
+            plotData.rightAxis,
+            plotData.leftAxis ? 1 : 3,
+            hasVisibleRight,
+            !plotData.leftAxis,
+          ),
+        );
+      }
 
       const opts: uPlot.Options = {
         width,
@@ -184,54 +422,8 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
           y: false,
           drag: { setScale: true, x: true, y: false, dist: 6 },
         },
-        scales: {
-          x: { time: false },
-          V: { auto: true },
-          A: { auto: true },
-        },
-        axes: [
-          {
-            scale: "x",
-            side: 2,
-            label: plotData.xLabel,
-            labelSize: 18,
-            size: 28,
-            font: "11px system-ui, sans-serif",
-            labelFont: "600 11px system-ui, sans-serif",
-            stroke: palette.text,
-            grid: { stroke: palette.border, width: 1 },
-            ticks: { stroke: palette.inputBorder, width: 1 },
-            values: (_u, splits) => splits.map((v) => formatAxisTick(v, plotData.xUnit)),
-          },
-          {
-            scale: "V",
-            side: 3,
-            show: hasVisibleVoltage,
-            label: "Tension (V)",
-            labelSize: 18,
-            size: 58,
-            font: "11px system-ui, sans-serif",
-            labelFont: "600 11px system-ui, sans-serif",
-            stroke: palette.text,
-            grid: { stroke: palette.border, width: 1 },
-            ticks: { stroke: palette.inputBorder, width: 1 },
-            values: (_u, splits) => splits.map((v) => formatAxisTick(v, "V")),
-          },
-          {
-            scale: "A",
-            side: currentSide,
-            show: hasVisibleCurrent,
-            label: "Courant (A)",
-            labelSize: 18,
-            size: 58,
-            font: "11px system-ui, sans-serif",
-            labelFont: "600 11px system-ui, sans-serif",
-            stroke: palette.text,
-            grid: { show: !plotData.hasVoltage, stroke: palette.border, width: 1 },
-            ticks: { stroke: palette.inputBorder, width: 1 },
-            values: (_u, splits) => splits.map((v) => formatAxisTick(v, "A")),
-          },
-        ],
+        scales,
+        axes,
         series: [
           {},
           ...plotData.series.map((s) => ({
@@ -244,6 +436,16 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
           })),
         ],
         hooks: {
+          setScale: [
+            (u, scaleKey) => {
+              if (scaleKey !== "x" || syncingScaleRef.current) return;
+              const min = u.scales.x?.min;
+              const max = u.scales.x?.max;
+              if (min !== undefined && max !== undefined) {
+                callbacksRef.current.onXRangeChange?.({ min, max });
+              }
+            },
+          ],
           draw: [
             (u) => {
               const st = stateRef.current;
@@ -257,6 +459,15 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
       const instance = new UPlot(opts, plotData.data, host);
       uplotRef.current = instance;
 
+      if (xRange) {
+        syncingScaleRef.current = true;
+        try {
+          instance.setScale("x", xRange);
+        } finally {
+          syncingScaleRef.current = false;
+        }
+      }
+
       const over = instance.over;
       let draggingCursor: "c1" | "c2" | null = null;
 
@@ -264,12 +475,21 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
         const rect = over.getBoundingClientRect();
         const left = Math.min(Math.max(0, clientX - rect.left), rect.width);
         const xVal = instance.posToVal(left, "x");
-        return nearestIndex(stateRef.current.plotData.xValues, xVal);
+        return nearestIndex(
+          stateRef.current.plotData.xValues,
+          xVal,
+          stateRef.current.plotData.xLog,
+        );
       };
 
       const setCursorIndex = (which: "c1" | "c2", idx: number) => {
-        if (which === "c1") setC1Index(idx);
-        else setC2Index(idx);
+        if (callbacksRef.current.onCursorChange) {
+          callbacksRef.current.onCursorChange(which, idx);
+        } else if (which === "c1") {
+          setLocalC1(idx);
+        } else {
+          setLocalC2(idx);
+        }
       };
 
       const onMouseDown = (e: MouseEvent) => {
@@ -326,6 +546,7 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
           stateRef.current.plotData.xMax,
           anchorX,
           factor,
+          stateRef.current.plotData.xLog,
         );
         instance.setScale("x", next);
       };
@@ -358,28 +579,50 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
       cancelled = true;
       teardown?.();
     };
-    // Rebuild uPlot only when the dataset or color theme changes so toggling traces keeps the zoom.
+    // Rebuild uPlot only when dataset, height, or theme changes so toggling traces preserves zoom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plotData, theme]);
+  }, [plotData, height, theme]);
+
+  // Synchronize external X zoom (used to link Bode Gain and Phase charts).
+  useEffect(() => {
+    const instance = uplotRef.current;
+    if (!instance || !xRange) return;
+    const curMin = instance.scales.x?.min;
+    const curMax = instance.scales.x?.max;
+    if (curMin === xRange.min && curMax === xRange.max) return;
+    syncingScaleRef.current = true;
+    try {
+      instance.setScale("x", xRange);
+    } finally {
+      syncingScaleRef.current = false;
+    }
+  }, [xRange]);
 
   // Resize existing uPlot instance smoothly without losing zoom state.
   useEffect(() => {
     const instance = uplotRef.current;
     if (!instance || boxSize.width <= 0) return;
-    instance.setSize({ width: Math.max(260, Math.floor(boxSize.width)), height: 240 });
-  }, [boxSize.width]);
+    instance.setSize({ width: Math.max(260, Math.floor(boxSize.width)), height });
+  }, [boxSize.width, height]);
 
   // Toggle individual series and Y-axis visibility, and redraw cursors without losing zoom.
   useEffect(() => {
     const instance = uplotRef.current;
     if (!instance) return;
-    if (instance.axes[1]) instance.axes[1].show = hasVisibleVoltage;
-    if (instance.axes[2]) instance.axes[2].show = hasVisibleCurrent;
+    if (plotData.leftAxis && instance.axes[1]) {
+      instance.axes[1].show = hasVisibleLeft;
+    }
+    if (plotData.rightAxis) {
+      const rightAxisIdx = plotData.leftAxis ? 2 : 1;
+      if (instance.axes[rightAxisIdx]) {
+        instance.axes[rightAxisIdx].show = hasVisibleRight;
+      }
+    }
     for (const s of plotData.series) {
       instance.setSeries(s.seriesIndex, { show: visibleNames.has(s.name) }, false);
     }
     instance.redraw(false, true);
-  }, [plotData, visibleNames, hasVisibleVoltage, hasVisibleCurrent, showCursors, c1Index, c2Index]);
+  }, [plotData, visibleNames, hasVisibleLeft, hasVisibleRight, showCursors, c1Index, c2Index]);
 
   const readout = useMemo(
     () => computeCursorReadout(plotData, c1Index, c2Index, visibleNames),
@@ -392,74 +635,26 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 6,
-          fontSize: 12,
-        }}
-      >
-        <button
-          type="button"
-          style={mode === "zoom" ? ACTIVE_BTN : BTN}
-          onClick={() => setMode("zoom")}
-          title="Glisser sur le graphe pour zoomer (ou glisser directement une ligne de curseur)"
-        >
-          Zoom (glisser)
-        </button>
-        {showCursors && (
-          <>
-            <button
-              type="button"
-              style={
-                mode === "c1"
-                  ? { ...ACTIVE_BTN, borderColor: CURSOR_COLORS.c1, color: CURSOR_COLORS.c1 }
-                  : BTN
-              }
-              onClick={() => setMode((m) => (m === "c1" ? "zoom" : "c1"))}
-              title="Cliquer sur le graphe pour placer le curseur 1"
-            >
-              Placer C1
-            </button>
-            <button
-              type="button"
-              style={
-                mode === "c2"
-                  ? { ...ACTIVE_BTN, borderColor: CURSOR_COLORS.c2, color: CURSOR_COLORS.c2 }
-                  : BTN
-              }
-              onClick={() => setMode((m) => (m === "c2" ? "zoom" : "c2"))}
-              title="Cliquer sur le graphe pour placer le curseur 2"
-            >
-              Placer C2
-            </button>
-          </>
-        )}
-        <button type="button" style={BTN} onClick={resetZoom} title="Revenir à toute la durée">
-          Réinitialiser le zoom
-        </button>
-        <button
-          type="button"
-          style={{ ...BTN, marginLeft: "auto" }}
-          aria-pressed={showCursors}
-          onClick={() => {
-            setShowCursors((prev) => {
-              if (prev) setMode("zoom");
+      {showControls && (
+        <PlotToolbar
+          mode={mode}
+          showCursors={showCursors}
+          onModeChange={setLocalMode}
+          onResetZoom={resetZoom}
+          onToggleCursors={() =>
+            setLocalShowCursors((prev) => {
+              if (prev) setLocalMode("zoom");
               return !prev;
-            });
-          }}
-        >
-          {showCursors ? "Masquer les curseurs" : "Afficher les curseurs"}
-        </button>
-      </div>
+            })
+          }
+        />
+      )}
 
       <div
         ref={boxRef}
         style={{
           width: "100%",
-          minHeight: 240,
+          minHeight: height,
           border: `1px solid ${UI.border}`,
           borderRadius: 6,
           background: UI.surface,
@@ -469,64 +664,8 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
         <div ref={chartHostRef} />
       </div>
 
-      {showCursors && (
-        <div style={{ overflowX: "auto" }}>
-          <table
-            aria-label="Mesures des curseurs"
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 12,
-              background: UI.panel,
-              border: `1px solid ${UI.border}`,
-              borderRadius: 6,
-            }}
-          >
-            <thead>
-              <tr style={{ color: UI.muted }}>
-                <th style={{ ...TABLE_CELL, textAlign: "left" }}>Signal</th>
-                <th style={{ ...TABLE_CELL, color: CURSOR_COLORS.c1 }}>Curseur 1</th>
-                <th style={{ ...TABLE_CELL, color: CURSOR_COLORS.c2 }}>Curseur 2</th>
-                <th style={TABLE_CELL}>Écart (Δ)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td style={{ ...TABLE_CELL, textAlign: "left", fontWeight: 600 }}>
-                  {plotData.xLabel}
-                </td>
-                <td style={TABLE_CELL}>{formatSI(readout.x1, plotData.xUnit)}</td>
-                <td style={TABLE_CELL}>{formatSI(readout.x2, plotData.xUnit)}</td>
-                <td style={TABLE_CELL}>
-                  {formatSignedSI(readout.dx, plotData.xUnit)}
-                  {readout.freqHz !== null ? ` (${formatSI(readout.freqHz, "Hz")})` : ""}
-                </td>
-              </tr>
-              {readout.traces.map((t) => (
-                <tr key={t.name}>
-                  <td style={{ ...TABLE_CELL, textAlign: "left" }}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: t.color,
-                        marginRight: 6,
-                      }}
-                    />
-                    {t.name}
-                  </td>
-                  <td style={TABLE_CELL}>{t.v1 !== null ? formatSI(t.v1, t.unit) : "—"}</td>
-                  <td style={TABLE_CELL}>{t.v2 !== null ? formatSI(t.v2, t.unit) : "—"}</td>
-                  <td style={TABLE_CELL}>
-                    {t.delta !== null ? formatSignedSI(t.delta, t.unit) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {showReadout && showCursors && (
+        <CursorReadoutTable xLabel={plotData.xLabel} xUnit={plotData.xUnit} readout={readout} />
       )}
     </div>
   );

@@ -1,10 +1,20 @@
-// Pure data transformation, cursor math, and zoom helpers for simulation plots.
+// Pure data transformation, cursor math, and zoom helpers for simulation plots (.tran, .ac, .dc).
 
+import type { CSSProperties } from "react";
 import type uPlot from "uplot";
 
 import type { SimulationResult } from "../api/client";
+import { UI } from "../store";
 
-/** High-contrast color palette for traces on a white background. */
+export const PLOT_TABLE_CELL: CSSProperties = {
+  padding: "3px 8px",
+  borderBottom: `1px solid ${UI.border}`,
+  textAlign: "right",
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+};
+
+/** High-contrast color palette for traces on light and dark backgrounds. */
 export const TRACE_COLORS = [
   "#2563eb", // blue
   "#dc2626", // red
@@ -21,19 +31,29 @@ export const CURSOR_COLORS = {
   c2: "#d97706",
 } as const;
 
+export type PlotUnit = "V" | "A" | "dB" | "°";
+
+export interface PlotAxisMeta {
+  scale: PlotUnit;
+  label: string;
+}
+
 export interface PlotSeriesMeta {
   /** Index in `uPlot.AlignedData` (1-based, since index 0 is the X axis). */
   seriesIndex: number;
   name: string;
   kind: "voltage" | "current";
-  unit: "V" | "A";
+  unit: PlotUnit;
   color: string;
 }
 
 export interface TranPlotData {
   xLabel: string;
   xUnit: string;
+  xLog: boolean;
   xValues: number[];
+  leftAxis: PlotAxisMeta | null;
+  rightAxis: PlotAxisMeta | null;
   series: PlotSeriesMeta[];
   data: uPlot.AlignedData;
   xMin: number;
@@ -42,9 +62,14 @@ export interface TranPlotData {
   hasCurrent: boolean;
 }
 
+export interface BodePlotData {
+  gain: TranPlotData;
+  phase: TranPlotData;
+}
+
 export interface CursorTraceDelta {
   name: string;
-  unit: "V" | "A";
+  unit: PlotUnit;
   color: string;
   v1: number | null;
   v2: number | null;
@@ -65,28 +90,50 @@ function axisLabelFor(name: string, unit: string): string {
 }
 
 /**
- * Convert a `SimulationResult` into aligned arrays and series metadata for uPlot.
+ * Align `(x, yArrays)` to a common length and reverse all arrays if `x` is descending
+ * (e.g. a decreasing `.dc` sweep), since uPlot and binary search require ascending X.
+ */
+function normalizeOrderedArrays<T>(
+  axisValues: readonly number[],
+  yArrays: readonly (readonly T[])[],
+): { xValues: number[]; yArrays: T[][] } | null {
+  let pointCount = axisValues.length;
+  for (const arr of yArrays) {
+    pointCount = Math.min(pointCount, arr.length);
+  }
+  if (pointCount === 0) return null;
+
+  const xValues = axisValues.slice(0, pointCount);
+  const alignedY = yArrays.map((arr) => arr.slice(0, pointCount));
+
+  if (pointCount >= 2 && (xValues[pointCount - 1] ?? 0) < (xValues[0] ?? 0)) {
+    xValues.reverse();
+    for (const arr of alignedY) arr.reverse();
+  }
+  return { xValues, yArrays: alignedY };
+}
+
+/**
+ * Convert a `.tran` or `.dc` `SimulationResult` into aligned arrays and series metadata for uPlot.
  * Returns `null` when there is no axis or no plottable points.
  */
-export function buildTranPlotData(result: SimulationResult): TranPlotData | null {
+export function buildPlotData(result: SimulationResult): TranPlotData | null {
   const traces = result.traces ?? [];
   if (!result.axis || result.axis.values.length === 0 || traces.length === 0) {
     return null;
   }
 
-  const axisValues = result.axis.values;
-  let pointCount = axisValues.length;
-  for (const trace of traces) {
-    pointCount = Math.min(pointCount, trace.values.length);
-  }
-  if (pointCount === 0) return null;
+  const normalized = normalizeOrderedArrays(
+    result.axis.values,
+    traces.map((t) => t.values),
+  );
+  if (!normalized) return null;
 
-  const xValues = axisValues.slice(0, pointCount);
+  const { xValues, yArrays } = normalized;
   const xMin = xValues[0] ?? 0;
   const xMax = xValues[xValues.length - 1] ?? xMin;
 
   const series: PlotSeriesMeta[] = [];
-  const yArrays: number[][] = [];
   let hasVoltage = false;
   let hasCurrent = false;
 
@@ -101,13 +148,15 @@ export function buildTranPlotData(result: SimulationResult): TranPlotData | null
       unit,
       color: TRACE_COLORS[idx % TRACE_COLORS.length] ?? "#2563eb",
     });
-    yArrays.push(trace.values.slice(0, pointCount));
   });
 
   return {
     xLabel: axisLabelFor(result.axis.name, result.axis.unit),
     xUnit: result.axis.unit,
+    xLog: false,
     xValues,
+    leftAxis: hasVoltage ? { scale: "V", label: "Tension (V)" } : null,
+    rightAxis: hasCurrent ? { scale: "A", label: "Courant (A)" } : null,
     series,
     data: [xValues, ...yArrays],
     xMin,
@@ -117,11 +166,129 @@ export function buildTranPlotData(result: SimulationResult): TranPlotData | null
   };
 }
 
+/** Alias kept for backwards compatibility with `.tran` callers. */
+export const buildTranPlotData = buildPlotData;
+
+/**
+ * Convert an `.ac` `SimulationResult` into linked Gain (dB) and Phase (°) datasets
+ * on a logarithmic frequency axis. Phase is unwrapped across adjacent frequencies.
+ */
+export function buildBodePlotData(result: SimulationResult): BodePlotData | null {
+  const traces = result.traces ?? [];
+  if (!result.axis || result.axis.values.length === 0 || traces.length === 0) {
+    return null;
+  }
+
+  let pointCount = result.axis.values.length;
+  for (const trace of traces) {
+    pointCount = Math.min(pointCount, trace.values.length);
+  }
+  if (pointCount === 0) return null;
+
+  // Keep only strictly positive frequencies because log10(f) requires f > 0.
+  const rawX = result.axis.values.slice(0, pointCount);
+  const indices: number[] = [];
+  for (let i = 0; i < pointCount; i++) {
+    const f = rawX[i];
+    if (typeof f === "number" && Number.isFinite(f) && f > 0) indices.push(i);
+  }
+  if (indices.length === 0) return null;
+
+  if (indices.length >= 2 && (rawX[indices[indices.length - 1]!] ?? 0) < (rawX[indices[0]!] ?? 0)) {
+    indices.reverse();
+  }
+
+  const xValues = indices.map((i) => rawX[i]!);
+  const xMin = xValues[0] ?? 1;
+  const xMax = xValues[xValues.length - 1] ?? xMin;
+  const xLabel = axisLabelFor(result.axis.name, result.axis.unit);
+
+  const gainArrays: (number | null)[][] = [];
+  const phaseArrays: (number | null)[][] = [];
+  const gainSeries: PlotSeriesMeta[] = [];
+  const phaseSeries: PlotSeriesMeta[] = [];
+
+  traces.forEach((trace, idx) => {
+    const color = TRACE_COLORS[idx % TRACE_COLORS.length] ?? "#2563eb";
+    const imag = trace.imag ?? [];
+    const gains: (number | null)[] = [];
+    const phases: (number | null)[] = [];
+    let prevPhase: number | null = null;
+
+    for (const i of indices) {
+      const re = trace.values[i] ?? 0;
+      const im = imag[i] ?? 0;
+      const mag = Math.hypot(re, im);
+      if (mag <= 0 || !Number.isFinite(mag)) {
+        gains.push(null);
+        phases.push(null);
+        continue;
+      }
+      gains.push(20 * Math.log10(mag));
+      let deg = (Math.atan2(im, re) * 180) / Math.PI;
+      if (prevPhase !== null) {
+        while (deg - prevPhase > 180) deg -= 360;
+        while (deg - prevPhase < -180) deg += 360;
+      }
+      prevPhase = deg;
+      phases.push(deg);
+    }
+
+    gainArrays.push(gains);
+    phaseArrays.push(phases);
+    gainSeries.push({
+      seriesIndex: idx + 1,
+      name: trace.name,
+      kind: trace.kind,
+      unit: "dB",
+      color,
+    });
+    phaseSeries.push({
+      seriesIndex: idx + 1,
+      name: trace.name,
+      kind: trace.kind,
+      unit: "°",
+      color,
+    });
+  });
+
+  return {
+    gain: {
+      xLabel,
+      xUnit: result.axis.unit,
+      xLog: true,
+      xValues,
+      leftAxis: { scale: "dB", label: "Gain (dB)" },
+      rightAxis: null,
+      series: gainSeries,
+      data: [xValues, ...gainArrays],
+      xMin,
+      xMax,
+      hasVoltage: true,
+      hasCurrent: false,
+    },
+    phase: {
+      xLabel,
+      xUnit: result.axis.unit,
+      xLog: true,
+      xValues,
+      leftAxis: { scale: "°", label: "Phase (°)" },
+      rightAxis: null,
+      series: phaseSeries,
+      data: [xValues, ...phaseArrays],
+      xMin,
+      xMax,
+      hasVoltage: true,
+      hasCurrent: false,
+    },
+  };
+}
+
 /**
  * Return the index of the sample in sorted ascending `xValues` closest to `targetX`.
- * Returns `0` for single-element or empty arrays.
+ * When `log` is true, distances are compared in log10 space (for Bode frequency axes).
  */
-export function nearestIndex(xValues: readonly number[], targetX: number): number {
+export function nearestIndex(xValues: readonly number[], targetX: number, log = false): number {
   const n = xValues.length;
   if (n <= 1) return 0;
   if (targetX <= (xValues[0] ?? 0)) return 0;
@@ -137,9 +304,14 @@ export function nearestIndex(xValues: readonly number[], targetX: number): numbe
       hi = mid;
     }
   }
-  const dLo = Math.abs(targetX - (xValues[lo] ?? 0));
-  const dHi = Math.abs((xValues[hi] ?? 0) - targetX);
-  return dLo <= dHi ? lo : hi;
+  const xLo = xValues[lo] ?? 0;
+  const xHi = xValues[hi] ?? 0;
+  if (log && targetX > 0 && xLo > 0 && xHi > 0) {
+    const dLo = Math.abs(Math.log10(targetX) - Math.log10(xLo));
+    const dHi = Math.abs(Math.log10(xHi) - Math.log10(targetX));
+    return dLo <= dHi ? lo : hi;
+  }
+  return Math.abs(targetX - xLo) <= Math.abs(xHi - targetX) ? lo : hi;
 }
 
 /**
@@ -184,7 +356,7 @@ export function computeCursorReadout(
 
 /**
  * Compute new `[min, max]` X bounds when zooming by `factor` (< 1 zooms in, > 1 zooms out)
- * around `anchorX`, clamped to `[dataMin, dataMax]`.
+ * around `anchorX`, clamped to `[dataMin, dataMax]`. Works in log10 space when `log` is true.
  */
 export function computeZoomBounds(
   currentMin: number,
@@ -193,7 +365,18 @@ export function computeZoomBounds(
   dataMax: number,
   anchorX: number,
   factor: number,
+  log = false,
 ): { min: number; max: number } {
+  if (log && dataMin > 0 && currentMin > 0 && currentMax > 0 && anchorX > 0) {
+    const lDataMin = Math.log10(dataMin);
+    const lDataMax = Math.log10(dataMax);
+    const lCurMin = Math.log10(currentMin);
+    const lCurMax = Math.log10(currentMax);
+    const lAnchor = Math.log10(anchorX);
+    const res = computeZoomBounds(lCurMin, lCurMax, lDataMin, lDataMax, lAnchor, factor, false);
+    return { min: 10 ** res.min, max: 10 ** res.max };
+  }
+
   const fullSpan = dataMax - dataMin;
   if (fullSpan <= 0) return { min: dataMin, max: dataMax };
 
