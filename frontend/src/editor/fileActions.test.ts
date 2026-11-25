@@ -157,6 +157,50 @@ describe("saving with the system file dialogs", () => {
     expect(alert).not.toHaveBeenCalled();
   });
 
+  it("tells whether the schematic was saved (#238)", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    // Dialog closed: not saved.
+    showSaveFilePicker.mockRejectedValueOnce(abort());
+    expect(await f.saveFile()).toBe(false);
+    expect(f.isUnsaved(f.state())).toBe(true);
+
+    // First save asks where, the next one writes to the same file.
+    expect(await f.saveFile()).toBe(true);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    expect(await f.saveFile()).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+
+    // The file cannot be written any more, nor the one picked instead: not saved, user told.
+    handle.createWritable = async () => {
+      throw new DOMException("read-only", "NoModificationAllowedError");
+    };
+    f.state().dropComponent("capacitor", { x: 4, y: 0 });
+    expect(await f.saveFile()).toBe(false);
+    expect(alert).toHaveBeenCalledOnce();
+    expect(f.isUnsaved(f.state())).toBe(true);
+  });
+
+  it("waits for the save in progress instead of saving twice", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    let pick: (h: typeof handle) => void = () => {};
+    showSaveFilePicker.mockImplementationOnce(() => new Promise((r) => (pick = r)));
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    const first = f.saveFile();
+    const second = f.saveFile();
+    pick(handle);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(handle.written).toHaveLength(1);
+  });
+
   it("saves a rescue copy in a new file, without marking the document saved", async () => {
     const f = await load();
     const handle = fakeHandle("schema-recupere.psice.json");
@@ -218,8 +262,9 @@ describe("without the file dialogs (other browsers)", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     f.state().dropComponent("resistor", { x: 0, y: 0 });
 
-    f.saveFile();
+    const saved = f.saveFile();
     expect(click).toHaveBeenCalledOnce();
+    expect(await saved).toBe(true);
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe(f.DEFAULT_FILE_NAME);
     expect(f.isUnsaved(f.state())).toBe(false);
