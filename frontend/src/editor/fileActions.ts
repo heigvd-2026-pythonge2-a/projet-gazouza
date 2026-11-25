@@ -14,6 +14,7 @@ import {
   serializeDoc,
   useEditorStore,
 } from "../store";
+import { exampleContent } from "./examples";
 import { exportImage as renderImage, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
@@ -74,6 +75,19 @@ function canDiscardChanges(): boolean {
 export function newFile() {
   if (!canDiscardChanges()) return;
   useEditorStore.getState().newDocument();
+  currentFile = null;
+}
+
+/**
+ * Opens an example circuit of the Examples menu (#226) with its analysis set in the toolbar. It is
+ * not tied to a file: saving it asks where, so the example itself is never overwritten.
+ */
+export function openExample(name: string) {
+  const example = exampleContent(name);
+  if (!example || !canDiscardChanges()) return;
+  const store = useEditorStore.getState();
+  store.openDocument(example.doc);
+  store.setAnalysis(example.analysis);
   currentFile = null;
 }
 

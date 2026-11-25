@@ -9,7 +9,8 @@ import {
   useEditorStore,
 } from "../store";
 import { resetEditorStore } from "../test/editorStore";
-import { analysisSettings, loadDemo, spiceNumber } from "./demo";
+import { loadDemo } from "./demo";
+import { analysisSettings, spiceNumber } from "./examples";
 
 beforeEach(resetEditorStore);
 
