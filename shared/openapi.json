@@ -250,6 +250,28 @@
             "type": "object",
             "title": "Params",
             "description": "Parameter values as typed by the user, SPICE suffixes allowed (e.g. {'resistance': '1k'}). For a label: {'net': 'out'}."
+          },
+          "name_offset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOffset"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Position of the name (or of a label's net name), set by hand. Absent: placed automatically."
+          },
+          "value_offset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TextOffset"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Position of the value, set by hand. Absent: placed automatically."
           }
         },
         "type": "object",
@@ -792,6 +814,14 @@
             },
             "type": "array",
             "title": "Wires"
+          },
+          "texts": {
+            "items": {
+              "$ref": "#/components/schemas/Text"
+            },
+            "type": "array",
+            "title": "Texts",
+            "description": "Ignored by the netlist."
           }
         },
         "type": "object",
@@ -886,6 +916,52 @@
           "analysis"
         ],
         "title": "SimulationResult"
+      },
+      "Text": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Stable unique id (e.g. 't1')."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Point",
+            "description": "Top-left corner of the text."
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Content",
+            "description": "Text as typed, line breaks included."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "position",
+          "content"
+        ],
+        "title": "Text",
+        "description": "Free text on the schematic (title, note...). Decorative only: the netlist ignores it."
+      },
+      "TextOffset": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y"
+          }
+        },
+        "type": "object",
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "TextOffset",
+        "description": "Where a text of a component is drawn, relative to the component, in grid units.\n\nThe offset points to the centre of the text, in the component's own frame (before the\nmirror and the rotation): a text placed by hand turns with its component and stays on the\nsame side of it, while the text itself is always drawn upright. The editor snaps it to half\na grid step."
       },
       "Trace": {
         "properties": {
