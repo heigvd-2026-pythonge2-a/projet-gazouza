@@ -85,12 +85,12 @@ const OPAMP_BODY: SymbolShape[] = [
  * the same box (x from 0 to 2, y from -0.5 to 0.5), so the caption and the bounds do not move when
  * the direction changes. An input points to its pin (the signal comes in), an output away from it.
  */
-export const LABEL_FLAGS: Readonly<Record<string, SymbolShape[]>> = {
+export const LABEL_FLAGS = {
   none: [{ kind: "line", points: [0, 0, 0, -0.5, 2, -0.5, 2, 0.5, 0, 0.5, 0, 0] }],
   input: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
   output: [{ kind: "line", points: [0, 0, 0, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0, 0.5, 0, 0] }],
   bidir: [{ kind: "line", points: [0, 0, 0.5, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0.5, 0.5, 0, 0] }],
-};
+} as const satisfies Record<string, SymbolShape[]>;
 
 /** Envelope of the transistors (IEC 60617 draws it, and beginners know it from textbooks). */
 const TRANSISTOR_ENVELOPE: SymbolShape = { kind: "circle", x: 0.25, y: 0, radius: 1.2 };
@@ -309,7 +309,8 @@ export function mainParam(def: ComponentDef, params: Record<string, string>): Pa
  */
 export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
   if (def.type !== "label") return def.symbol;
-  return LABEL_FLAGS[params.direction ?? "none"] ?? def.symbol;
+  const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
+  return flags[params.direction ?? "none"] ?? def.symbol;
 }
 
 export interface Bounds {
