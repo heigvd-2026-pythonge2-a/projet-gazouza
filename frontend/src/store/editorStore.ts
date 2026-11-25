@@ -265,6 +265,16 @@ function freshDocument(doc: EditorDoc) {
   };
 }
 
+/**
+ * The analysis kept for another document: its settings, but not the sources chosen for `.ac` and
+ * `.dc`, whose ids may name another source there (the first one is taken instead).
+ */
+const forgetSources = (s: Pick<EditorState, "analysis">): AnalysisSettings => ({
+  ...s.analysis,
+  acSource: "",
+  dcSource: "",
+});
+
 /** True if the document has changes that were not saved. */
 export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
   s.doc !== s.savedDoc;
@@ -464,9 +474,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setShowValues: (show) => set({ showValues: show }),
 
-  newDocument: () => set(freshDocument(emptyDoc())),
+  newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
-  openDocument: (doc) => set(freshDocument(doc)),
+  openDocument: (doc) => set((s) => ({ ...freshDocument(doc), analysis: forgetSources(s) })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 

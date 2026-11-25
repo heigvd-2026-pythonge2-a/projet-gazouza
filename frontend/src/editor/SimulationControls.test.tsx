@@ -42,8 +42,29 @@ describe("SimulationControls (#222)", () => {
     render(<SimulationControls />);
 
     await user.selectOptions(screen.getByLabelText("Analyse"), "dc");
-    expect(screen.getByLabelText("Pas du balayage (A)")).toHaveValue("100m");
-    expect(analysisOf()).toMatchObject({ analysis: { kind: "dc", start: 0, stop: 5, step: 0.1 } });
+    expect(screen.getByLabelText("Pas du balayage (A)")).toHaveValue("100u");
+    expect(analysisOf()).toMatchObject({
+      analysis: { kind: "dc", start: 0, stop: 0.01, step: 1e-4 },
+    });
+  });
+
+  it("gives the default range of its unit to another swept source, unless it was typed", async () => {
+    const user = userEvent.setup();
+    dropComponent("voltage_source");
+    const i1 = dropComponent("current_source", { x: 6, y: 0 });
+    render(<SimulationControls />);
+
+    await user.selectOptions(screen.getByLabelText("Analyse"), "dc");
+    const source = screen.getByLabelText("Source balayée");
+    expect(screen.getByLabelText("Valeur de fin (V)")).toHaveValue("5");
+    await user.selectOptions(source, i1.id);
+    expect(screen.getByLabelText("Valeur de fin (A)")).toHaveValue("10m");
+
+    const stop = screen.getByLabelText("Valeur de fin (A)");
+    await user.clear(stop);
+    await user.type(stop, "50m");
+    await user.selectOptions(source, editorState().doc.components[0]!.id);
+    expect(screen.getByLabelText("Valeur de fin (V)")).toHaveValue("50m");
   });
 
   it("offers no source to choose when the schematic has none", async () => {

@@ -287,6 +287,20 @@ describe("files and simulation", () => {
     expect(isUnsaved(store())).toBe(false);
   });
 
+  it("keeps the analysis on New and Open, but not the sources chosen in the old document", () => {
+    store().setAnalysis({ kind: "ac", acStop: "1Meg", acSource: "c1", dcSource: "c1" });
+    store().openDocument(fixtureDoc("rc_tran"));
+    expect(store().analysis).toMatchObject({
+      kind: "ac",
+      acStop: "1Meg",
+      acSource: "",
+      dcSource: "",
+    });
+    store().setAnalysis({ dcSource: "c1" });
+    store().newDocument();
+    expect(store().analysis.dcSource).toBe("");
+  });
+
   it("only shows a result while the document it was run on is shown", () => {
     store().openDocument(fixtureDoc("divider_op"));
     const result: SimulationResult = fixtureResult("divider_op");
