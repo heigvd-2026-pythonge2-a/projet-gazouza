@@ -5,6 +5,9 @@ on:
     branches: ["main"]
     paths:
       - "website/**"
+      # The site embeds a demo of the app ("Essayer en ligne"), rebuilt with the frontend.
+      - "frontend/**"
+      - "shared/fixtures/**"
       - ".github/workflows/pages.yml"
   # Pull requests build the site in ci.yml (job "Site web"), behind the "CI OK" check.
   workflow_dispatch:
@@ -35,7 +38,16 @@ jobs:
         with:
           node-version: "24"
           cache: "pnpm"
-          cache-dependency-path: website/pnpm-lock.yaml
+          cache-dependency-path: |
+            website/pnpm-lock.yaml
+            frontend/pnpm-lock.yaml
+
+      # Online demo of the app, built into website/public/demo/ (served at /demo/).
+      - name: Build de la démo de l'app
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build:demo
 
       - name: Install dependencies
         working-directory: website

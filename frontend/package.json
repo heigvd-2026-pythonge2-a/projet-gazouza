@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "vite build --mode demo --base ./ --outDir ../website/public/demo --emptyOutDir",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -22,6 +23,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-konva": "^19.3.2",
+    "uplot": "^1.6.32",
     "zustand": "^5.1.0"
   },
   "devDependencies": {

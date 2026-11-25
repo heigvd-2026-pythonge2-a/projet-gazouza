@@ -12,7 +12,7 @@ import {
   type SymbolShape,
 } from "../store";
 import { arcPoints } from "./symbolGeometry";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 const STROKE = 2;
 const TEXT_WIDTH = 80;
@@ -117,14 +117,22 @@ interface ComponentSymbolProps {
   onSelect?: (e: KonvaEventObject<MouseEvent>) => void;
   /** Right press on the component (the canvas decides on release what it means). */
   onContextPress?: () => void;
-  /** While dragging: the grid position the component would be dropped at. */
-  onDrag?: (position: { x: number; y: number }) => void;
-  /** End of a drag, with the grid position the component was dropped at. */
-  onMove?: (position: { x: number; y: number }) => void;
+  /**
+   * While dragging: the grid position the component would be dropped at, and whether Ctrl is
+   * held (move without the wires).
+   */
+  onDrag?: (position: { x: number; y: number }, detach: boolean) => void;
+  /** End of a drag, with the grid position the component was dropped at (and Ctrl, as above). */
+  onMove?: (position: { x: number; y: number }, detach: boolean) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /**
+   * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
+   * ones, so a connected pin does not leave a square behind.
+   */
+  markedPins?: ReadonlySet<string>;
 }
 
 /**
@@ -142,9 +150,11 @@ export function ComponentSymbol({
   onMove,
   onPinMouseDown,
   onDoubleClick,
+  markedPins,
 }: ComponentSymbolProps) {
+  const colors = useCanvasColors();
   const def = getDef(c.type);
-  const color = selected ? COLORS.selected : COLORS.symbol;
+  const color = selected ? colors.selected : colors.symbol;
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
@@ -170,14 +180,17 @@ export function ComponentSymbol({
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: snap(node.x()), y: snap(node.y()) });
-        onDrag?.({ x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) });
+        onDrag?.(
+          { x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) },
+          e.evt.ctrlKey || e.evt.metaKey,
+        );
       }}
       onDragEnd={(e) => {
         const node = e.target;
         const position = { x: Math.round(node.x() / GRID), y: Math.round(node.y() / GRID) };
         // Force the node onto the grid even if the store value does not change.
         node.position({ x: position.x * GRID, y: position.y * GRID });
-        onMove?.(position);
+        onMove?.(position, e.evt.ctrlKey || e.evt.metaKey);
       }}
     >
       <Group rotation={c.rotation} scaleX={c.mirror ? -1 : 1}>
@@ -188,25 +201,27 @@ export function ComponentSymbol({
           width={(bounds.max.x - bounds.min.x + 2 * pad) * GRID}
           height={(bounds.max.y - bounds.min.y + 2 * pad) * GRID}
           fill="rgba(0,0,0,0)"
-          stroke={selected ? COLORS.selected : undefined}
+          stroke={selected ? colors.selected : undefined}
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
         {def.symbol.map((shape, i) => (
           <SymbolShapeNode key={i} shape={shape} color={color} />
         ))}
-        {def.pins.map((pin) => (
-          <Rect
-            key={pin.name}
-            x={(pin.x - PIN_SIZE / 2) * GRID}
-            y={(pin.y - PIN_SIZE / 2) * GRID}
-            width={PIN_SIZE * GRID}
-            height={PIN_SIZE * GRID}
-            stroke={COLORS.pin}
-            strokeWidth={1}
-            listening={false}
-          />
-        ))}
+        {def.pins
+          .filter((pin) => !markedPins || markedPins.has(pin.name))
+          .map((pin) => (
+            <Rect
+              key={pin.name}
+              x={(pin.x - PIN_SIZE / 2) * GRID}
+              y={(pin.y - PIN_SIZE / 2) * GRID}
+              width={PIN_SIZE * GRID}
+              height={PIN_SIZE * GRID}
+              stroke={colors.pin}
+              strokeWidth={1}
+              listening={false}
+            />
+          ))}
         {onPinMouseDown &&
           def.pins.map((pin) => (
             <Rect
@@ -236,7 +251,7 @@ export function ComponentSymbol({
           width={TEXT_WIDTH}
           align={textBox.align}
           fontSize={FONT_SIZE}
-          fill={selected ? COLORS.selected : COLORS.text}
+          fill={selected ? colors.selected : colors.text}
           listening={false}
         />
       )}

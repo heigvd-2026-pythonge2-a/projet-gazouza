@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from collections import deque
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,7 +32,7 @@ from app.models.simulation import (
 
 DEFAULT_TIMEOUT_SECONDS: float = 10.0
 MAX_NETLIST_BYTES: int = 1_048_576
-MAX_RAWFILE_BYTES: int = 50 * 1024 * 1024
+MAX_RAWFILE_BYTES: int = 200 * 1024 * 1024
 
 _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
@@ -70,6 +70,23 @@ _ANALYSIS_KIND_TO_DIRECTIVE: dict[str, str] = {
 _MODEL_TYPE_RE = re.compile(r"^[a-z0-9_]+")
 _AC_EXCITATION_TOKEN_RE = re.compile(r"\bac\b", re.IGNORECASE)
 _NGSPICE_DEFAULT_PARAM_WARNING = "warning, ngspice assumes default parameter(s)"
+_SPICE_SUFFIX_MULTIPLIERS: dict[str, float] = {
+    "f": 1e-15,
+    "p": 1e-12,
+    "n": 1e-9,
+    "u": 1e-6,
+    "m": 1e-3,
+    "k": 1e3,
+    "meg": 1e6,
+    "g": 1e9,
+    "t": 1e12,
+}
+_SPICE_NUMBER_RE = re.compile(
+    r"^(?P<number>[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)"
+    r"(?P<suffix>meg|[fpnumkgt])?"
+    r"(?P<unit>ohm|hz|v|a|s|h|f)?$",
+    re.IGNORECASE,
+)
 
 
 class UnsafeNetlistError(ValueError):
@@ -110,54 +127,89 @@ def _error_result(
     )
 
 
-def _validate_save_component_name(spice_name: str) -> None:
-    """Reject SPICE component names containing whitespace, control chars, or ';'."""
-    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 or ch == ";" for ch in spice_name):
+def _validate_save_identifier(identifier: str, *, en_kind: str, fr_kind: str) -> None:
+    """Reject empty SPICE identifiers or those containing whitespace, control chars, or ';()'."""
+    if not identifier or any(
+        ch.isspace() or ord(ch) < 32 or ord(ch) == 127 or ch in ";()" for ch in identifier
+    ):
         raise UnsafeNetlistError(
-            f"Unsafe SPICE component name for .save: {spice_name!r}.",
+            f"Unsafe SPICE {en_kind} name for .save: {identifier!r}.",
             user_message=(
-                "Un nom de composant SPICE contient des caractères interdits "
+                f"Un nom de {fr_kind} SPICE contient des caractères interdits "
                 "pour des raisons de sécurité."
             ),
         )
 
 
+def _validate_save_component_name(spice_name: str) -> None:
+    """Reject SPICE component names containing unsafe characters."""
+    _validate_save_identifier(spice_name, en_kind="component", fr_kind="composant")
+
+
+def _non_vl_current_save_token(comp_lower: str) -> str | None:
+    """Return the ngspice @comp[...] .save token for non-V/L 2-pin elements, or None."""
+    # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
+    # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
+    if comp_lower.startswith(("r", "c")):
+        return f"@{comp_lower}[i]"
+    if comp_lower.startswith("d"):
+        return f"@{comp_lower}[id]"
+    if comp_lower.startswith("i"):
+        return f"@{comp_lower}[c]"
+    return None
+
+
 def _collect_save_tokens(
-    components: dict[str, str],
+    components: Mapping[str, str],
     existing_tokens: set[str],
     *,
+    nets: Mapping[str, list[str]] | None = None,
     is_ac: bool = False,
+    current_aliases: Mapping[str, str] | None = None,
 ) -> list[str]:
     """Build missing .save tokens for node voltages and component branch currents."""
     needed: list[str] = []
     seen = set(existing_tokens)
 
-    if "all" not in seen:
-        needed.append("all")
-        seen.add("all")
+    def _add(token: str) -> None:
+        if token not in seen:
+            needed.append(token)
+            seen.add(token)
 
-    if is_ac:
-        # In .ac, ngspice ignores/warns on @comp[i]; only V*/L* branch currents are
-        # computed natively, and other 2-terminal components use 0V sense sources.
-        return needed
+    has_explicit_nets = bool(nets)
+    if has_explicit_nets:
+        assert nets is not None
+        for net_name in nets:
+            _validate_save_identifier(net_name, en_kind="net", fr_kind="nœud")
+            if net_name != "0":
+                _add(f"v({net_name.lower()})")
+    else:
+        _add("all")
+
+    sense_by_component: dict[str, str] = {}
+    if has_explicit_nets and is_ac and current_aliases:
+        for sense_source, target_spice in current_aliases.items():
+            _validate_save_component_name(sense_source)
+            sense_by_component[target_spice.strip().lower()] = sense_source.strip().lower()
 
     for spice_name in components:
         _validate_save_component_name(spice_name)
         comp_lower = spice_name.lower()
-        # Voltage sources and inductors are already saved by `all` as `i(v*)` / `i(l*)`.
-        # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
-        # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
-        if comp_lower.startswith(("r", "c")):
-            token = f"@{comp_lower}[i]"
-        elif comp_lower.startswith("d"):
-            token = f"@{comp_lower}[id]"
-        elif comp_lower.startswith("i"):
-            token = f"@{comp_lower}[c]"
-        else:
+        if comp_lower.startswith(("v", "l")):
+            if has_explicit_nets:
+                _add(f"i({comp_lower})")
             continue
-        if token not in seen:
-            needed.append(token)
-            seen.add(token)
+        if is_ac:
+            # In .ac, ngspice ignores/warns on @comp[i]; non-V/L elements use 0V sense sources
+            # (already captured by `all` when `nets` is empty).
+            if (
+                has_explicit_nets
+                and (sense_source := sense_by_component.get(comp_lower)) is not None
+            ):
+                _add(f"i({sense_source})")
+            continue
+        if (token := _non_vl_current_save_token(comp_lower)) is not None:
+            _add(token)
 
     return needed
 
@@ -537,18 +589,42 @@ def _format_analysis_directive(
     return f".dc {source_name} {start} {stop} {step}"
 
 
+def _parse_spice_number(token: str) -> float | None:
+    """Parse a SPICE numeric token (with optional SI suffix/unit) into a finite float."""
+    match = _SPICE_NUMBER_RE.fullmatch(token.strip())
+    if match is None:
+        return None
+    value = float(match["number"])
+    suffix = match["suffix"]
+    if suffix is not None:
+        value *= _SPICE_SUFFIX_MULTIPLIERS[suffix.lower()]
+    if not math.isfinite(value):
+        return None
+    return 0.0 if value == 0.0 else value
+
+
 def _normalize_dc_step_line(tokens: list[str]) -> str | None:
-    """Negate a positive .dc step token for descending sweeps (start > stop)."""
+    """Flip the .dc step sign when netlist bounds and step polarity disagree."""
     if len(tokens) < 5:
         return None
+    netlist_start = _parse_spice_number(tokens[2])
+    netlist_stop = _parse_spice_number(tokens[3])
+    if netlist_start is None or netlist_stop is None or netlist_start == netlist_stop:
+        return None
+
     step_val, sep, comment_tail = tokens[4].partition(";")
-    if not step_val or step_val.startswith("-"):
+    step_num = _parse_spice_number(step_val)
+    if step_num is None or step_num == 0.0:
         return None
-    unsigned = step_val.lstrip("+")
-    if not unsigned or not any(ch in "123456789" for ch in unsigned):
+
+    if netlist_start > netlist_stop and step_num > 0.0:
+        normalized_step = f"-{step_val.lstrip('+')}"
+    elif netlist_start < netlist_stop and step_num < 0.0:
+        normalized_step = step_val.lstrip("-")
+    else:
         return None
-    negated_step = f"-{unsigned}{sep}{comment_tail}"
-    return " ".join([*tokens[:4], negated_step, *tokens[5:]])
+
+    return " ".join([*tokens[:4], f"{normalized_step}{sep}{comment_tail}", *tokens[5:]])
 
 
 def _append_ac_excitation_to_block(
@@ -614,8 +690,10 @@ def _collect_existing_identifiers(
 
 
 def _validate_netlist_and_components_safety(netlist_result: NetlistResult) -> None:
-    """Validate both netlist lines and component keys against SPICE injection rules."""
+    """Validate netlist lines, net keys, and component keys against SPICE injection rules."""
     validate_netlist_safety(netlist_result.netlist)
+    for net_name in netlist_result.nets:
+        _validate_save_identifier(net_name, en_kind="net", fr_kind="nœud")
     for spice_name in netlist_result.components:
         _validate_save_component_name(spice_name)
 
@@ -642,7 +720,6 @@ def _prepare_netlist_for_execution(
         blocks = _blocks
 
     is_ac = isinstance(analysis, AcAnalysis)
-    is_descending_dc = isinstance(analysis, DcAnalysis) and analysis.start > analysis.stop
     ac_source_lower: str | None = None
     used_nodes_lower: set[str] = set()
     used_components_lower: set[str] = set()
@@ -693,7 +770,7 @@ def _prepare_netlist_for_execution(
 
         if base_token in _ANALYSIS_DIRECTIVES:
             has_analysis_directive = True
-            if is_descending_dc and base_token == ".dc":
+            if base_token == ".dc" and (analysis is None or isinstance(analysis, DcAnalysis)):
                 rewritten_dc = _normalize_dc_step_line(tokens)
                 if rewritten_dc is not None:
                     body_lines.append(rewritten_dc)
@@ -748,7 +825,9 @@ def _prepare_netlist_for_execution(
     save_tokens = _collect_save_tokens(
         netlist_result.components,
         existing_save_tokens,
+        nets=netlist_result.nets,
         is_ac=is_ac,
+        current_aliases=current_aliases,
     )
     body_lines.extend(_format_save_lines(save_tokens))
     body_lines.append(".end")

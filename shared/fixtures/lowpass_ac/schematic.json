@@ -25,7 +25,7 @@
         "x": 4,
         "y": -2
       },
-      "rotation": 90,
+      "rotation": 270,
       "mirror": false,
       "params": {
         "resistance": "1k"
@@ -106,12 +106,7 @@
         "comp": "c2",
         "pin": "1"
       },
-      "points": [
-        {
-          "x": 0,
-          "y": -2
-        }
-      ]
+      "points": []
     },
     {
       "id": "w2",
@@ -123,12 +118,7 @@
         "comp": "c3",
         "pin": "1"
       },
-      "points": [
-        {
-          "x": 8,
-          "y": -2
-        }
-      ]
+      "points": []
     },
     {
       "id": "w3",

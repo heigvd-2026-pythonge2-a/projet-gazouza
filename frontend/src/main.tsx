@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { LibraryGate } from "./editor";
+import { installTheme } from "./store";
+
+// Before the first render, so the night-blue theme never flashes white.
+installTheme();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root element not found");

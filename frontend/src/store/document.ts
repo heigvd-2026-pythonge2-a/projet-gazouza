@@ -9,6 +9,7 @@
 // be implemented by keeping snapshots.
 
 import { getDef, symbolBounds } from "./library";
+import { pathBlocked, routeBetween } from "./routing";
 
 export interface GridPoint {
   x: number;
@@ -211,6 +212,46 @@ export function unconnectedPins(doc: EditorDoc): UnconnectedPin[] {
   );
 }
 
+/** A connection dot drawn on the schematic. */
+export interface ConnectionDot {
+  /** Stable key: the junction's id when there is one, otherwise built from the position. */
+  id: string;
+  position: GridPoint;
+  /** The junction lying there, if any (a click on the dot selects it). */
+  junction?: string;
+}
+
+/**
+ * Grid points where a connection dot is drawn: those where at least three connections meet
+ * (#245). A connection is a component pin lying there, or a wire end attached there, to a pin or
+ * to a junction. Two pins touching and a third component's pin make a dot, as do two wires on a
+ * pin; two wires following each other, or a pin and its wire, do not. Free wire ends connect
+ * nothing and do not count, nor does a wire reduced to a point (two touching pins count already).
+ */
+export function connectionDots(doc: EditorDoc): ConnectionDot[] {
+  const points = new Map<string, { position: GridPoint; count: number; junction?: string }>();
+  const add = (p: GridPoint, junction?: string) => {
+    const k = `${p.x},${p.y}`;
+    const entry = points.get(k) ?? { position: { ...p }, count: 0 };
+    entry.count++;
+    if (junction) entry.junction = junction;
+    points.set(k, entry);
+  };
+  for (const c of doc.components) for (const pin of getDef(c.type).pins) add(toWorld(pin, c));
+  for (const w of doc.wires) {
+    if (wirePath(doc, w).every((p, _, path) => samePoint(p, path[0] as GridPoint))) continue;
+    for (const end of [w.from, w.to]) {
+      if ("comp" in end) add(endPosition(doc, end));
+      else if ("junction" in end) add(endPosition(doc, end), end.junction);
+    }
+  }
+  return [...points]
+    .filter(([, entry]) => entry.count >= 3)
+    .map(([k, { position, junction }]) =>
+      junction ? { id: junction, position, junction } : { id: `dot-${k}`, position },
+    );
+}
+
 export interface GridRect {
   min: GridPoint;
   max: GridPoint;
@@ -240,6 +281,46 @@ export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   return [...components, ...wires, ...junctions].map((item) => item.id);
 }
 
+const rectsMeet = (a: GridRect, b: GridRect): boolean =>
+  a.min.x <= b.max.x && b.min.x <= a.max.x && a.min.y <= b.max.y && b.min.y <= a.max.y;
+
+/**
+ * Ids of what touches `r`, even partly: components whose symbol box meets it, wires with a
+ * segment crossing it, and junctions inside. Used by the selection rectangle with Shift (#93).
+ */
+export function itemsTouchingRect(doc: EditorDoc, r: GridRect): string[] {
+  const components = doc.components.filter((c) => {
+    const { min, max } = symbolBounds(getDef(c.type));
+    return rectsMeet(rectFrom(toWorld(min, c), toWorld(max, c)), r);
+  });
+  const wires = doc.wires.filter((w) => {
+    const path = wirePath(doc, w);
+    return path.some(
+      (a, i) => i + 1 < path.length && rectsMeet(rectFrom(a, path[i + 1] as GridPoint), r),
+    );
+  });
+  const junctions = doc.junctions.filter((j) => inRect(j.position, r));
+  return [...components, ...wires, ...junctions].map((item) => item.id);
+}
+
+/**
+ * Segments with both ends inside `r`, of the wires that are not entirely inside it (those are
+ * selected whole): selecting a section of a wire with the rectangle (#121).
+ */
+export function segmentsInRect(doc: EditorDoc, r: GridRect): WirePart[] {
+  const parts: WirePart[] = [];
+  for (const w of doc.wires) {
+    const path = partPath(doc, w);
+    if (path.every((p) => inRect(p, r))) continue;
+    for (let i = 0; i + 1 < path.length; i++) {
+      if (inRect(path[i] as GridPoint, r) && inRect(path[i + 1] as GridPoint, r)) {
+        parts.push({ wire: w.id, kind: "segment", index: i });
+      }
+    }
+  }
+  return parts;
+}
+
 /**
  * Smallest rectangle holding the whole circuit: symbol boxes of the components, wires and
  * junctions. Null for an empty document.
@@ -260,6 +341,110 @@ export function docBounds(doc: EditorDoc): GridRect | null {
     min: { x: Math.min(...xs), y: Math.min(...ys) },
     max: { x: Math.max(...xs), y: Math.max(...ys) },
   };
+}
+
+// --- Overlapping components -----------------------------------------------------------------
+
+/** Box of a component's symbol and pins, on the grid (rotation and mirror applied). */
+export function componentBox(c: PlacedComponent): GridRect {
+  const { min, max } = symbolBounds(getDef(c.type));
+  return rectFrom(toWorld(min, c), toWorld(max, c));
+}
+
+const pinPoints = (c: PlacedComponent): GridPoint[] =>
+  getDef(c.type).pins.map((pin) => toWorld(pin, c));
+
+/**
+ * True if the symbols of two components overlap, even partly (boxes that only touch do not).
+ * The one exception: two components with exactly one pin at the same point are connected
+ * directly, without a wire, so their boxes may meet around that pin.
+ */
+export function componentsOverlap(a: PlacedComponent, b: PlacedComponent): boolean {
+  const ra = componentBox(a);
+  const rb = componentBox(b);
+  const width = Math.min(ra.max.x, rb.max.x) - Math.max(ra.min.x, rb.min.x);
+  const height = Math.min(ra.max.y, rb.max.y) - Math.max(ra.min.y, rb.min.y);
+  if (width <= 0 || height <= 0) return false;
+  const pa = pinPoints(a);
+  const shared = pinPoints(b).filter((p) => pa.some((q) => samePoint(p, q))).length;
+  return shared !== 1;
+}
+
+/** Pairs ("a|b") of a component of `ids` and another component, not in `ids`, that overlap. */
+export function overlappingPairs(doc: EditorDoc, ids: ReadonlySet<string>): Set<string> {
+  const pairs = new Set<string>();
+  const moved = doc.components.filter((c) => ids.has(c.id));
+  const others = doc.components.filter((c) => !ids.has(c.id));
+  for (const a of moved) {
+    for (const b of others) if (componentsOverlap(a, b)) pairs.add(`${a.id}|${b.id}`);
+  }
+  return pairs;
+}
+
+/** How far (grid steps, both axes added) `freeMove` looks for a free place around the target. */
+const FREE_SEARCH_RADIUS = 8;
+/** How many times `nudgeFree` shifts a new component before giving up. */
+const MAX_NUDGES = 50;
+
+export interface FreeMoveOptions extends MoveOptions {
+  /** Overlaps to tolerate (by default, those already there before the move). */
+  allowed?: ReadonlySet<string>;
+}
+
+/**
+ * Moves `ids` by `delta` (see `moveItems`), or by the nearest delta that puts no component of
+ * `ids` on top of another one. Overlaps listed in `options.allowed` are tolerated, so an old file
+ * with overlapping symbols can still be edited. If nothing is free nearby, `doc` is returned
+ * unchanged.
+ */
+export function freeMove(
+  doc: EditorDoc,
+  ids: ReadonlySet<string>,
+  delta: GridPoint,
+  { allowed = overlappingPairs(doc, ids), ...options }: FreeMoveOptions = {},
+): EditorDoc {
+  // Only the components matter for overlaps: the wires are moved (and maybe re-routed, which
+  // costs more) once the place is found.
+  const fits = (d: GridPoint): EditorDoc | null => {
+    const components = doc.components.map((c) =>
+      ids.has(c.id) ? { ...c, position: shift(c.position, d) } : c,
+    );
+    for (const pair of overlappingPairs({ ...doc, components }, ids)) {
+      if (!allowed.has(pair)) return null;
+    }
+    return moveItems(doc, ids, d, options);
+  };
+  for (let r = 0; r <= FREE_SEARCH_RADIUS; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const dy = r - Math.abs(dx);
+      for (const sy of dy === 0 ? [0] : [-dy, dy]) {
+        const moved = fits({ x: delta.x + dx, y: delta.y + sy });
+        if (moved) return moved;
+      }
+    }
+  }
+  return doc;
+}
+
+/**
+ * Shifts the new components `ids` by `step` again and again until they lie on no other
+ * component: placing several components at the same point spreads them out. Gives up (and
+ * leaves them where they are) after `MAX_NUDGES` steps.
+ */
+export function nudgeFree(doc: EditorDoc, ids: ReadonlySet<string>, step: GridPoint): EditorDoc {
+  // A component just placed has no wire yet: only its position changes. (Moving it with
+  // `moveItems` would wire it to the pins it touched where it was dropped.)
+  let out = doc;
+  for (let i = 0; i < MAX_NUDGES; i++) {
+    if (overlappingPairs(out, ids).size === 0) return out;
+    out = {
+      ...out,
+      components: out.components.map((c) =>
+        ids.has(c.id) ? { ...c, position: shift(c.position, step) } : c,
+      ),
+    };
+  }
+  return doc;
 }
 
 // --- Ids and names --------------------------------------------------------------------------
@@ -381,13 +566,50 @@ export function realignWires(before: EditorDoc, after: EditorDoc): EditorDoc {
   const wires = after.wires.map((w) => {
     const a0 = endPosition(before, w.from);
     const b0 = endPosition(before, w.to);
-    const a1 = endPosition(after, w.from);
-    const b1 = endPosition(after, w.to);
-    if (samePoint(a0, a1) && samePoint(b0, b1)) return w;
+    if (samePoint(a0, endPosition(after, w.from)) && samePoint(b0, endPosition(after, w.to))) {
+      return w;
+    }
     changed = true;
-    return { ...w, points: realignedBends(w.points, a0, b0, a1, b1) };
+    return realignWire(after, w, w.points, a0, b0);
   });
   return changed ? { ...after, wires } : after;
+}
+
+/**
+ * Direction (one grid step) in which a wire leaves the pin `end` is attached to: away from the
+ * middle of its component. Null for a junction, a free end, or a pin in the middle (ground).
+ */
+function outward(doc: EditorDoc, end: WireEnd): GridPoint | null {
+  if (!("comp" in end)) return null;
+  const c = doc.components.find((comp) => comp.id === end.comp);
+  if (!c) return null;
+  const p = pinPosition(c, end.pin);
+  const dx = p.x - c.position.x;
+  const dy = p.y - c.position.y;
+  if (dx !== 0 && Math.abs(dx) >= Math.abs(dy)) return { x: Math.sign(dx), y: 0 };
+  if (dy !== 0) return { x: 0, y: Math.sign(dy) };
+  return null;
+}
+
+/**
+ * `w` in `after`, re-aligned on its ends that moved from `a0`/`b0` (see `realignedBends`), with
+ * `bends` as its bends before the move. If the re-aligned wire runs into a component, it is routed
+ * again around the components, leaving its pins outwards (#125); if there is no such route, the
+ * re-aligned one is kept.
+ */
+function realignWire(
+  after: EditorDoc,
+  w: EditorWire,
+  bends: readonly GridPoint[],
+  a0: GridPoint,
+  b0: GridPoint,
+): EditorWire {
+  const a1 = endPosition(after, w.from);
+  const b1 = endPosition(after, w.to);
+  const points = realignedBends(bends, a0, b0, a1, b1);
+  if (!pathBlocked(after, [a1, ...points, b1])) return { ...w, points };
+  const route = routeBetween(after, a1, b1, outward(after, w.from), outward(after, w.to));
+  return { ...w, points: route ? simplifyPath(route).slice(1, -1) : points };
 }
 
 // --- Editing part of a wire ---------------------------------------------------------------------
@@ -579,10 +801,11 @@ const reversed = (w: EditorWire): EditorWire => ({
  * Removes the junctions (among `ids`) that no longer join three wires, so no dot is left where
  * nothing meets any more. A junction with one wire end (or none) goes, and that end becomes a
  * free end in the same place. A junction between exactly two wires goes too: both wires are
- * merged into one going through its position (the first one keeps its id). A merge that would
- * give a wire looping back to where it starts is not done, and the junction is kept.
+ * merged into one going through its position (the first one keeps its id, unless the other one is
+ * `keep`). A merge that would give a wire looping back to where it starts is not done, and the
+ * junction is kept.
  */
-export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>, keep?: string): EditorDoc {
   let out = doc;
   for (const id of ids) {
     const junction = out.junctions.find((j) => j.id === id);
@@ -610,7 +833,8 @@ export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): Editor
         ...b.points,
         endPosition(out, b.to),
       ]).slice(1, -1);
-      const merged: EditorWire = { id: first.id, from: a.from, to: b.to, points };
+      const id = second.id === keep ? keep : first.id;
+      const merged: EditorWire = { id, from: a.from, to: b.to, points };
       out = {
         ...out,
         junctions: without,
@@ -634,15 +858,107 @@ export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): Editor
   return out;
 }
 
+/**
+ * Removes several segments (see `deleteSegment`), of one or several wires. They are found again
+ * by their end points after each cut, since cutting a wire changes the indexes of its parts.
+ */
+export function deleteSegments(doc: EditorDoc, parts: readonly WirePart[]): EditorDoc {
+  const targets = parts.flatMap((part) => {
+    const points = part.kind === "segment" ? wirePartPoints(doc, part) : null;
+    return points ? [points as [GridPoint, GridPoint]] : [];
+  });
+  let out = doc;
+  for (const [a, b] of targets) {
+    for (const w of out.wires) {
+      const path = partPath(out, w);
+      const i = path.findIndex(
+        (p, k) =>
+          k + 1 < path.length &&
+          onSegment(a, p, path[k + 1] as GridPoint) &&
+          onSegment(b, p, path[k + 1] as GridPoint),
+      );
+      if (i < 0) continue;
+      out = deleteSegment(out, { wire: w.id, kind: "segment", index: i });
+      break;
+    }
+  }
+  return out;
+}
+
 const shift = (p: GridPoint, d: GridPoint): GridPoint => ({ x: p.x + d.x, y: p.y + d.y });
+
+export interface MoveOptions {
+  /**
+   * Ctrl + drag (#91): the wires attached to the moved components do not follow. Their ends get
+   * free in place (where the pins were), and direct pin-to-pin connections are broken.
+   */
+  detach?: boolean;
+}
+
+/** Wire ends attached to components of `ids` become free ends where the pins are. */
+function detachFrom(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+  const free = (end: WireEnd): WireEnd => {
+    if (!("comp" in end) || !ids.has(end.comp)) return end;
+    const c = doc.components.find((comp) => comp.id === end.comp);
+    return c ? pinPosition(c, end.pin) : end;
+  };
+  return {
+    ...doc,
+    wires: doc.wires.map((w) => (ids.has(w.id) ? w : { ...w, from: free(w.from), to: free(w.to) })),
+  };
+}
+
+/**
+ * Adds a wire of zero length between each pin of a component of `ids` and the pin of another
+ * component (not in `ids`) at the same point: once the component moves, this wire follows it like
+ * the others, so a direct pin-to-pin connection is kept (#124).
+ */
+function contactWires(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+  const taken = allIds(doc);
+  const wires: EditorWire[] = [];
+  const joined = (a: WireEnd, b: WireEnd) =>
+    doc.wires.some(
+      (w) => (sameEnd(w.from, a) && sameEnd(w.to, b)) || (sameEnd(w.from, b) && sameEnd(w.to, a)),
+    );
+  for (const c of doc.components) {
+    if (!ids.has(c.id)) continue;
+    for (const pin of getDef(c.type).pins) {
+      const p = toWorld(pin, c);
+      for (const other of doc.components) {
+        if (ids.has(other.id)) continue;
+        for (const otherPin of getDef(other.type).pins) {
+          if (!samePoint(toWorld(otherPin, other), p)) continue;
+          const from = { comp: c.id, pin: pin.name };
+          const to = { comp: other.id, pin: otherPin.name };
+          if (joined(from, to)) continue;
+          const id = nextIndexed("w", taken);
+          taken.push(id);
+          wires.push({ id, from, to, points: [] });
+        }
+      }
+    }
+  }
+  return wires.length === 0 ? doc : { ...doc, wires: [...doc.wires, ...wires] };
+}
 
 /**
  * Moves components, junctions and wires (by id) by `delta`, in grid units. A moved wire takes
  * its bends and free ends along. Wires attached to moved items on both sides are translated
- * whole; the others are re-aligned (see `realignedBends`) so they stay connected and orthogonal.
+ * whole; the others are re-aligned (see `realignWire`) so they stay connected and orthogonal,
+ * unless `options.detach` leaves them where they are. A pin touching a pin of a component that
+ * does not move gets a wire to it, so the connection is kept (none is left if they touch again).
  */
-export function moveItems(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridPoint): EditorDoc {
+export function moveItems(
+  doc: EditorDoc,
+  ids: ReadonlySet<string>,
+  delta: GridPoint,
+  { detach = false }: MoveOptions = {},
+): EditorDoc {
   if ((delta.x === 0 && delta.y === 0) || ids.size === 0) return doc;
+  return moveWithWires(detach ? detachFrom(doc, ids) : contactWires(doc, ids), ids, delta);
+}
+
+function moveWithWires(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridPoint): EditorDoc {
   const moveEnd = (end: WireEnd): WireEnd =>
     "comp" in end || "junction" in end ? end : shift(end, delta);
   const after: EditorDoc = {
@@ -656,22 +972,22 @@ export function moveItems(doc: EditorDoc, ids: ReadonlySet<string>, delta: GridP
       ids.has(w.id) ? { ...w, from: moveEnd(w.from), to: moveEnd(w.to) } : w,
     ),
   };
-  return {
-    ...after,
-    wires: after.wires.map((w, i) => {
-      const old = doc.wires[i] ?? w;
-      const a1 = endPosition(after, w.from);
-      const b1 = endPosition(after, w.to);
-      // A moved wire is first carried along whole, then re-aligned to ends that did not follow.
-      const carried = ids.has(w.id);
-      const offset = carried ? delta : { x: 0, y: 0 };
-      const bends = old.points.map((p) => shift(p, offset));
-      const a0 = shift(endPosition(doc, old.from), offset);
-      const b0 = shift(endPosition(doc, old.to), offset);
-      if (!carried && samePoint(a0, a1) && samePoint(b0, b1)) return w;
-      return { ...w, points: realignedBends(bends, a0, b0, a1, b1) };
-    }),
-  };
+  const wires = after.wires.flatMap((w, i) => {
+    const old = doc.wires[i] ?? w;
+    const a1 = endPosition(after, w.from);
+    const b1 = endPosition(after, w.to);
+    // A moved wire is first carried along whole, then re-aligned to ends that did not follow.
+    const carried = ids.has(w.id);
+    const offset = carried ? delta : { x: 0, y: 0 };
+    const bends = old.points.map((p) => shift(p, offset));
+    const a0 = shift(endPosition(doc, old.from), offset);
+    const b0 = shift(endPosition(doc, old.to), offset);
+    if (samePoint(a0, a1) && samePoint(b0, b1)) return [carried ? { ...w, points: bends } : w];
+    // Two pins brought together connect directly: the wire between them is not needed.
+    if ("comp" in w.from && "comp" in w.to && samePoint(a1, b1)) return [];
+    return [realignWire(after, w, bends, a0, b0)];
+  });
+  return { ...after, wires };
 }
 
 export function moveComponent(doc: EditorDoc, id: string, position: GridPoint): EditorDoc {
@@ -742,34 +1058,120 @@ export function splitWire(
   wireId: string,
   p: GridPoint,
 ): { doc: EditorDoc; junction: string } {
+  const junction = nextIndexed("j", allIds(doc));
+  const withJunction = {
+    ...doc,
+    junctions: [...doc.junctions, { id: junction, position: { ...p } }],
+  };
+  return { doc: cutWire(withJunction, wireId, p, { junction }).doc, junction };
+}
+
+/**
+ * Cuts a wire in two at `p` (which must lie on it), both pieces ending on `end` there. Returns
+ * the new doc and the id of the second piece (the first one keeps the wire's id).
+ */
+function cutWire(
+  doc: EditorDoc,
+  wireId: string,
+  p: GridPoint,
+  end: WireEnd,
+): { doc: EditorDoc; second: string } {
   const w = doc.wires.find((wire) => wire.id === wireId);
   if (!w) throw new Error(`Unknown wire ${wireId}`);
   const path = wirePath(doc, w);
   let i = 0;
   while (i + 2 < path.length && !onSegment(p, path[i] as GridPoint, path[i + 1] as GridPoint)) i++;
 
-  const junction = nextIndexed("j", allIds(doc));
-  const newWire = nextIndexed("w", [...allIds(doc), junction]);
+  const second = nextIndexed("w", allIds(doc));
   const notP = (q: GridPoint) => !samePoint(q, p);
-  const first: EditorWire = {
-    ...w,
-    to: { junction },
-    points: path.slice(1, i + 1).filter(notP),
-  };
-  const second: EditorWire = {
-    id: newWire,
-    from: { junction },
+  const firstPiece: EditorWire = { ...w, to: end, points: path.slice(1, i + 1).filter(notP) };
+  const secondPiece: EditorWire = {
+    id: second,
+    from: end,
     to: w.to,
     points: path.slice(i + 1, -1).filter(notP),
   };
   return {
     doc: {
       ...doc,
-      junctions: [...doc.junctions, { id: junction, position: { ...p } }],
-      wires: doc.wires.flatMap((wire) => (wire.id === wireId ? [first, second] : [wire])),
+      wires: doc.wires.flatMap((wire) => (wire.id === wireId ? [firstPiece, secondPiece] : [wire])),
     },
-    junction,
+    second,
   };
+}
+
+/** Which pins and wires `connectPinsOnWires` looks at (all of them when left out). */
+export interface PinsOnWiresScope {
+  comps?: ReadonlySet<string>;
+  wires?: ReadonlySet<string>;
+}
+
+/**
+ * Connects the pins that lie on a wire without being attached to it (#89): a wire passing over a
+ * pin is cut there and both pieces are attached to the pin; a free wire end lying on a pin is
+ * attached to it. A wire laid over two pins of the same component is cut at both, and the piece
+ * between them removed: the component is inserted in the wire. A wire already attached to the
+ * component is left alone, so a wire drawn across a component never shorts it. Only the pins of
+ * `scope.comps` and the wires of `scope.wires` are looked at (the pieces of a cut wire included).
+ */
+export function connectPinsOnWires(doc: EditorDoc, scope: PinsOnWiresScope = {}): EditorDoc {
+  const wireIds = scope.wires ? new Set(scope.wires) : null;
+  let out = doc;
+  const onComp = (e: WireEnd, comp: string) => "comp" in e && e.comp === comp;
+  for (const c of doc.components) {
+    if (scope.comps && !scope.comps.has(c.id)) continue;
+    // Wires drawn from this component before: one crossing its own body must not short it. The
+    // pieces cut below are not among them, so a wire laid over two pins is cut at both.
+    const attached = new Set(
+      doc.wires.filter((w) => onComp(w.from, c.id) || onComp(w.to, c.id)).map((w) => w.id),
+    );
+    for (const pin of getDef(c.type).pins) {
+      const p = toWorld(pin, c);
+      const end = { comp: c.id, pin: pin.name };
+      // Each cut adds a piece: look again until nothing changes (a wire may cross a pin twice).
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const w of out.wires) {
+          if (wireIds && !wireIds.has(w.id)) continue;
+          if (attached.has(w.id)) continue;
+          const isFreeAtP = (e: WireEnd) => !("comp" in e) && !("junction" in e) && samePoint(e, p);
+          if (isFreeAtP(w.from) || isFreeAtP(w.to)) {
+            const attach = (e: WireEnd) => (isFreeAtP(e) ? end : e);
+            out = {
+              ...out,
+              wires: out.wires.map((x) =>
+                x.id === w.id ? { ...x, from: attach(x.from), to: attach(x.to) } : x,
+              ),
+            };
+            changed = true;
+            break;
+          }
+          const path = wirePath(out, w);
+          const inside = path.some(
+            (a, i) => i + 1 < path.length && onSegment(p, a, path[i + 1] as GridPoint),
+          );
+          if (
+            !inside ||
+            samePoint(p, path[0] as GridPoint) ||
+            samePoint(p, path.at(-1) as GridPoint)
+          ) {
+            continue;
+          }
+          const cut = cutWire(out, w.id, p, end);
+          out = cut.doc;
+          wireIds?.add(cut.second);
+          changed = true;
+          break;
+        }
+      }
+    }
+    // A piece now joining two pins of the component ran along its body: without it, the component
+    // is inserted in the wire (in series), instead of being shorted by it.
+    const across = (w: EditorWire) =>
+      !attached.has(w.id) && onComp(w.from, c.id) && onComp(w.to, c.id);
+    if (out.wires.some(across)) out = { ...out, wires: out.wires.filter((w) => !across(w)) };
+  }
+  return out;
 }
 
 /**
@@ -813,7 +1215,9 @@ const sameEnd = (a: WireEnd, b: WireEnd): boolean =>
 
 /**
  * Adds a wire along `path` (start, bends, end, in grid units). Both ends are attached with
- * `resolveEnd`. Returns null, and changes nothing, for a wire of zero length or one that would
+ * `resolveEnd`. A wire starting or ending on the free end of another one is merged with it (a
+ * junction of two wires would draw a dot where nothing branches, #245); the merged wire keeps the
+ * returned id. Returns null, and changes nothing, for a wire of zero length or one that would
  * loop back to the pin or junction it starts from.
  */
 export function addWire(
@@ -831,7 +1235,8 @@ export function addWire(
 
   const id = nextIndexed("w", allIds(to.doc));
   const wire: EditorWire = { id, from: from.end, to: to.end, points: points.slice(1, -1) };
-  return { doc: { ...to.doc, wires: [...to.doc.wires, wire] }, id };
+  const added = { ...to.doc, wires: [...to.doc.wires, wire] };
+  return { doc: cleanJunctions(added, junctionsOf([wire]), id), id };
 }
 
 // --- Copy and paste ------------------------------------------------------------------------------
@@ -841,7 +1246,8 @@ export type Clip = EditorDoc;
 
 /**
  * The selected components and junctions, plus the wires whose two ends are inside the copy: both
- * attached to copied items, or free ends of a selected wire. Wires going outside are left out.
+ * attached to copied items, or free ends of a selected wire. Wires going outside are left out,
+ * and the copied junctions left with fewer than three wires are cleaned up (see `cleanJunctions`).
  */
 export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
   const components = doc.components.filter((c) => ids.has(c.id));
@@ -851,7 +1257,8 @@ export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
       "comp" in end ? ids.has(end.comp) : "junction" in end ? ids.has(end.junction) : ids.has(w.id);
     return inside(w.from) && inside(w.to);
   });
-  return structuredClone({ components, wires, junctions });
+  const clip = structuredClone({ components, wires, junctions });
+  return cleanJunctions(clip, new Set(junctions.map((j) => j.id)));
 }
 
 /**

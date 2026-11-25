@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addComponent, emptyDoc, type GridPoint } from "./document";
+import { addComponent, emptyDoc, pinPosition, samePoint, type GridPoint } from "./document";
 import { obstacles, routeAround } from "./routing";
 
 const key = (p: GridPoint) => `${p.x},${p.y}`;
@@ -47,6 +47,37 @@ describe("routeAround", () => {
     const blocked = obstacles(doc);
     expect(blocked.size).toBeGreaterThan(0);
     const crossed = pointsOf(path).filter((p) => blocked.has(key(p)));
+    expect(crossed).toEqual([]);
+  });
+
+  it("goes straight through a pin when allowed, around it otherwise (#244)", () => {
+    // A vertical resistor below the line, its top pin on it.
+    const doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: { x: 5, y: 2 },
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    expect(pinPosition(doc.components[0]!, "1")).toEqual({ x: 5, y: 0 });
+    const a = { x: 0, y: 0 };
+    const b = { x: 10, y: 0 };
+    expect(routeAround(doc, a, b, { throughPins: true })).toEqual([b]);
+    expect(routeAround(doc, a, b)).not.toEqual([b]);
+  });
+
+  it("keeps a detour off the pins, even when the L route may cross them (#244)", () => {
+    // A horizontal resistor on the line: its body is in the way, its pins too.
+    const doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: { x: 5, y: 0 },
+      rotation: 90,
+      mirror: false,
+    }).doc;
+    const c = doc.components[0]!;
+    const pins = [pinPosition(c, "1"), pinPosition(c, "2")];
+    const a = { x: 0, y: 0 };
+    const route = routeAround(doc, a, { x: 10, y: 0 }, { throughPins: true });
+    const crossed = pointsOf([a, ...route]).filter((p) => pins.some((q) => samePoint(p, q)));
     expect(crossed).toEqual([]);
   });
 

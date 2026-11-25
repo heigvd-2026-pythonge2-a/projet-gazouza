@@ -60,13 +60,89 @@ describe("saving with the system file dialogs", () => {
     );
     expect(f.parseDoc(handle.written[0]!)).toEqual(f.state().doc);
 
-    // Saved already: nothing to do.
-    f.saveFile();
     f.state().dropComponent("capacitor", { x: 4, y: 0 });
     f.saveFile();
     await vi.waitFor(() => expect(handle.written).toHaveLength(2));
     expect(showSaveFilePicker).toHaveBeenCalledOnce();
     expect(f.parseDoc(handle.written[1]!).components).toHaveLength(2);
+  });
+
+  it("saves again without changes, and asks where if the file cannot be written (#94)", async () => {
+    const f = await load();
+    const first = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(first);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.saveFile();
+    await vi.waitFor(() => expect(f.isUnsaved(f.state())).toBe(false));
+
+    // Nothing changed: written again all the same.
+    f.saveFile();
+    await vi.waitFor(() => expect(first.written).toHaveLength(2));
+
+    // The file was deleted: writing to it fails, the dialog asks for another one.
+    first.createWritable = async () => {
+      throw new DOMException("gone", "NotFoundError");
+    };
+    const second = fakeHandle("nouveau.psice.json");
+    showSaveFilePicker.mockResolvedValue(second);
+    f.saveFile();
+    await vi.waitFor(() => expect(second.written).toHaveLength(1));
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("saves as another file", async () => {
+    const f = await load();
+    const first = fakeHandle("a.psice.json");
+    const { showSaveFilePicker } = stubPickers(first);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.saveFile();
+    await vi.waitFor(() => expect(first.written).toHaveLength(1));
+    const second = fakeHandle("b.psice.json");
+    showSaveFilePicker.mockResolvedValue(second);
+    f.saveFileAs();
+    await vi.waitFor(() => expect(second.written).toHaveLength(1));
+    expect(first.written).toHaveLength(1);
+  });
+
+  it("exports the schematic as a PNG image", async () => {
+    const f = await load();
+    const views = await import("./viewCommands");
+    const image = new Blob(["png"], { type: "image/png" });
+    const exportImage = vi.fn(async () => image);
+    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
+    const handle = fakeHandle(f.IMAGE_FILE_NAME);
+    const written: unknown[] = [];
+    handle.createWritable = async () => ({
+      write: async (data: unknown) => void written.push(data),
+      close: async () => {},
+    });
+    const { showSaveFilePicker } = stubPickers(handle);
+
+    await f.exportImage();
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/vide/));
+    expect(exportImage).not.toHaveBeenCalled();
+
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    await f.exportImage();
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false });
+    expect(showSaveFilePicker).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedName: "schema.png" }),
+    );
+    expect(written).toEqual([image]);
+
+    await f.exportImage({ transparent: true });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+  });
+
+  it("remembers the transparent background choice, white by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.TRANSPARENT_EXPORT_KEY);
+    expect(f.exportTransparent()).toBe(false);
+    f.setExportTransparent(true);
+    expect(f.exportTransparent()).toBe(true);
+    f.setExportTransparent(false);
+    expect(f.exportTransparent()).toBe(false);
   });
 
   it("keeps the changes unsaved when the dialog is closed", async () => {

@@ -16,7 +16,7 @@ import {
   type GridPoint,
 } from "../store";
 import { getAnimationTime, setAnimationTime } from "./animationClock";
-import { GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 /** Distance between two dots on a conductor, in grid units. */
 const SPACING = 1;
@@ -27,7 +27,6 @@ const MIN_SPEED = 0.4;
 /** Below this fraction of the largest current, the current counts as zero: no dots. */
 const ZERO_FRACTION = 1e-3;
 const DOT_RADIUS = 2.5;
-const DOT_COLOR = "#f59e0b";
 /** How often the time shown by the controls is refreshed, in ms. */
 const CLOCK_REFRESH = 100;
 
@@ -71,6 +70,7 @@ export function CurrentLayer({
   result: SimulationResult;
   settings: CurrentAnimation;
 }) {
+  const colors = useCanvasColors();
   const layerRef = useRef<Konva.Layer>(null);
   const edges = useMemo(() => flowNetwork(doc), [doc]);
   const drawn = useMemo(
@@ -161,7 +161,7 @@ export function CurrentLayer({
             context.moveTo(p.x * GRID + DOT_RADIUS, p.y * GRID);
             context.arc(p.x * GRID, p.y * GRID, DOT_RADIUS, 0, Math.PI * 2);
           }
-          context.setAttr("fillStyle", DOT_COLOR);
+          context.setAttr("fillStyle", colors.currentDot);
           context.fill();
         }}
       />

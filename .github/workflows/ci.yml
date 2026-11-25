@@ -153,6 +153,10 @@ jobs:
       - name: Build de vérification
         run: pnpm build
 
+      # The online demo embedded in the website (pages.yml deploys it from main).
+      - name: Build de la démo du site
+        run: pnpm build:demo
+
   # Pull requests only: on main, pages.yml builds and deploys the site.
   website:
     name: Site web (Astro build)

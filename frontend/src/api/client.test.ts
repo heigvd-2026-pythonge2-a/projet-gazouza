@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, describeDetail, getHealth, simulate, type SimulationRequest } from "./client";
+import { fixtureLibrary } from "../store/testFixtures";
+import {
+  ApiError,
+  describeDetail,
+  getHealth,
+  getLibrary,
+  simulate,
+  type SimulationRequest,
+} from "./client";
+import { DEMO_UNAVAILABLE } from "./demoBackend";
 
 const request = {} as SimulationRequest;
 
@@ -82,6 +91,26 @@ describe("API client", () => {
   it("reports an answer that is not JSON", async () => {
     stubFetch(async () => new Response("pas du JSON", { status: 200 }));
     expect((await failure(getHealth())).kind).toBe("invalid");
+  });
+});
+
+describe("API client in the online demo (mode demo)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("answers health and the library from the fixtures, without fetch", async () => {
+    vi.stubEnv("MODE", "demo");
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    await expect(getHealth()).resolves.toEqual({ status: "démo" });
+    await expect(getLibrary()).resolves.toEqual(fixtureLibrary());
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("says that the demo cannot simulate", async () => {
+    vi.stubEnv("MODE", "demo");
+    const error = await failure(simulate(request));
+    expect(error.kind).toBe("unreachable");
+    expect(error.message).toBe(DEMO_UNAVAILABLE);
   });
 });
 

@@ -25,6 +25,10 @@ export type Layout = {
   sideWidth: number;
   inspectorFraction: number;
   resultsFraction: number;
+  /** The results panel is shown: hidden until the first simulation (#96). */
+  resultsVisible: boolean;
+  /** The properties panel is shown: it can be closed to give its room to the others (#164). */
+  inspectorVisible: boolean;
 };
 
 export const DEFAULT_LAYOUT: Layout = {
@@ -33,6 +37,8 @@ export const DEFAULT_LAYOUT: Layout = {
   sideWidth: SIDE_WIDTH.default,
   inspectorFraction: INSPECTOR_FRACTION.default,
   resultsFraction: RESULTS_FRACTION.default,
+  resultsVisible: false,
+  inspectorVisible: true,
 };
 
 /** Clamps `value` to [min, max]; when the range is empty, `min` wins. */
@@ -61,4 +67,24 @@ export function inspectorHeight(fraction: number, columnHeight: number): number 
 export function resultsHeight(fraction: number, columnHeight: number): number {
   const max = columnHeight - MIN_SCHEMATIC_HEIGHT - SPLITTER_SIZE;
   return Math.round(clamp(fraction * columnHeight, MIN_RESULTS_HEIGHT, max));
+}
+
+/** How far past its smallest size a panel must be dragged to fold away when released (#198). */
+export const FOLD_DISTANCE = 40;
+
+/**
+ * Which panel folds away when a splitter is released with `wanted` as the size of the panel it
+ * resizes: "panel" when that panel was dragged `FOLD_DISTANCE` under its smallest size `min`;
+ * "other" when it was dragged that far past its largest size `max`, which squeezes the panel on
+ * the other side of the splitter under its own smallest size; null when nothing folds. Leave
+ * `max` out when the other side cannot fold (the schematic).
+ */
+export function foldOnRelease(
+  wanted: number,
+  min: number,
+  max = Number.POSITIVE_INFINITY,
+): "panel" | "other" | null {
+  if (wanted <= min - FOLD_DISTANCE) return "panel";
+  if (wanted >= max + FOLD_DISTANCE) return "other";
+  return null;
 }

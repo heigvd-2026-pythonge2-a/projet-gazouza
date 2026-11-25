@@ -136,6 +136,32 @@
 	max-width: 44rem;
 }
 
+/* Closing call to action of the home page, centred under the team. */
+.psice-cta {
+	text-align: center;
+	padding: 2.5rem 1rem;
+	border-radius: 1rem;
+	border: 1px solid var(--psice-card-border);
+	background-color: var(--psice-card-bg);
+	background-image: radial-gradient(var(--psice-grid-dot) 1.2px, transparent 1.2px);
+	background-size: 24px 24px;
+}
+
+.psice-cta .psice-lead {
+	margin-inline: auto;
+}
+
+.psice-cta-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 1rem;
+}
+
+.psice-cta-actions > * {
+	margin: 0 !important;
+}
+
 /* Cards: glassy, lift on hover. */
 .card {
 	background: var(--psice-card-bg);
@@ -152,6 +178,17 @@
 	transform: translateY(-3px);
 	border-color: color-mix(in srgb, var(--sl-color-accent) 60%, transparent) !important;
 	box-shadow: 0 14px 32px -16px var(--psice-glow);
+}
+
+/* No lift for those who asked the system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+	.card {
+		transition: none;
+	}
+
+	.card:hover {
+		transform: none;
+	}
 }
 
 .card .icon {
@@ -196,4 +233,186 @@ kbd {
 	background-color: var(--psice-card-bg);
 	background-image: radial-gradient(var(--psice-grid-dot) 1.2px, transparent 1.2px);
 	background-size: 20px 20px;
+}
+
+/* "Essayer en ligne" page: the app in an iframe, as wide as the content column. */
+.psice-demo {
+	display: block;
+	width: 100%;
+	height: min(75vh, 720px);
+	min-height: 480px;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	background: #ffffff;
+}
+
+.psice-demo-links {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 1rem;
+}
+
+.psice-demo-fullscreen {
+	text-align: right;
+	font-size: var(--sl-text-sm);
+}
+
+/* The demo needs a computer screen (DemoFrame.astro): a notice replaces it on a phone. */
+.psice-demo-narrow {
+	display: none;
+}
+
+@media (max-width: 55.99rem) {
+	.psice-demo-wide {
+		display: none;
+	}
+
+	.psice-demo-narrow {
+		display: block;
+	}
+
+	.psice-demo-narrow img {
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+	}
+}
+
+/*
+ * Home page: the logo of the hero, inline (index.mdx). On hover it replays the animation of
+ * docs/images/psice-logo-animation.gif (assets/brand/make_brand.py), with the same timings
+ * (frames of 20 ms): the terminal appears, a spark draws the P, the junction dot lights up, the
+ * letters of "sice" rise one after the other, then the dot of the i appears as an unconnected
+ * pin and sends a warning pulse.
+ */
+:root {
+	--psice-logo-ink: #f1f5f9;
+}
+
+:root[data-theme='light'] {
+	--psice-logo-ink: #0f172a;
+}
+
+.psice-hero-logo {
+	display: block;
+	width: 100%;
+	height: auto;
+	overflow: visible;
+}
+
+.psice-hero-logo .pl-p {
+	stroke: var(--psice-logo-ink);
+}
+
+.psice-hero-logo .pl-letter {
+	fill: var(--psice-logo-ink);
+}
+
+.psice-hero-logo .pl-ring,
+.psice-hero-logo .pl-dot,
+.psice-hero-logo .pl-pin,
+.psice-hero-logo .pl-pulse {
+	transform-box: fill-box;
+	transform-origin: center;
+}
+
+.psice-hero-logo .pl-pulse,
+.psice-hero-logo .pl-spark {
+	opacity: 0;
+}
+
+/* The spark follows the P as it is drawn (where offset-path is not supported, it stays hidden). */
+.psice-hero-logo .pl-spark {
+	offset-path: path('M490.01 557.00V357.80H552.01A62.99 62.99 0 0 1 552.01 483.78H490.01');
+	offset-rotate: 0deg;
+	filter: drop-shadow(0 0 10px #2563eb);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.psice-hero-logo:hover .pl-ring {
+		animation: pl-pop 120ms both cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+
+	.psice-hero-logo:hover .pl-p {
+		stroke-dasharray: 1 2;
+		animation: pl-draw 420ms 120ms both cubic-bezier(0.33, 1, 0.68, 1);
+	}
+
+	.psice-hero-logo:hover .pl-spark {
+		animation: pl-spark 420ms 120ms both cubic-bezier(0.33, 1, 0.68, 1);
+	}
+
+	.psice-hero-logo:hover .pl-dot {
+		animation:
+			pl-pop 120ms 540ms both cubic-bezier(0.34, 1.56, 0.64, 1),
+			pl-glow 140ms 540ms both ease-out;
+	}
+
+	.psice-hero-logo:hover .pl-letter {
+		animation: pl-rise 220ms calc(660ms + var(--i) * 60ms) both cubic-bezier(0.33, 1, 0.68, 1);
+	}
+
+	.psice-hero-logo:hover .pl-pin {
+		animation: pl-pop 160ms 1060ms both cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+
+	.psice-hero-logo:hover .pl-pulse {
+		animation: pl-pulse 360ms 1220ms linear;
+	}
+}
+
+@keyframes pl-pop {
+	from {
+		transform: scale(0);
+	}
+}
+
+@keyframes pl-draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes pl-spark {
+	from {
+		offset-distance: 0%;
+		opacity: 1;
+	}
+	95% {
+		opacity: 1;
+	}
+	to {
+		offset-distance: 100%;
+		opacity: 0;
+	}
+}
+
+@keyframes pl-glow {
+	from {
+		filter: drop-shadow(0 0 24px #2563eb);
+	}
+}
+
+@keyframes pl-rise {
+	from {
+		opacity: 0;
+		transform: translateY(50px);
+	}
+	62% {
+		opacity: 1;
+	}
+}
+
+@keyframes pl-pulse {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(2.6);
+	}
 }

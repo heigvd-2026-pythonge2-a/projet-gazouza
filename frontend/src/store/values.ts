@@ -2,8 +2,8 @@
 // the netlist module (backend/app/netlist/values.py), which reports the same errors (BAD_VALUE,
 // MILLI_SUFFIX) at simulation time: these checks only warn the user earlier. Texts in French.
 
-import type { EditorDoc } from "./document";
-import { getDef, visibleParams } from "./library";
+import { nameProblem, netNameProblem, type EditorDoc } from "./document";
+import { getDef, visibleParams, type ParamDef } from "./library";
 
 /** Units allowed after the suffix, ignored like in SPICE ("1kOhm", "10uF"). */
 const UNITS = ["ohm", "Ω", "hz", "v", "a", "s", "h", "f"];
@@ -84,5 +84,46 @@ export function invalidValues(doc: EditorDoc): InvalidValue[] {
           ]
         : [];
     });
+  });
+}
+
+/**
+ * What is wrong with `value` typed for the parameter `p` of a component of type `type`, or null:
+ * the node name of a label, or a SPICE number. Other parameters (choices) are never wrong.
+ */
+export function paramProblem(type: string, p: ParamDef, value: string): ValueProblem | null {
+  if (type === "label" && p.name === "net") {
+    const message = netNameProblem(value);
+    return message ? { level: "error", message } : null;
+  }
+  return p.kind === "value" ? valueProblem(value, p.unit) : null;
+}
+
+/** What is wrong with one field of a component, as shown next to it on the schematic (#196). */
+export interface ComponentProblem extends ValueProblem {
+  comp: string;
+  /** Parameter whose value is wrong, or null for the SPICE name of the component. */
+  param: string | null;
+}
+
+/**
+ * The first problem of each component that has one, errors before warnings, fields in the order
+ * of the properties panel (name, then parameters). Same checks as the panel: the schematic shows
+ * them next to the components, so the user sees every problem at a glance.
+ */
+export function componentProblems(doc: EditorDoc): ComponentProblem[] {
+  return doc.components.flatMap((c) => {
+    const def = getDef(c.type);
+    const found: ComponentProblem[] = [];
+    if (def.prefix !== null) {
+      const message = nameProblem(doc, c, def.prefix);
+      if (message) found.push({ comp: c.id, param: null, level: "error", message });
+    }
+    for (const p of visibleParams(def, c.params)) {
+      const problem = paramProblem(c.type, p, c.params[p.name] ?? "");
+      if (problem) found.push({ comp: c.id, param: p.name, ...problem });
+    }
+    const first = found.find((f) => f.level === "error") ?? found[0];
+    return first ? [first] : [];
   });
 }

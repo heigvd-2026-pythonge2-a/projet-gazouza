@@ -11,11 +11,11 @@ import {
   type PlacedComponent,
   type ValueProblem,
 } from "../store";
-import { INSPECTOR_ID, VALUE_FIELD_ATTR } from "./inspectorFocus";
+import { FIELD_ATTR, INSPECTOR_ID, NAME_FIELD, VALUE_FIELD_ATTR } from "./inspectorFocus";
 import { COLORS, UI } from "./theme";
 
 /** Colour of a warning (a value that works, but probably not as meant). */
-const WARNING = "#b45309";
+const WARNING = UI.warning;
 
 /** Components with at least this many fields show them on two columns, when there is room. */
 const TWO_COLUMNS_FROM = 4;
@@ -43,9 +43,11 @@ function Field(props: {
   wide?: boolean;
   /** The component's main value: the field a double-click on the component goes to. */
   valueField?: boolean;
+  /** Names the field, for the error bubbles of the schematic (`FIELD_ATTR`). */
+  field: string;
   onChange: (value: string) => void;
 }) {
-  const { label, value, unit, options, valueField, wide, onChange } = props;
+  const { label, value, unit, options, valueField, field, wide, onChange } = props;
   const problem: ValueProblem | null =
     typeof props.problem === "string"
       ? { level: "error", message: props.problem }
@@ -69,7 +71,7 @@ function Field(props: {
     <div style={{ marginBottom: 8, minWidth: 0, ...(wide ? { gridColumn: "1 / -1" } : {}) }}>
       <label
         htmlFor={id}
-        style={{ display: "block", fontSize: 12, color: "#4b5563", marginBottom: 3 }}
+        style={{ display: "block", fontSize: 12, color: UI.label, marginBottom: 3 }}
       >
         {label}
       </label>
@@ -77,9 +79,9 @@ function Field(props: {
         style={{
           display: "flex",
           alignItems: "center",
-          border: `1px solid ${problem ? problemColor : "#d1d5db"}`,
+          border: `1px solid ${problem ? problemColor : UI.inputBorder}`,
           borderRadius: 4,
-          background: "#ffffff",
+          background: UI.surface,
         }}
       >
         {options ? (
@@ -87,6 +89,7 @@ function Field(props: {
             id={id}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            {...{ [FIELD_ATTR]: field }}
             style={controlStyle}
           >
             {options.map((o) => (
@@ -110,13 +113,14 @@ function Field(props: {
             }}
             onKeyDown={onKeyDown}
             {...(valueField ? { [VALUE_FIELD_ATTR]: "" } : {})}
+            {...{ [FIELD_ATTR]: field }}
             spellCheck={false}
             aria-invalid={problem?.level === "error" ? true : undefined}
             aria-describedby={problem ? `${id}-problem` : undefined}
             style={controlStyle}
           />
         )}
-        {unit && <span style={{ padding: "0 8px", color: "#9ca3af" }}>{unit}</span>}
+        {unit && <span style={{ padding: "0 8px", color: UI.faint }}>{unit}</span>}
       </div>
       {problem && (
         <p id={`${id}-problem`} style={{ margin: "3px 0 0", fontSize: 12, color: problemColor }}>
@@ -156,6 +160,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
         {def.prefix !== null && (
           <Field
             label="Nom"
+            field={NAME_FIELD}
             wide
             value={c.name ?? ""}
             problem={nameProblem(doc, c, def.prefix)}
@@ -167,6 +172,7 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           return (
             <Field
               key={p.name}
+              field={p.name}
               label={p.label}
               value={value}
               unit={p.unit}

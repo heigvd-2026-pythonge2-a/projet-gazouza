@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copy the SVG files of a directory onto the `badges` branch and push, keeping the
-# badges written by other workflows (milestones, coverage).
+# files already there.
 #
 # Usage: publish-badges.sh <dir-with-svgs>
 # Needs GH_TOKEN and GITHUB_REPOSITORY (both set in GitHub Actions).

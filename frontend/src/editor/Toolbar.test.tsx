@@ -2,8 +2,11 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useThemeStore } from "../store";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
+import { TRANSPARENT_EXPORT_KEY } from "./fileActions";
 import { EditorToolbar } from "./Toolbar";
+import { registerViewCommands } from "./viewCommands";
 
 beforeEach(resetEditorStore);
 afterEach(() => vi.restoreAllMocks());
@@ -41,8 +44,12 @@ describe("EditorToolbar", () => {
 
     expect(button("Coller (Ctrl+V)")).toBeDisabled();
     await user.click(button("Copier (Ctrl+C)"));
+    // The copy follows the mouse on the schematic until a click there drops it.
     await user.click(button("Coller (Ctrl+V)"));
+    expect(editorState().tool.kind).toBe("paste");
+    act(() => editorState().pasteAt({ x: 10, y: 0 }));
     await user.click(button("Dupliquer (Ctrl+D)"));
+    act(() => editorState().pasteAt({ x: 20, y: 0 }));
     expect(editorState().doc.components.map((c) => c.name)).toEqual(["R1", "R2", "R3"]);
 
     await user.click(button("Supprimer (Suppr)"));
@@ -80,5 +87,85 @@ describe("EditorToolbar", () => {
     confirm.mockReturnValue(true);
     await user.click(button("Nouveau schéma (Ctrl+N)"));
     expect(editorState().doc.components).toEqual([]);
+  });
+
+  it("exports on a white background unless the transparent box is checked, and keeps it", async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(TRANSPARENT_EXPORT_KEY);
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    const exportImage = vi.fn(async () => null);
+    const unregister = registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
+    render(<EditorToolbar />);
+    act(() => void dropComponent("resistor"));
+
+    const open = button("Exporter le schéma en image PNG…");
+    await user.click(open);
+    expect(open).toHaveAttribute("aria-expanded", "true");
+    const box = screen.getByRole("checkbox", { name: /Fond transparent/ });
+    expect(box).not.toBeChecked();
+    await user.click(button("Exporter…"));
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.click(open);
+    await user.click(screen.getByRole("checkbox", { name: /Fond transparent/ }));
+    await user.click(button("Exporter…"));
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+    expect(window.localStorage.getItem(TRANSPARENT_EXPORT_KEY)).toBe("true");
+
+    // Reopened: the last choice is kept; Escape closes without exporting.
+    await user.click(open);
+    expect(screen.getByRole("checkbox", { name: /Fond transparent/ })).toBeChecked();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(exportImage).toHaveBeenCalledTimes(2);
+    unregister();
+  });
+
+  it("switches between the light and the night-blue theme", async () => {
+    useThemeStore.setState({ theme: "light", chosen: false });
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    await user.click(button("Passer au thème bleu nuit"));
+    expect(useThemeStore.getState()).toMatchObject({ theme: "dark", chosen: true });
+    await user.click(button("Passer au thème clair"));
+    expect(useThemeStore.getState().theme).toBe("light");
+  });
+
+  it("opens an example with its analysis, after asking about unsaved changes", async () => {
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    act(() => void dropComponent("resistor"));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    await user.click(button("Ouvrir un exemple prêt à simuler"));
+    await user.click(screen.getByRole("menuitem", { name: /^Filtre passe-bas RC/ }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(editorState().doc.components.map((c) => c.type)).toEqual(["resistor"]);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    confirm.mockReturnValue(true);
+    await user.click(button("Ouvrir un exemple prêt à simuler"));
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(editorState().doc.components.some((c) => c.type === "capacitor")).toBe(true);
+    expect(editorState().analysis).toMatchObject({ kind: "ac", acStop: "100k" });
+  });
+
+  it("closes the examples menu on Escape", async () => {
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    await user.click(button("Ouvrir un exemple prêt à simuler"));
+    expect(screen.getByRole("menu", { name: "Exemples" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(button("Ouvrir un exemple prêt à simuler")).toHaveFocus();
+  });
+
+  it("closes the examples menu when the focus leaves it", async () => {
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    await user.click(button("Ouvrir un exemple prêt à simuler"));
+    await user.tab();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
