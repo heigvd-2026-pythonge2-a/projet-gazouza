@@ -221,6 +221,26 @@ kbd {
 	font-size: var(--sl-text-sm);
 }
 
+/* The demo needs a computer screen (DemoFrame.astro): a notice replaces it on a phone. */
+.psice-demo-narrow {
+	display: none;
+}
+
+@media (max-width: 55.99rem) {
+	.psice-demo-wide {
+		display: none;
+	}
+
+	.psice-demo-narrow {
+		display: block;
+	}
+
+	.psice-demo-narrow img {
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+	}
+}
+
 /*
  * Home page: the logo of the hero, inline (index.mdx). On hover it replays the animation of
  * docs/images/psice-logo-animation.gif (assets/brand/make_brand.py), with the same timings
