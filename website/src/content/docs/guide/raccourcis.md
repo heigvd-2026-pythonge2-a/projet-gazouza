@@ -59,7 +59,7 @@ afficher cette liste à tout moment.
 | Clic (outil fil) | Coude, ou fin du fil sur une broche ou un fil |
 | Double-clic (outil fil) | Finir le fil dans le vide |
 | <kbd>Échap</kbd> (outil fil) | Enlever le dernier coude |
-| Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser |
+| Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser (dans tous les sens) |
 | Double-clic sur un fil | Sélectionner le fil entier |
 
 ## Vue

@@ -83,6 +83,66 @@ describe("moveWirePart", () => {
     expect(pathOf(after, wire)).toEqual([p(0, 0), p(0, 2), p(5, 2), p(5, 5), p(10, 5)]);
   });
 
+  it("slides a segment along its length, its neighbours following (#261)", () => {
+    // A U between two steps: (0,0) → (4,0) → (4,5) → (8,5) → (8,0) → (12,0).
+    const added = addWire(emptyDoc(), [p(0, 0), p(4, 0), p(4, 5), p(8, 5), p(8, 0), p(12, 0)])!;
+    const segment = { wire: added.id, kind: "segment", index: 2 } as const;
+    const after = moveWirePart(added.doc, segment, p(8, 5), p(6, 5));
+    expect(pathOf(after, added.id)).toEqual([
+      p(0, 0),
+      p(6, 0),
+      p(6, 5),
+      p(10, 5),
+      p(10, 0),
+      p(12, 0),
+    ]);
+    // Along and across at once.
+    const both = moveWirePart(added.doc, segment, p(5, 7), p(6, 5));
+    expect(pathOf(both, added.id)).toEqual([p(0, 0), p(3, 0), p(3, 7), p(7, 7), p(7, 0), p(12, 0)]);
+  });
+
+  it("slides a vertical segment, adding corners next to the wire ends", () => {
+    const { doc, wire } = stepWire();
+    const after = moveWirePart(doc, { wire, kind: "segment", index: 1 }, p(5, 4), p(5, 2));
+    expectSameEndsAndOrthogonal(doc, after, wire);
+    expect(pathOf(after, wire)).toEqual([p(0, 0), p(0, 2), p(5, 2), p(5, 7), p(10, 7), p(10, 5)]);
+  });
+
+  it("keeps an end segment attached while it slides", () => {
+    const { doc, wire } = stepWire();
+    const after = moveWirePart(doc, { wire, kind: "segment", index: 0 }, p(4, 1), p(2, 0));
+    expectSameEndsAndOrthogonal(doc, after, wire);
+    expect(pathOf(after, wire)).toEqual([p(0, 0), p(2, 0), p(2, 1), p(7, 1), p(7, 5), p(10, 5)]);
+  });
+
+  it("keeps a wire between two pins attached and orthogonal while a segment slides", () => {
+    let doc = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: p(0, 0),
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    doc = addComponent(doc, {
+      type: "resistor",
+      position: p(10, 0),
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    // From the bottom pin of the first one (0,2) to the bottom pin of the second one (10,2).
+    const added = addWire(doc, [p(0, 2), p(0, 6), p(10, 6), p(10, 2)])!;
+    const after = moveWirePart(
+      added.doc,
+      { wire: added.id, kind: "segment", index: 1 },
+      p(3, 8),
+      p(5, 6),
+    );
+    expectSameEndsAndOrthogonal(added.doc, after, added.id);
+    const w = after.wires[0]!;
+    expect(w.from).toEqual({ comp: "c1", pin: "2" });
+    expect(w.to).toEqual({ comp: "c2", pin: "2" });
+    expect(pathOf(after, added.id)).toContainEqual(p(-2, 8));
+  });
+
   it("moves a bend through the target, keeping the wire orthogonal", () => {
     const { doc, wire } = stepWire();
     const target = p(7, -3);
