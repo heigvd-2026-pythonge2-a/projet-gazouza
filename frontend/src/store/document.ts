@@ -692,11 +692,18 @@ function withPath(doc: EditorDoc, wireId: string, path: readonly GridPoint[]): E
 
 /**
  * Moves a wire part so it goes through `target` (grid units), keeping the wire orthogonal and its
- * ends where they are. A bend moves to `target` and its neighbouring bends follow; a segment only
- * moves across its direction (a horizontal one up or down). Where the neighbour is a wire end,
- * which cannot move, a corner is added. Useless bends are removed afterwards.
+ * ends where they are. A bend moves to `target` and its neighbouring bends follow. A segment moves
+ * across its direction to `target` (a horizontal one up or down), and slides along it by as much
+ * as `target` is from `grab`, the point it was grabbed at (#261): its neighbours then follow,
+ * staying parallel to themselves. Where a point that should move is a wire end, which cannot, a
+ * corner is added next to it. Useless bends are removed afterwards.
  */
-export function moveWirePart(doc: EditorDoc, part: WirePart, target: GridPoint): EditorDoc {
+export function moveWirePart(
+  doc: EditorDoc,
+  part: WirePart,
+  target: GridPoint,
+  grab: GridPoint = target,
+): EditorDoc {
   const w = doc.wires.find((wire) => wire.id === part.wire);
   if (!w || !wirePartPoints(doc, part)) return doc;
   const path = partPath(doc, w).map((p) => ({ ...p }));
@@ -737,17 +744,51 @@ export function moveWirePart(doc: EditorDoc, part: WirePart, target: GridPoint):
     ]);
   }
 
-  const a = path[part.index] as GridPoint;
-  const b = path[part.index + 1] as GridPoint;
+  const i = part.index;
+  const a = path[i] as GridPoint;
+  const b = path[i + 1] as GridPoint;
   const horizontal = a.y === b.y;
-  const moved = (p: GridPoint): GridPoint =>
+  // Along the segment: its two ends and the bends at the far end of its neighbours.
+  const slide = horizontal ? { x: target.x - grab.x, y: 0 } : { x: 0, y: target.y - grab.y };
+  const sliding = slide.x !== 0 || slide.y !== 0;
+  const slid = (p: GridPoint): GridPoint => shift(p, slide);
+  const across = (p: GridPoint): GridPoint =>
     horizontal ? { x: p.x, y: target.y } : { x: target.x, y: p.y };
-  // A segment end that is a wire end stays and gets a new bend next to it instead.
-  const before = path.slice(0, part.index);
-  const after = path.slice(part.index + 2);
-  const start = isEnd(part.index) ? [a, moved(a)] : [moved(a)];
-  const end = isEnd(part.index + 1) ? [moved(b), b] : [moved(b)];
-  return withPath(doc, w.id, [...before, ...start, ...end, ...after]);
+  /** Points standing for `path[j]` once moved, in path order (a wire end stays and gets a bend). */
+  const segmentEnd = (j: number): GridPoint[] => {
+    const p = path[j] as GridPoint;
+    // A segment end that is a wire end keeps its column (or row): the slide only makes the
+    // segment longer or shorter there, so it never goes back over the pin it leaves.
+    if (!isEnd(j)) return [slid(across(p))];
+    return j === 0 ? [p, across(p)] : [across(p), p];
+  };
+  const neighbourEnd = (j: number, towards: GridPoint): GridPoint[] => {
+    const p = path[j] as GridPoint;
+    if (!isEnd(j)) return [slid(p)];
+    // The wire end stays: the wire first leaves it one step the way it did, then turns.
+    const step = {
+      x: p.x + Math.sign(towards.x - p.x),
+      y: p.y + Math.sign(towards.y - p.y),
+    };
+    return j === 0 ? [p, step, slid(step)] : [slid(step), step, p];
+  };
+  const prev = i - 1 >= 0 && sliding ? neighbourEnd(i - 1, a) : null;
+  const next = i + 2 <= last && sliding ? neighbourEnd(i + 2, b) : null;
+  const moved = [
+    ...path.slice(0, prev ? i - 1 : i),
+    ...(prev ?? []),
+    ...segmentEnd(i),
+    ...segmentEnd(i + 1),
+    ...(next ?? []),
+    ...path.slice(next ? i + 3 : i + 2),
+  ];
+  // A slide that would run the wire into a component is dropped: the segment only moves across.
+  if (sliding && pathBlocked(doc, simplifyPath(squarePath(moved)))) {
+    const plain = moveWirePart(doc, part, target);
+    const plainWire = plain.wires.find((x) => x.id === w.id);
+    if (plainWire && !pathBlocked(plain, wirePath(plain, plainWire))) return plain;
+  }
+  return withPath(doc, w.id, moved);
 }
 
 /**

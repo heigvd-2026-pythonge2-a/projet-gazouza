@@ -193,10 +193,10 @@ interface EditorState {
   /** Selects one bend or segment of a wire (clears the other selection). */
   selectWirePart: (part: WirePart | null) => void;
   /**
-   * Moves the selected wire part through `target` (see `moveWirePart`) and keeps it selected
-   * where it lands (`landing`, a point on the part after the move).
+   * Moves the selected wire part through `target`, a segment sliding by as much as `target` is
+   * from `grab` (see `moveWirePart`), and keeps it selected where it lands (`landing`).
    */
-  moveWirePart: (target: GridPoint, landing: WirePart | null) => void;
+  moveWirePart: (target: GridPoint, landing: WirePart | null, grab?: GridPoint) => void;
   toggleSelected: (id: string) => void;
   /**
    * Escape: removes the last bend of the wire being drawn (see `removeLastBend`), else leaves the
@@ -534,10 +534,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   selectWirePart: (part) =>
     set((s) => ({ selection: [], segments: [], wirePart: part, history: seal(s.history) })),
 
-  moveWirePart: (target, landing) =>
+  moveWirePart: (target, landing, grab) =>
     set((s) => {
       if (!s.wirePart) return {};
-      const moved = moveWirePart(s.doc, s.wirePart, target);
+      const moved = moveWirePart(s.doc, s.wirePart, target, grab);
       const doc =
         moved === s.doc ? moved : connectPinsOnWires(moved, { wires: new Set([s.wirePart.wire]) });
       // A cut changes the parts of the wire: the landing part may not exist any more.

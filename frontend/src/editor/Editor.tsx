@@ -235,8 +235,11 @@ export function SchematicCanvas() {
     delta: GridPoint;
     detach: boolean;
   } | null>(null);
-  /** Where the selected wire part is being dragged (grid point), before the store changes. */
-  const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
+  /**
+   * Where the selected wire part is being dragged (grid point) and where it was grabbed, before
+   * the store changes.
+   */
+  const [partTarget, setPartTarget] = useState<{ grab: GridPoint; target: GridPoint } | null>(null);
   /** Component whose main value is being edited in the menu over it (double-click). */
   const [editing, setEditing] = useState<string | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
@@ -296,7 +299,7 @@ export function SchematicCanvas() {
   const doc = drag
     ? moveItems(storeDoc, drag.ids, drag.delta, { detach: drag.detach })
     : partTarget && wirePart
-      ? moveWirePart(storeDoc, wirePart, partTarget)
+      ? moveWirePart(storeDoc, wirePart, partTarget.target, partTarget.grab)
       : storeDoc;
   // While dragging, the free pins are those left once dropped: a pin landing on a wire is cut in
   // as the drop would do, and what touches is connected (see `unconnectedPins`).
@@ -594,12 +597,12 @@ export function SchematicCanvas() {
       if (!target && g.x === start.x && g.y === start.y) return;
       if (target && g.x === target.x && g.y === target.y) return;
       target = g;
-      setPartTarget(g);
+      setPartTarget({ grab: start, target: g });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
-      if (target) dropWirePart(part, target);
+      if (target) dropWirePart(part, target, start);
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape" || !target) return;
@@ -622,7 +625,7 @@ export function SchematicCanvas() {
   };
 
   /** Ends a wire part drag: moves it, and keeps it selected where it landed. */
-  const dropWirePart = (part: WirePart, target: GridPoint) => {
+  const dropWirePart = (part: WirePart, target: GridPoint, grab: GridPoint) => {
     const s = useEditorStore.getState();
     const before = wirePartPoints(s.doc, part);
     if (!before) return;
@@ -631,10 +634,13 @@ export function SchematicCanvas() {
     const [a, b] = before;
     if (part.kind === "segment" && a && b) {
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      on = a.y === b.y ? { x: mid.x, y: target.y } : { x: target.x, y: mid.y };
+      on =
+        a.y === b.y
+          ? { x: mid.x + target.x - grab.x, y: target.y }
+          : { x: target.x, y: mid.y + target.y - grab.y };
     }
-    const landing = wirePartAt(moveWirePart(s.doc, part, target), part.wire, on);
-    s.moveWirePart(target, landing?.kind === part.kind ? landing : null);
+    const landing = wirePartAt(moveWirePart(s.doc, part, target, grab), part.wire, on);
+    s.moveWirePart(target, landing?.kind === part.kind ? landing : null, grab);
   };
 
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
