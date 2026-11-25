@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import html
 import http.client
+import importlib
 import json
 import logging
 import os
@@ -68,6 +69,8 @@ HEALTH_POLL_INTERVAL_S = 0.02
 JS_EVAL_TIMEOUT_S = 2.0
 
 _ICON_RELATIVE_PATH = Path("assets") / "brand" / "psice.ico"
+# pywebview's Windows backend: importing it loads pythonnet and the WebView2 assemblies.
+_DESKTOP_RUNTIME_MODULE = "webview.platforms.edgechromium"
 _LOGO_P_PATH = "M490.01 557.00V357.80H552.01A62.99 62.99 0 0 1 552.01 483.78H490.01"
 _LOGO_GLYPH_PATHS: tuple[tuple[str, str, str], ...] = (
     (
@@ -1172,8 +1175,26 @@ def _resolve_self_check_frontend_dist(frontend_dist: Path | None) -> Path:
     return resolved
 
 
+def _verify_desktop_runtime() -> str:
+    """Load the .NET assemblies the pywebview window needs, without opening a window.
+
+    On Windows, pywebview drives WebView2 through pythonnet. .NET Framework refuses to load
+    assemblies carrying the "downloaded from the Internet" mark unless Psice.exe.config
+    allows it, so importing the backend here catches that failure in the self-check.
+    """
+    if sys.platform != "win32":
+        return "skipped"
+    try:
+        importlib.import_module(_DESKTOP_RUNTIME_MODULE)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Les composants .NET de la fenêtre (pythonnet, WebView2) ne se chargent pas : {exc}"
+        ) from exc
+    return "ok"
+
+
 def run_self_check(*, frontend_dist: Path | None = None) -> str:
-    """Verify frontend assets, ASGI app, component library, ngspice, and offline RC simulation."""
+    """Verify frontend assets, ASGI app, library, ngspice, RC simulation and window runtime."""
     resolved_dist = _resolve_self_check_frontend_dist(frontend_dist)
 
     library = load_library()
@@ -1219,10 +1240,12 @@ def run_self_check(*, frontend_dist: Path | None = None) -> str:
             f"({final_v:.4f} V)."
         )
 
+    desktop_runtime = _verify_desktop_runtime()
+
     return (
         f"Self-check OK: frontend={resolved_dist}, library={len(library)}, "
         f"ngspice={ngspice_exe}, rc_points={len(result.axis.values)}, "
-        f"v_out_final={final_v:.4f}V"
+        f"v_out_final={final_v:.4f}V, desktop_runtime={desktop_runtime}"
     )
 
 
@@ -1270,7 +1293,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Verify bundled frontend assets, ASGI app, component library, ngspice, "
-            "and an offline RC simulation without opening a GUI window."
+            "an offline RC simulation and the window's .NET runtime without opening a GUI window."
         ),
     )
     return parser
