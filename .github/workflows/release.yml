@@ -56,11 +56,19 @@ jobs:
         shell: pwsh
         run: ./build.ps1 -Verify
 
+      # An artifact name cannot contain "/" (branch names such as feat/x).
+      - name: Nom de l'artefact
+        id: artifact
+        shell: bash
+        env:
+          REF: ${{ github.ref_name }}
+        run: echo "name=Psice-${REF//\//-}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       # The folder, not the zip: the artifact is already downloaded as a zip.
       - name: Envoi de l'application (artefact)
         uses: actions/upload-artifact@v7
         with:
-          name: Psice-${{ github.ref_name }}-${{ github.sha }}
+          name: ${{ steps.artifact.outputs.name }}
           path: dist/Psice/
           if-no-files-found: error
 
