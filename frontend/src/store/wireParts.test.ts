@@ -4,6 +4,7 @@ import {
   addComponent,
   addWire,
   cleanJunctions,
+  componentBox,
   deleteItems,
   deleteSegment,
   docBounds,
@@ -105,14 +106,73 @@ describe("moveWirePart", () => {
     const { doc, wire } = stepWire();
     const after = moveWirePart(doc, { wire, kind: "segment", index: 1 }, p(5, 4), p(5, 2));
     expectSameEndsAndOrthogonal(doc, after, wire);
-    expect(pathOf(after, wire)).toEqual([p(0, 0), p(0, 2), p(5, 2), p(5, 7), p(10, 7), p(10, 5)]);
+    // Each wire end is left the way it was, one step, before the wire turns.
+    expect(pathOf(after, wire)).toEqual([
+      p(0, 0),
+      p(1, 0),
+      p(1, 2),
+      p(5, 2),
+      p(5, 7),
+      p(9, 7),
+      p(9, 5),
+      p(10, 5),
+    ]);
   });
 
   it("keeps an end segment attached while it slides", () => {
     const { doc, wire } = stepWire();
     const after = moveWirePart(doc, { wire, kind: "segment", index: 0 }, p(4, 1), p(2, 0));
     expectSameEndsAndOrthogonal(doc, after, wire);
-    expect(pathOf(after, wire)).toEqual([p(0, 0), p(2, 0), p(2, 1), p(7, 1), p(7, 5), p(10, 5)]);
+    // The end of the segment on the wire end keeps its column: the segment only gets longer.
+    expect(pathOf(after, wire)).toEqual([p(0, 0), p(0, 1), p(7, 1), p(7, 5), p(10, 5)]);
+  });
+
+  /** True if no point of the wire lies strictly inside the box of component `id`. */
+  const clearOf = (doc: EditorDoc, wire: string, id: string) => {
+    const { min, max } = componentBox(doc.components.find((c) => c.id === id)!);
+    return pathOf(doc, wire).every(
+      (q) => !(min.x < q.x && q.x < max.x && min.y < q.y && q.y < max.y),
+    );
+  };
+
+  it("never slides a segment back over the pin it leaves", () => {
+    // A horizontal resistor (pins at (-2,0) and (2,0)), a wire leaving (2,0) to the right.
+    const r = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: p(0, 0),
+      rotation: 90,
+      mirror: false,
+    });
+    const added = addWire(r.doc, [p(2, 0), p(6, 0), p(6, 4)])!;
+    const after = moveWirePart(
+      added.doc,
+      { wire: added.id, kind: "segment", index: 0 },
+      p(2, 1),
+      p(4, 0),
+    );
+    expectSameEndsAndOrthogonal(added.doc, after, added.id);
+    expect(clearOf(after, added.id, r.id)).toBe(true);
+    expect(pathOf(after, added.id)).toEqual([p(2, 0), p(2, 1), p(4, 1), p(4, 3), p(6, 3), p(6, 4)]);
+  });
+
+  it("never slides a vertical segment back over the pin it ends on", () => {
+    // A vertical resistor (pins at (0,-2) and (0,2)), a wire arriving on (0,2) from below.
+    const r = addComponent(emptyDoc(), {
+      type: "resistor",
+      position: p(0, 0),
+      rotation: 0,
+      mirror: false,
+    });
+    const added = addWire(r.doc, [p(4, 6), p(0, 6), p(0, 2)])!;
+    const after = moveWirePart(
+      added.doc,
+      { wire: added.id, kind: "segment", index: 1 },
+      p(1, 2),
+      p(0, 4),
+    );
+    expectSameEndsAndOrthogonal(added.doc, after, added.id);
+    expect(clearOf(after, added.id, r.id)).toBe(true);
+    expect(pathOf(after, added.id).at(-1)).toEqual(p(0, 2));
   });
 
   it("keeps a wire between two pins attached and orthogonal while a segment slides", () => {
@@ -141,6 +201,22 @@ describe("moveWirePart", () => {
     expect(w.from).toEqual({ comp: "c1", pin: "2" });
     expect(w.to).toEqual({ comp: "c2", pin: "2" });
     expect(pathOf(after, added.id)).toContainEqual(p(-2, 8));
+  });
+
+  it("does not slide a segment into a component", () => {
+    // A free U, and a horizontal resistor whose body is right of it, on the bottom line.
+    const added = addWire(emptyDoc(), [p(0, 0), p(0, 5), p(4, 5), p(4, 0)])!;
+    const doc = addComponent(added.doc, {
+      type: "resistor",
+      position: p(10, 5),
+      rotation: 90,
+      mirror: false,
+    }).doc;
+    const segment = { wire: added.id, kind: "segment", index: 1 } as const;
+    expect(moveWirePart(doc, segment, p(8, 5), p(2, 5))).toBe(doc);
+    // Across only, the move is still done.
+    const down = moveWirePart(doc, segment, p(8, 7), p(2, 5));
+    expect(pathOf(down, added.id)).toEqual([p(0, 0), p(0, 7), p(4, 7), p(4, 0)]);
   });
 
   it("moves a bend through the target, keeping the wire orthogonal", () => {

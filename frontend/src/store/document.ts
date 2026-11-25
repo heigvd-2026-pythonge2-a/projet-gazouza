@@ -751,31 +751,45 @@ export function moveWirePart(
   const horizontal = a.y === b.y;
   // Along the segment: its two ends and the bends at the far end of its neighbours.
   const slide = horizontal ? { x: target.x - grab.x, y: 0 } : { x: 0, y: target.y - grab.y };
-  const slid = (p: GridPoint): GridPoint => shift(p, slide);
-  const moved = (p: GridPoint): GridPoint =>
-    slid(horizontal ? { x: p.x, y: target.y } : { x: target.x, y: p.y });
-  // A point that is a wire end stays, and gets a new bend next to it instead.
-  const keep = (j: number, p: GridPoint, to: GridPoint): GridPoint[] => {
-    if (!isEnd(j)) return [to];
-    return j === 0 ? [p, to] : [to, p];
-  };
   const sliding = slide.x !== 0 || slide.y !== 0;
-  const prev =
-    i - 1 >= 0 && sliding
-      ? keep(i - 1, path[i - 1] as GridPoint, slid(path[i - 1] as GridPoint))
-      : null;
-  const next =
-    i + 2 <= last && sliding
-      ? keep(i + 2, path[i + 2] as GridPoint, slid(path[i + 2] as GridPoint))
-      : null;
-  return withPath(doc, w.id, [
+  const slid = (p: GridPoint): GridPoint => shift(p, slide);
+  const across = (p: GridPoint): GridPoint =>
+    horizontal ? { x: p.x, y: target.y } : { x: target.x, y: p.y };
+  /** Points standing for `path[j]` once moved, in path order (a wire end stays and gets a bend). */
+  const segmentEnd = (j: number): GridPoint[] => {
+    const p = path[j] as GridPoint;
+    // A segment end that is a wire end keeps its column (or row): the slide only makes the
+    // segment longer or shorter there, so it never goes back over the pin it leaves.
+    if (!isEnd(j)) return [slid(across(p))];
+    return j === 0 ? [p, across(p)] : [across(p), p];
+  };
+  const neighbourEnd = (j: number, towards: GridPoint): GridPoint[] => {
+    const p = path[j] as GridPoint;
+    if (!isEnd(j)) return [slid(p)];
+    // The wire end stays: the wire first leaves it one step the way it did, then turns.
+    const step = {
+      x: p.x + Math.sign(towards.x - p.x),
+      y: p.y + Math.sign(towards.y - p.y),
+    };
+    return j === 0 ? [p, step, slid(step)] : [slid(step), step, p];
+  };
+  const prev = i - 1 >= 0 && sliding ? neighbourEnd(i - 1, a) : null;
+  const next = i + 2 <= last && sliding ? neighbourEnd(i + 2, b) : null;
+  const moved = [
     ...path.slice(0, prev ? i - 1 : i),
     ...(prev ?? []),
-    ...keep(i, a, moved(a)),
-    ...keep(i + 1, b, moved(b)),
+    ...segmentEnd(i),
+    ...segmentEnd(i + 1),
     ...(next ?? []),
     ...path.slice(next ? i + 3 : i + 2),
-  ]);
+  ];
+  // A slide that would run the wire into a component is dropped: the segment only moves across.
+  if (sliding && pathBlocked(doc, simplifyPath(squarePath(moved)))) {
+    const plain = moveWirePart(doc, part, target);
+    const plainWire = plain.wires.find((x) => x.id === w.id);
+    if (plainWire && !pathBlocked(plain, wirePath(plain, plainWire))) return plain;
+  }
+  return withPath(doc, w.id, moved);
 }
 
 /**
