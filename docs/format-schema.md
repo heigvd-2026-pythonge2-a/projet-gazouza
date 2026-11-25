@@ -95,7 +95,7 @@ déclenche que si l'utilisateur vide un champ.
 | `type` | Broche | Rôle | Ligne SPICE |
 | --- | --- | --- | --- |
 | `ground` | `1` | Relie son nœud à la masse : le nœud s'appelle `0`. | aucune |
-| `label` | `1` | Donne un nom au nœud : `params.net = "out"`. | aucune |
+| `label` | `1` | Donne un nom au nœud : `params.net = "out"`. `params.direction` (`none`, `input`, `output`, `bidir`) ne change que le dessin ; absent, il vaut `none`. | aucune |
 
 Ces deux types n'ont **pas** de `name` : on peut poser autant de masses qu'on veut, et le nom d'une
 étiquette est uniquement dans `params.net` (pas de doublon).
