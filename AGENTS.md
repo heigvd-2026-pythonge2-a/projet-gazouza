@@ -91,6 +91,19 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   utilise `--milestone "<titre exact>"` (liste : `gh api repos/{owner}/{repo}/milestones`).
   En cas de doute entre deux jalons, demande à l'humain. Chaque tâche prévue d'un jalon a son
   issue dans la milestone dès le début du jalon, sinon le pourcentage d'avancement est faux.
+- **Releases** : le workflow [`release.yml`](.github/workflows/release.yml) construit
+  l'application Windows sur un runner Windows (`build.ps1 -Verify`, qui lance aussi le
+  `--self-check` du zip). Il ne tourne ni sur les PR ni sur `main`, seulement :
+  - **lancé à la main** (onglet Actions, « Application Windows », « Run workflow ») : il garde
+    l'application comme artefact du workflow et ne publie rien. C'est le moyen de tester le
+    build avant une livraison ou après un changement de `build.ps1` ;
+  - **sur un tag `vX.Y.Z`** poussé (SemVer, `0.x` avant la livraison finale) : il publie
+    `Psice.zip` dans la release GitHub du tag. Un suffixe (`v1.0.0-rc.1`) en fait une
+    pré-version. Le tag se pose sur un commit de `main` dont la CI est verte
+    (`git tag v0.2.0 origin/main ; git push origin v0.2.0`).
+
+  Une release est publique dès que le tag est poussé : annonce-la à l'équipe avant, et ne pousse
+  jamais de tag sans l'accord explicite de l'humain.
 - **Partir des issues ouvertes** : avant de commencer une tâche, cherche une issue ouverte qui
   la couvre (`gh issue list --state open --search "<mots-clés>"`, ou
   `gh issue list --milestone "<titre>"`). Si elle existe, travaille dessus : mentionne-la à
