@@ -4,6 +4,7 @@ import { Circle, Group, Line, Rect, Text } from "react-konva";
 import {
   getDef,
   symbolBounds,
+  symbolOf,
   toWorld,
   visibleParams,
   type Bounds,
@@ -205,7 +206,7 @@ export function ComponentSymbol({
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
-        {def.symbol.map((shape, i) => (
+        {symbolOf(def, c.params).map((shape, i) => (
           <SymbolShapeNode key={i} shape={shape} color={color} />
         ))}
         {def.pins

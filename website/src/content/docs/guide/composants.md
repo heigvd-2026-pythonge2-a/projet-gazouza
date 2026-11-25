@@ -17,7 +17,7 @@ de code. Les symboles suivent la norme **CEI 60617**.
 | Source de tension | `V` | `+`, `-` | Forme d'onde (voir ci-dessous) |
 | Source de courant | `I` | `+`, `-` | Forme d'onde (voir ci-dessous) |
 | Masse | — | `1` | — |
-| Étiquette de nœud | — | `1` | Nom du nœud (`out`) |
+| Étiquette de nœud | — | `1` | Nom du nœud (`out`), direction |
 
 Le **préfixe** est la première lettre du nom du composant (`R1`, `Rcharge`). Tu peux renommer
 un composant, mais son nom doit garder ce préfixe et rester unique.
@@ -35,6 +35,15 @@ même sans fil dessiné entre eux.
 
 Un nom d'étiquette ne contient que des lettres, des chiffres et `_`, et commence par une lettre.
 Les majuscules ne comptent pas : `Out` et `out` désignent le même nœud.
+
+La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
+
+| Direction | Drapeau |
+|---|---|
+| Aucune | Rectangle |
+| Entrée | Pointe vers la broche : le signal entre dans le circuit |
+| Sortie | Pointe à l'opposé de la broche : le signal sort du circuit |
+| Bidirectionnelle | Pointe des deux côtés |
 
 ## Formes d'onde des sources
 
