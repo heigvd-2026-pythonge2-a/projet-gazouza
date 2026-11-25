@@ -161,7 +161,7 @@ export function CurrentLayer({
             context.moveTo(p.x * GRID + DOT_RADIUS, p.y * GRID);
             context.arc(p.x * GRID, p.y * GRID, DOT_RADIUS, 0, Math.PI * 2);
           }
-          context.setAttr("fillStyle", colors.highlight);
+          context.setAttr("fillStyle", colors.currentDot);
           context.fill();
         }}
       />

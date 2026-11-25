@@ -24,7 +24,9 @@ export interface ThemePalette {
   bandFill: string;
   bandTouch: string;
   bandTouchFill: string;
-  /** Moving dots of the current animation, and the "unsaved" badge. */
+  /** Moving dots of the current animation: a blue that the wires and the selection do not use. */
+  currentDot: string;
+  /** The "unsaved" badge. */
   highlight: string;
 
   /** Panels and controls around the canvas. */
@@ -67,6 +69,7 @@ export const PALETTES: Record<ThemeName, ThemePalette> = {
     bandFill: "rgba(37, 99, 235, 0.08)",
     bandTouch: "#16a34a",
     bandTouchFill: "rgba(22, 163, 74, 0.08)",
+    currentDot: "#0284c7",
     highlight: "#f59e0b",
 
     surface: "#ffffff",
@@ -107,6 +110,8 @@ export const PALETTES: Record<ThemeName, ThemePalette> = {
     bandFill: "rgba(96, 165, 250, 0.12)",
     bandTouch: "#4ade80",
     bandTouchFill: "rgba(74, 222, 128, 0.12)",
+    // Lighter than the light theme's, so the dots stand out on the night blue.
+    currentDot: "#38bdf8",
     highlight: "#fbbf24",
 
     surface: "#1e293b",
