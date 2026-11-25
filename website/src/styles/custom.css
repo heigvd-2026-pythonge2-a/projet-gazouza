@@ -136,6 +136,32 @@
 	max-width: 44rem;
 }
 
+/* Closing call to action of the home page, centred under the team. */
+.psice-cta {
+	text-align: center;
+	padding: 2.5rem 1rem;
+	border-radius: 1rem;
+	border: 1px solid var(--psice-card-border);
+	background-color: var(--psice-card-bg);
+	background-image: radial-gradient(var(--psice-grid-dot) 1.2px, transparent 1.2px);
+	background-size: 24px 24px;
+}
+
+.psice-cta .psice-lead {
+	margin-inline: auto;
+}
+
+.psice-cta-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 1rem;
+}
+
+.psice-cta-actions > * {
+	margin: 0 !important;
+}
+
 /* Cards: glassy, lift on hover. */
 .card {
 	background: var(--psice-card-bg);
@@ -152,6 +178,17 @@
 	transform: translateY(-3px);
 	border-color: color-mix(in srgb, var(--sl-color-accent) 60%, transparent) !important;
 	box-shadow: 0 14px 32px -16px var(--psice-glow);
+}
+
+/* No lift for those who asked the system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+	.card {
+		transition: none;
+	}
+
+	.card:hover {
+		transform: none;
+	}
 }
 
 .card .icon {

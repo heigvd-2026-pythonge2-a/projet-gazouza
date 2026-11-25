@@ -34,7 +34,7 @@ hero:
       variant: minimal
 ---
 
-import { Aside, Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+import { Aside, Card, CardGrid, LinkButton, LinkCard, Steps } from '@astrojs/starlight/components';
 import AppShowcase from '../../components/AppShowcase.astro';
 import Roadmap from '../../components/Roadmap.astro';
 import Team from '../../components/Team.astro';
@@ -160,3 +160,23 @@ import Team from '../../components/Team.astro';
 </div>
 
 <Team />
+
+<div class="psice-section psice-cta">
+<span class="psice-kicker">À toi de jouer</span>
+
+## Dessine ton premier circuit
+
+<p class="psice-lead">
+	Le tutoriel se fait en moins de 15 minutes. Sur un ordinateur, la démo en ligne tourne dans le
+	navigateur, sans rien installer.
+</p>
+
+<div class="psice-cta-actions">
+	<LinkButton href="/projet-gazouza/demarrer/premier-circuit/" icon="right-arrow">
+		Commencer
+	</LinkButton>
+	<LinkButton href="/projet-gazouza/demarrer/essayer/" icon="rocket" variant="secondary">
+		Essayer en ligne
+	</LinkButton>
+</div>
+</div>
