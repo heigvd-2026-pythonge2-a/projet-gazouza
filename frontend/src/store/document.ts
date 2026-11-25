@@ -212,6 +212,46 @@ export function unconnectedPins(doc: EditorDoc): UnconnectedPin[] {
   );
 }
 
+/** A connection dot drawn on the schematic. */
+export interface ConnectionDot {
+  /** Stable key: the junction's id when there is one, otherwise built from the position. */
+  id: string;
+  position: GridPoint;
+  /** The junction lying there, if any (a click on the dot selects it). */
+  junction?: string;
+}
+
+/**
+ * Grid points where a connection dot is drawn: those where at least three connections meet
+ * (#245). A connection is a component pin lying there, or a wire end attached there, to a pin or
+ * to a junction. Two pins touching and a third component's pin make a dot, as do two wires on a
+ * pin; two wires following each other, or a pin and its wire, do not. Free wire ends connect
+ * nothing and do not count, nor does a wire reduced to a point (two touching pins count already).
+ */
+export function connectionDots(doc: EditorDoc): ConnectionDot[] {
+  const points = new Map<string, { position: GridPoint; count: number; junction?: string }>();
+  const add = (p: GridPoint, junction?: string) => {
+    const k = `${p.x},${p.y}`;
+    const entry = points.get(k) ?? { position: { ...p }, count: 0 };
+    entry.count++;
+    if (junction) entry.junction = junction;
+    points.set(k, entry);
+  };
+  for (const c of doc.components) for (const pin of getDef(c.type).pins) add(toWorld(pin, c));
+  for (const w of doc.wires) {
+    if (wirePath(doc, w).every((p, _, path) => samePoint(p, path[0] as GridPoint))) continue;
+    for (const end of [w.from, w.to]) {
+      if ("comp" in end) add(endPosition(doc, end));
+      else if ("junction" in end) add(endPosition(doc, end), end.junction);
+    }
+  }
+  return [...points]
+    .filter(([, entry]) => entry.count >= 3)
+    .map(([k, { position, junction }]) =>
+      junction ? { id: junction, position, junction } : { id: `dot-${k}`, position },
+    );
+}
+
 export interface GridRect {
   min: GridPoint;
   max: GridPoint;
@@ -761,10 +801,11 @@ const reversed = (w: EditorWire): EditorWire => ({
  * Removes the junctions (among `ids`) that no longer join three wires, so no dot is left where
  * nothing meets any more. A junction with one wire end (or none) goes, and that end becomes a
  * free end in the same place. A junction between exactly two wires goes too: both wires are
- * merged into one going through its position (the first one keeps its id). A merge that would
- * give a wire looping back to where it starts is not done, and the junction is kept.
+ * merged into one going through its position (the first one keeps its id, unless the other one is
+ * `keep`). A merge that would give a wire looping back to where it starts is not done, and the
+ * junction is kept.
  */
-export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>, keep?: string): EditorDoc {
   let out = doc;
   for (const id of ids) {
     const junction = out.junctions.find((j) => j.id === id);
@@ -792,7 +833,8 @@ export function cleanJunctions(doc: EditorDoc, ids: ReadonlySet<string>): Editor
         ...b.points,
         endPosition(out, b.to),
       ]).slice(1, -1);
-      const merged: EditorWire = { id: first.id, from: a.from, to: b.to, points };
+      const id = second.id === keep ? keep : first.id;
+      const merged: EditorWire = { id, from: a.from, to: b.to, points };
       out = {
         ...out,
         junctions: without,
@@ -1173,7 +1215,9 @@ const sameEnd = (a: WireEnd, b: WireEnd): boolean =>
 
 /**
  * Adds a wire along `path` (start, bends, end, in grid units). Both ends are attached with
- * `resolveEnd`. Returns null, and changes nothing, for a wire of zero length or one that would
+ * `resolveEnd`. A wire starting or ending on the free end of another one is merged with it (a
+ * junction of two wires would draw a dot where nothing branches, #245); the merged wire keeps the
+ * returned id. Returns null, and changes nothing, for a wire of zero length or one that would
  * loop back to the pin or junction it starts from.
  */
 export function addWire(
@@ -1191,7 +1235,8 @@ export function addWire(
 
   const id = nextIndexed("w", allIds(to.doc));
   const wire: EditorWire = { id, from: from.end, to: to.end, points: points.slice(1, -1) };
-  return { doc: { ...to.doc, wires: [...to.doc.wires, wire] }, id };
+  const added = { ...to.doc, wires: [...to.doc.wires, wire] };
+  return { doc: cleanJunctions(added, junctionsOf([wire]), id), id };
 }
 
 // --- Copy and paste ------------------------------------------------------------------------------
@@ -1201,7 +1246,8 @@ export type Clip = EditorDoc;
 
 /**
  * The selected components and junctions, plus the wires whose two ends are inside the copy: both
- * attached to copied items, or free ends of a selected wire. Wires going outside are left out.
+ * attached to copied items, or free ends of a selected wire. Wires going outside are left out,
+ * and the copied junctions left with fewer than three wires are cleaned up (see `cleanJunctions`).
  */
 export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
   const components = doc.components.filter((c) => ids.has(c.id));
@@ -1211,7 +1257,8 @@ export function copyItems(doc: EditorDoc, ids: ReadonlySet<string>): Clip {
       "comp" in end ? ids.has(end.comp) : "junction" in end ? ids.has(end.junction) : ids.has(w.id);
     return inside(w.from) && inside(w.to);
   });
-  return structuredClone({ components, wires, junctions });
+  const clip = structuredClone({ components, wires, junctions });
+  return cleanJunctions(clip, new Set(junctions.map((j) => j.id)));
 }
 
 /**
