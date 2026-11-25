@@ -56,6 +56,13 @@ Deux composants peuvent quand même se toucher par **une** broche : ils sont alo
 - Un **double-clic** termine le fil dans le vide ; <kbd>Échap</kbd> enlève le dernier coude.
 - Lâcher un fil **au milieu d'un autre fil** crée une **jonction** (le point bleu d'un « T ») :
   les trois fils sont alors reliés.
+- Partir du **bout libre** d'un fil (ou y arriver) le prolonge : les deux ne forment plus qu'un
+  seul fil.
+
+Un **point de connexion** bleu est dessiné partout où **au moins trois connexions** se
+rejoignent : trois fils sur une jonction, deux fils sur une broche, ou trois composants qui se
+touchent par une broche. Là où deux fils se suivent, ou là où un fil arrive sur une broche, il n'y
+en a pas.
 
 Quand tu déplaces un composant, ses fils **restent accrochés** et suivent ; s'ils passeraient
 à travers un autre composant, ils sont retracés autour. Avec <kbd>Ctrl</kbd> enfoncé pendant le
