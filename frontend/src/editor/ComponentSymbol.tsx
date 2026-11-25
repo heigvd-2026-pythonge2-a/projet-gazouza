@@ -12,7 +12,7 @@ import {
   type SymbolShape,
 } from "../store";
 import { arcPoints } from "./symbolGeometry";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 const STROKE = 2;
 const TEXT_WIDTH = 80;
@@ -146,8 +146,9 @@ export function ComponentSymbol({
   onPinMouseDown,
   onDoubleClick,
 }: ComponentSymbolProps) {
+  const colors = useCanvasColors();
   const def = getDef(c.type);
-  const color = selected ? COLORS.selected : COLORS.symbol;
+  const color = selected ? colors.selected : colors.symbol;
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
@@ -194,7 +195,7 @@ export function ComponentSymbol({
           width={(bounds.max.x - bounds.min.x + 2 * pad) * GRID}
           height={(bounds.max.y - bounds.min.y + 2 * pad) * GRID}
           fill="rgba(0,0,0,0)"
-          stroke={selected ? COLORS.selected : undefined}
+          stroke={selected ? colors.selected : undefined}
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
@@ -208,7 +209,7 @@ export function ComponentSymbol({
             y={(pin.y - PIN_SIZE / 2) * GRID}
             width={PIN_SIZE * GRID}
             height={PIN_SIZE * GRID}
-            stroke={COLORS.pin}
+            stroke={colors.pin}
             strokeWidth={1}
             listening={false}
           />
@@ -242,7 +243,7 @@ export function ComponentSymbol({
           width={TEXT_WIDTH}
           align={textBox.align}
           fontSize={FONT_SIZE}
-          fill={selected ? COLORS.selected : COLORS.text}
+          fill={selected ? colors.selected : colors.text}
           listening={false}
         />
       )}

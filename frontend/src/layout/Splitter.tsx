@@ -1,5 +1,7 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
+import { UI } from "../store";
+
 import { SPLITTER_SIZE } from "./sizes";
 
 const KEY_STEP = 16;
@@ -90,10 +92,10 @@ export function Splitter({
         touchAction: "none",
         // A 1px line in the middle; the whole bar lights up while hovered or dragged.
         background: active
-          ? "#93c5fd"
+          ? UI.splitterHover
           : hover
-            ? "#bfdbfe"
-            : `linear-gradient(${vertical ? "to right" : "to bottom"}, transparent 2px, #e5e7eb 2px, #e5e7eb 3px, transparent 3px)`,
+            ? UI.activeBorder
+            : `linear-gradient(${vertical ? "to right" : "to bottom"}, transparent 2px, ${UI.border} 2px, ${UI.border} 3px, transparent 3px)`,
       }}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}

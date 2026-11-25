@@ -32,7 +32,7 @@ import {
   useElementSize,
   type Layout,
 } from "./layout";
-import { useEditorStore } from "./store";
+import { COLORS, UI, useEditorStore } from "./store";
 
 /** Panel shown in full screen; the schematic keeps the palette beside it to stay editable. */
 type Maximized = "schematic" | "results" | null;
@@ -43,14 +43,14 @@ type Folding = "side" | "inspector" | "results" | null;
 /** Look of a panel that will fold away when the splitter is released. */
 const FOLDING: CSSProperties = { opacity: 0.35, transition: "opacity 0.1s" };
 
-const BORDER = "1px solid #e5e7eb";
+const BORDER = `1px solid ${UI.border}`;
 
 const TOOL_BUTTON: CSSProperties = {
   padding: "4px 10px",
   border: BORDER,
   borderRadius: 5,
-  background: "#ffffff",
-  color: "#374151",
+  background: UI.surface,
+  color: COLORS.text,
   font: "inherit",
   fontSize: 12,
   cursor: "pointer",
@@ -206,8 +206,8 @@ export default function App() {
         flexDirection: "column",
         fontFamily: '"Segoe UI", system-ui, sans-serif',
         fontSize: 13,
-        color: "#1f2937",
-        background: "#ffffff",
+        color: COLORS.symbol,
+        background: UI.surface,
       }}
     >
       {/* No header bar (#209): the window title names the app. An unreachable backend is
@@ -495,7 +495,11 @@ export default function App() {
 }
 
 /** Look of a toggle button of the toolbar while it is on. */
-const PRESSED: CSSProperties = { background: "#eff6ff", color: "#2563eb", borderColor: "#bfdbfe" };
+const PRESSED: CSSProperties = {
+  background: UI.activeBackground,
+  color: COLORS.selected,
+  borderColor: UI.activeBorder,
+};
 
 /** Small × button in a panel's corner, to hide the panel. */
 function CloseButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -513,8 +517,8 @@ function CloseButton({ label, onClick }: { label: string; onClick: () => void })
         padding: 0,
         border: BORDER,
         borderRadius: 5,
-        background: "#ffffff",
-        color: "#4b5563",
+        background: UI.surface,
+        color: UI.label,
         cursor: "pointer",
         fontSize: 16,
         lineHeight: 1,

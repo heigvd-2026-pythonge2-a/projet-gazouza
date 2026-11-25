@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { isUnsaved, useEditorStore } from "../store";
+import { isUnsaved, useEditorStore, useThemeStore } from "../store";
 import {
   exportImage,
   exportTransparent,
@@ -11,7 +11,7 @@ import {
   setExportTransparent,
 } from "./fileActions";
 import { exportNetlist } from "./simulationActions";
-import { UI } from "./theme";
+import { COLORS, UI } from "./theme";
 import { fitView, zoomIn, zoomOut } from "./viewCommands";
 
 const SOON = "Bientôt disponible";
@@ -36,6 +36,8 @@ const ICONS = {
   zoomIn: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4 M7 5v4",
   zoomOut: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4",
   fit: "M2 5.5V2h3.5 M10.5 2H14v3.5 M14 10.5V14h-3.5 M5.5 14H2v-3.5",
+  moon: "M13.5 9.5A6 6 0 1 1 6.5 2.5a4.8 4.8 0 0 0 7 7z",
+  sun: "M8 5a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M8 1v1.5 M8 13.5V15 M1 8h1.5 M13.5 8H15 M3 3l1 1 M12 12l1 1 M3 13l1-1 M12 4l1-1",
 } as const;
 
 function Icon({ name }: { name: keyof typeof ICONS }) {
@@ -87,8 +89,8 @@ function ToolButton(props: {
           padding: 0,
           border: `1px solid ${UI.border}`,
           borderRadius: 5,
-          background: expanded ? UI.activeBackground : "#ffffff",
-          color: "#374151",
+          background: expanded ? UI.activeBackground : UI.surface,
+          color: COLORS.text,
           opacity: disabled ? 0.4 : 1,
           cursor: disabled ? "default" : "pointer",
         }}
@@ -105,7 +107,7 @@ function ToolButton(props: {
             width: 6,
             height: 6,
             borderRadius: 3,
-            background: "#f59e0b",
+            background: COLORS.highlight,
             pointerEvents: "none",
           }}
         />
@@ -168,12 +170,12 @@ function ExportButton() {
             gap: 8,
             width: 230,
             padding: 10,
-            background: "#ffffff",
+            background: UI.surface,
             border: `1px solid ${UI.border}`,
             borderRadius: 6,
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+            boxShadow: `0 4px 12px ${UI.shadow}`,
             fontSize: 13,
-            color: "#1f2937",
+            color: COLORS.symbol,
           }}
         >
           <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
@@ -200,10 +202,10 @@ function ExportButton() {
             style={{
               alignSelf: "flex-end",
               padding: "4px 10px",
-              border: "1px solid #2563eb",
+              border: `1px solid ${COLORS.selected}`,
               borderRadius: 5,
-              background: "#2563eb",
-              color: "#ffffff",
+              background: COLORS.selected,
+              color: UI.onAccent,
               font: "inherit",
               cursor: "pointer",
             }}
@@ -254,6 +256,7 @@ export function EditorToolbar() {
       s.selection.some((id) => s.doc.components.some((c) => c.id === id)),
   );
   const canPaste = useEditorStore((s) => s.clipboard !== null);
+  const dark = useThemeStore((t) => t.theme === "dark");
   const s = useEditorStore.getState;
 
   return (
@@ -334,6 +337,11 @@ export function EditorToolbar() {
         <ToolButton label="Zoom avant (molette)" icon="zoomIn" onClick={zoomIn} />
         <ToolButton label="Zoom arrière (molette)" icon="zoomOut" onClick={zoomOut} />
         <ToolButton label="Ajuster la vue au circuit (F)" icon="fit" onClick={fitView} />
+        <ToolButton
+          label={dark ? "Passer au thème clair" : "Passer au thème bleu nuit"}
+          icon={dark ? "sun" : "moon"}
+          onClick={() => useThemeStore.getState().toggle()}
+        />
       </Group>
     </>
   );

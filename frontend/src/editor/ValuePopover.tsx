@@ -10,14 +10,14 @@ import {
 } from "../store";
 import type { Viewport } from "./Grid";
 import { focusInspector } from "./inspectorFocus";
-import { GRID, UI } from "./theme";
+import { COLORS, GRID, UI } from "./theme";
 
 /** Space between the symbol and the menu, in grid units. */
 const GAP = 0.4;
 /** Smallest space kept between the menu and the edges of the canvas, in pixels. */
 const MARGIN = 4;
 /** Colour of a warning, as in the properties panel. */
-const WARNING = "#b45309";
+const WARNING = UI.warning;
 
 /**
  * Small menu over a component, opened by a double-click (#197), to change its main value without
@@ -110,15 +110,15 @@ export function ValuePopover({
         top: 0,
         width: 200,
         padding: 8,
-        background: "#ffffff",
+        background: UI.surface,
         border: `1px solid ${UI.border}`,
         borderRadius: 6,
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+        boxShadow: `0 4px 12px ${UI.shadow}`,
         fontSize: 12,
         zIndex: 10,
       }}
     >
-      <label htmlFor={id} style={{ display: "block", color: "#4b5563", marginBottom: 3 }}>
+      <label htmlFor={id} style={{ display: "block", color: UI.label, marginBottom: 3 }}>
         {param.label}
         {component.name && ` — ${component.name}`}
       </label>
@@ -126,7 +126,7 @@ export function ValuePopover({
         style={{
           display: "flex",
           alignItems: "center",
-          border: `1px solid ${problem ? problemColor : "#d1d5db"}`,
+          border: `1px solid ${problem ? problemColor : UI.inputBorder}`,
           borderRadius: 4,
         }}
       >
@@ -153,7 +153,7 @@ export function ValuePopover({
             outline: "none",
           }}
         />
-        {param.unit && <span style={{ padding: "0 6px", color: "#9ca3af" }}>{param.unit}</span>}
+        {param.unit && <span style={{ padding: "0 6px", color: UI.faint }}>{param.unit}</span>}
       </div>
       {problem && (
         <p id={`${id}-problem`} style={{ margin: "3px 0 0", color: problemColor }}>
@@ -172,7 +172,7 @@ export function ValuePopover({
             padding: 0,
             border: 0,
             background: "none",
-            color: "#2563eb",
+            color: COLORS.selected,
             font: "inherit",
             cursor: "pointer",
             textDecoration: "underline",

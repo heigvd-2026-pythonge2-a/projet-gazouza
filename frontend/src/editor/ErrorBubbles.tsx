@@ -15,8 +15,8 @@ const MARGIN = 4;
 const CENTRED = "translateX(-50%)";
 
 const STYLES = {
-  error: { color: UI.error, background: "#fef2f2" },
-  warning: { color: "#b45309", background: "#fffbeb" },
+  error: { color: UI.error, background: UI.errorBackground },
+  warning: { color: UI.warning, background: UI.warningBackground },
 } as const;
 
 const arrowStyle: CSSProperties = {
@@ -104,7 +104,7 @@ function Bubble({
           fontSize: 12,
           lineHeight: 1.35,
           textAlign: "left",
-          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.15)",
+          boxShadow: `0 1px 3px ${UI.shadow}`,
           cursor: "pointer",
           pointerEvents: "auto",
         }}
