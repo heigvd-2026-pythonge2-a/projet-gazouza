@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
 
-import { getHealth } from "./api/client";
 import {
   AnimateButton,
   EditorToolbar,
@@ -64,7 +63,6 @@ const FULL_SCREEN_RETURN_MS = 3000;
 // The results can also go under the schematic; the layout is remembered between launches. The
 // results only show once there is something to show (#96), the properties can be closed (#164).
 export default function App() {
-  const [backend, setBackend] = useState("connexion…");
   // The results start hidden, even if they were shown when the app was closed (#96).
   const [layout, setLayout] = useState<Layout>(() => ({ ...loadLayout(), resultsVisible: false }));
   const [rowRef, row] = useElementSize<HTMLDivElement>();
@@ -170,12 +168,6 @@ export default function App() {
     [],
   );
 
-  useEffect(() => {
-    getHealth()
-      .then((health) => setBackend(health.status))
-      .catch(() => setBackend("injoignable"));
-  }, []);
-
   /** Results panel: a slot for the plot module (src/plot). */
   const resultsPanel = (style: CSSProperties) => (
     <section
@@ -218,23 +210,8 @@ export default function App() {
         background: "#ffffff",
       }}
     >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          height: 30,
-          flex: "none",
-          padding: "0 12px",
-          background: "#1f2937",
-          color: "#e5e7eb",
-          fontSize: 12,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 13, color: "#ffffff" }}>Psice</h1>
-        <span style={{ marginLeft: "auto" }}>Backend : {backend}</span>
-      </header>
-
+      {/* No header bar (#209): the window title names the app. An unreachable backend is
+          reported by LibraryGate at startup, then by each simulation that fails. */}
       <div
         role="toolbar"
         style={{
