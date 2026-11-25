@@ -2,7 +2,7 @@
 // toolbar to the backend. Errors are shown to the user in French.
 
 import { ApiError, generateNetlist, simulate, type SimulationRequest } from "../api/client";
-import { analysisSources, toAnalysis, toSchematic, useEditorStore } from "../store";
+import { analysisSources, namesNets, toAnalysis, toSchematic, useEditorStore } from "../store";
 import { saveNewFile } from "./fileActions";
 
 /** Cancels the simulation in progress, if any. */
@@ -25,7 +25,8 @@ const message = (error: unknown) =>
 /**
  * Runs the simulation of the current document. The result is kept with the document it was run
  * on (see `setSimulation`); for an operating point, the netlist's nodes are fetched too, to show
- * the voltages on the schematic. Running it again while it runs stops it.
+ * the voltages on the schematic, and so they are when an error or a warning names a node, to
+ * highlight its wires (#253). Running it again while it runs stops it.
  */
 export async function runSimulation(): Promise<void> {
   if (stop) {
@@ -45,8 +46,10 @@ export async function runSimulation(): Promise<void> {
   try {
     const result = await simulate(built.request, { signal: controller.signal });
     let nets: Record<string, string[]> = {};
-    if (result.analysis === "op" && (result.errors ?? []).length === 0) {
-      // Only needed to place the values; the result is shown without them if this fails.
+    const showValues = result.analysis === "op" && (result.errors ?? []).length === 0;
+    if (showValues || namesNets(result)) {
+      // Only needed to place the values and find the nodes named by the errors; the result is
+      // shown without them if this fails.
       nets = await generateNetlist(built.request, { signal: controller.signal })
         .then((n) => n.nets ?? {})
         .catch(() => ({}));

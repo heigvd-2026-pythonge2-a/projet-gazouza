@@ -110,7 +110,7 @@ describe("saving with the system file dialogs", () => {
     const views = await import("./viewCommands");
     const image = new Blob(["png"], { type: "image/png" });
     const exportImage = vi.fn(async () => image);
-    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
+    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, show() {}, exportImage });
     const handle = fakeHandle(f.IMAGE_FILE_NAME);
     const written: unknown[] = [];
     handle.createWritable = async () => ({

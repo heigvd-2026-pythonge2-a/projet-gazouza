@@ -94,7 +94,13 @@ describe("EditorToolbar", () => {
     window.localStorage.removeItem(TRANSPARENT_EXPORT_KEY);
     vi.spyOn(window, "alert").mockImplementation(() => {});
     const exportImage = vi.fn(async () => null);
-    const unregister = registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
+    const unregister = registerViewCommands({
+      zoomIn() {},
+      zoomOut() {},
+      fit() {},
+      show() {},
+      exportImage,
+    });
     render(<EditorToolbar />);
     act(() => void dropComponent("resistor"));
 

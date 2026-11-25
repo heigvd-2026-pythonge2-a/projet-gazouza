@@ -7,15 +7,18 @@ import {
   analysisSources,
   chosenSource,
   dcRangeFor,
+  diagnosticMarks,
   formatSI,
   freshSimulation,
   useEditorStore,
   type AnalysisKind,
   type AnalysisSettings,
   type AnalysisSource,
+  type DiagnosticMark,
 } from "../store";
 import { runSimulation } from "./simulationActions";
 import { COLORS, UI } from "./theme";
+import { showArea } from "./viewCommands";
 
 const CONTROL: CSSProperties = {
   padding: "4px 8px",
@@ -248,6 +251,40 @@ export function SimulationControls() {
   );
 }
 
+/**
+ * One error or warning of the report. If it points at elements of the schematic (`mark`, #253),
+ * it is a link: clicking it shows them on the canvas and selects them.
+ */
+function DiagnosticItem({ message, mark }: { message: string; mark: DiagnosticMark | undefined }) {
+  const select = useEditorStore((s) => s.select);
+  if (!mark) return <li>{message}</li>;
+  return (
+    <li>
+      <button
+        type="button"
+        title="Montrer sur le schéma"
+        onClick={() => {
+          showArea(mark.bounds);
+          select([...mark.components, ...mark.wires, ...mark.junctions]);
+        }}
+        style={{
+          padding: 0,
+          border: "none",
+          background: "none",
+          color: "inherit",
+          font: "inherit",
+          textAlign: "left",
+          textDecoration: "underline dotted",
+          textUnderlineOffset: 2,
+          cursor: "pointer",
+        }}
+      >
+        {message}
+      </button>
+    </li>
+  );
+}
+
 /** Errors and warnings of the last simulation, and the values of an operating point. */
 export function SimulationReport() {
   const simulating = useEditorStore((s) => s.simulating);
@@ -257,6 +294,11 @@ export function SimulationReport() {
   const doc = useEditorStore((s) => s.doc);
   const showValues = useEditorStore((s) => s.showValues);
   const setShowValues = useEditorStore((s) => s.setShowValues);
+  const nets = useEditorStore((s) => s.simulation?.nets);
+  const marks = useMemo(
+    () => new Map((result ? diagnosticMarks(doc, result, nets ?? {}) : []).map((m) => [m.key, m])),
+    [doc, result, nets],
+  );
 
   if (simulating) return <p style={{ color: UI.muted }}>Simulation en cours…</p>;
   if (error) return <p style={{ color: UI.error }}>{error}</p>;
@@ -281,7 +323,7 @@ export function SimulationReport() {
           <p style={{ color: UI.error, fontWeight: 600 }}>La simulation n'a pas pu aboutir :</p>
           <ul style={{ color: UI.error, paddingLeft: 18 }}>
             {errors.map((d, i) => (
-              <li key={i}>{d.message}</li>
+              <DiagnosticItem key={i} message={d.message} mark={marks.get(`error:${i}`)} />
             ))}
           </ul>
         </>
@@ -289,7 +331,7 @@ export function SimulationReport() {
       {warnings.length > 0 && (
         <ul style={{ color: UI.warning, paddingLeft: 18 }}>
           {warnings.map((d, i) => (
-            <li key={i}>{d.message}</li>
+            <DiagnosticItem key={i} message={d.message} mark={marks.get(`warning:${i}`)} />
           ))}
         </ul>
       )}
