@@ -199,6 +199,13 @@ enregistrer, ou **Enregistrer et fermer** en un seul clic. Et si un panneau renc
 inattendue, il te propose d'enregistrer une **copie de secours** (`schema-recupere.psice.json`)
 pour ne rien perdre.
 
+Si Psice se ferme mal (plantage, processus arrêté, ordinateur éteint), tes modifications non
+enregistrées ne sont pas perdues : tant que le schéma a des modifications, Psice en garde une copie
+quelques instants après chaque changement. Au lancement suivant, il te propose **Restaurer** le
+schéma retrouvé (il revient tel quel, marqué comme modifié : pense à l'enregistrer) ou
+**Ignorer**. Après une fermeture normale, ou quand le schéma est enregistré, cette copie est
+effacée et rien n'est proposé.
+
 ## Animer le courant
 
 Après une simulation `.op` ou `.tran`, le bouton **Animer** de la barre d'outils fait circuler

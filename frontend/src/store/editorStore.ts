@@ -263,6 +263,11 @@ interface EditorState {
   newDocument: () => void;
   /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
   openDocument: (doc: EditorDoc) => void;
+  /**
+   * Replaces the document by the copy found after a crash (#274), like `openDocument`, but marked
+   * as modified: it was never saved as it is.
+   */
+  restoreDocument: (doc: EditorDoc) => void;
   /** Records that `doc` was saved (Ctrl+S); edits made while it was being written stay unsaved. */
   markSaved: (doc: EditorDoc) => void;
 }
@@ -560,6 +565,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   // An older file may have pins touching without a wire: connect them, without marking it changed.
   openDocument: (doc) => set((s) => ({ ...freshDocument(tidy(doc)), analysis: forgetSources(s) })),
+
+  // An empty document stands for "never saved": it is never the restored one itself.
+  restoreDocument: (doc) =>
+    set((s) => ({
+      ...freshDocument(tidy(doc)),
+      savedDoc: emptyDoc(),
+      analysis: forgetSources(s),
+    })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 

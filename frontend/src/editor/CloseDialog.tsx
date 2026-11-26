@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { isUnsaved, useEditorStore } from "../store";
 import { saveFile } from "./fileActions";
+import { endRecovery } from "./recovery";
 import { COLORS, UI } from "./theme";
 
 const BUTTON = {
@@ -40,6 +41,8 @@ export function CloseDialog() {
   );
 
   const answer = useCallback((close: boolean) => {
+    // The window goes: no copy to offer at the next start (#274).
+    if (close) endRecovery();
     request.current?.resolve(close);
     request.current = null;
     setOpen(false);
@@ -48,7 +51,10 @@ export function CloseDialog() {
 
   useEffect(() => {
     window.psiceRequestClose = () => {
-      if (!isUnsaved(useEditorStore.getState())) return Promise.resolve(true);
+      if (!isUnsaved(useEditorStore.getState())) {
+        endRecovery();
+        return Promise.resolve(true);
+      }
       if (!request.current) {
         let resolve: (close: boolean) => void = () => {};
         const promise = new Promise<boolean>((r) => (resolve = r));

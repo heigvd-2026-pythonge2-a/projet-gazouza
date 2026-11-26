@@ -49,6 +49,7 @@ import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
+import { RecoveryPrompt } from "./RecoveryPrompt";
 import { ValuePopover } from "./ValuePopover";
 import { registerViewCommands, type ImageOptions } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
@@ -1022,6 +1023,7 @@ export function SchematicCanvas() {
         />
       )}
       <CloseDialog />
+      <RecoveryPrompt />
     </div>
   );
 }
