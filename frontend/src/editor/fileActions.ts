@@ -15,7 +15,7 @@ import {
   useEditorStore,
 } from "../store";
 import { exampleContent } from "./examples";
-import { exportImage as renderImage, type ImageOptions } from "./viewCommands";
+import { exportImage as renderImage, type ImageFormat, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
 export interface PickerType {
@@ -28,11 +28,17 @@ const PICKER_TYPES: PickerType[] = [
   { description: "Schéma Psice", accept: { "application/json": [".json"] } },
 ];
 
-/** File type of an exported image. */
-const PNG_TYPES: PickerType[] = [{ description: "Image PNG", accept: { "image/png": [".png"] } }];
+/** File type of an exported image, by format. */
+const IMAGE_TYPES: Record<ImageFormat, PickerType[]> = {
+  png: [{ description: "Image PNG", accept: { "image/png": [".png"] } }],
+  svg: [{ description: "Image SVG", accept: { "image/svg+xml": [".svg"] } }],
+};
 
-/** Name proposed for an exported image. */
-export const IMAGE_FILE_NAME = "schema.png";
+/** Name proposed for an exported image, by format. */
+export const IMAGE_FILE_NAMES: Record<ImageFormat, string> = {
+  png: "schema.png",
+  svg: "schema.svg",
+};
 
 /** The parts of the File System Access API used here (not in TypeScript's DOM types yet). */
 interface FilePickers {
@@ -272,9 +278,31 @@ export function setExportTransparent(transparent: boolean) {
   }
 }
 
+/** localStorage key of the last format chosen for the image export. */
+export const EXPORT_FORMAT_KEY = "psice.export.format";
+
+/** Last format chosen for the image export (PNG by default). */
+export function exportFormat(): ImageFormat {
+  try {
+    return window.localStorage.getItem(EXPORT_FORMAT_KEY) === "svg" ? "svg" : "png";
+  } catch {
+    return "png";
+  }
+}
+
+/** Remembers the image format for the next exports. */
+export function setExportFormat(format: ImageFormat) {
+  try {
+    window.localStorage.setItem(EXPORT_FORMAT_KEY, format);
+  } catch {
+    // Storage blocked: the choice is simply not kept.
+  }
+}
+
 /**
- * Exports the schematic as a PNG image, to put in a report (#112): the whole circuit, without the
- * grid nor the selection, on a white background, or a transparent one if asked (#195).
+ * Exports the schematic as an image, to put in a report: the whole circuit, without the grid nor
+ * the selection, on a white background, or a transparent one if asked (#195). PNG (#112) by
+ * default, or SVG, which stays sharp at any size (#279).
  */
 export async function exportImage(options: ImageOptions = { transparent: false }) {
   if (useEditorStore.getState().doc.components.length === 0) {
@@ -286,5 +314,6 @@ export async function exportImage(options: ImageOptions = { transparent: false }
     window.alert("Impossible de créer l'image du schéma.");
     return;
   }
-  await saveNewFile(IMAGE_FILE_NAME, image, PNG_TYPES);
+  const format = options.format ?? "png";
+  await saveNewFile(IMAGE_FILE_NAMES[format], image, IMAGE_TYPES[format]);
 }

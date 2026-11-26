@@ -111,7 +111,7 @@ describe("saving with the system file dialogs", () => {
     const image = new Blob(["png"], { type: "image/png" });
     const exportImage = vi.fn(async () => image);
     views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, show() {}, exportImage });
-    const handle = fakeHandle(f.IMAGE_FILE_NAME);
+    const handle = fakeHandle(f.IMAGE_FILE_NAMES.png);
     const written: unknown[] = [];
     handle.createWritable = async () => ({
       write: async (data: unknown) => void written.push(data),
@@ -133,6 +133,24 @@ describe("saving with the system file dialogs", () => {
 
     await f.exportImage({ transparent: true });
     expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+
+    // SVG: its own name and file type.
+    await f.exportImage({ transparent: false, format: "svg" });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false, format: "svg" });
+    expect(showSaveFilePicker).toHaveBeenLastCalledWith({
+      suggestedName: "schema.svg",
+      types: [{ description: "Image SVG", accept: { "image/svg+xml": [".svg"] } }],
+    });
+  });
+
+  it("remembers the image format, PNG by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.EXPORT_FORMAT_KEY);
+    expect(f.exportFormat()).toBe("png");
+    f.setExportFormat("svg");
+    expect(f.exportFormat()).toBe("svg");
+    f.setExportFormat("png");
+    expect(f.exportFormat()).toBe("png");
   });
 
   it("remembers the transparent background choice, white by default", async () => {

@@ -50,6 +50,7 @@ import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
 import { ValuePopover } from "./ValuePopover";
+import { layerToSvg } from "./svgExport";
 import { registerViewCommands, type ImageOptions } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
@@ -426,8 +427,11 @@ export function SchematicCanvas() {
     });
   }, [size, zoomAt, fitView]);
 
-  /** The circuit drawn on a white or transparent background, as a PNG (null: nothing to draw). */
-  const renderImage = ({ transparent }: ImageOptions): Promise<Blob | null> => {
+  /**
+   * The circuit drawn on a white or transparent background, as a PNG or an SVG (null: nothing to
+   * draw). Both show the same area: the circuit and its captions, with a margin around.
+   */
+  const renderImage = ({ transparent, format = "png" }: ImageOptions): Promise<Blob | null> => {
     const stage = stageRef.current;
     const layer = contentRef.current;
     const box = layer?.getClientRect();
@@ -435,6 +439,17 @@ export function SchematicCanvas() {
       return Promise.resolve(null);
     }
     const scale = stage.scaleX();
+    if (format === "svg") {
+      // Back from screen pixels to the units of the schematic, which the SVG keeps.
+      const frame = {
+        x: (box.x - stage.x()) / scale - EXPORT_MARGIN,
+        y: (box.y - stage.y()) / scale - EXPORT_MARGIN,
+        width: box.width / scale + 2 * EXPORT_MARGIN,
+        height: box.height / scale + 2 * EXPORT_MARGIN,
+      };
+      const svg = layerToSvg(layer, frame, transparent);
+      return Promise.resolve(new Blob([svg], { type: "image/svg+xml" }));
+    }
     const margin = EXPORT_MARGIN * scale;
     const drawn = layer.toCanvas({
       x: box.x - margin,
