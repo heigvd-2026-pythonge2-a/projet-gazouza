@@ -161,6 +161,8 @@ interface ComponentSymbolProps {
   onPinHover?: (pin: string | null) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /** The pointer enters the component (`true`) or leaves it (`false`). */
+  onHover?: (over: boolean) => void;
   /**
    * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
    * ones, so a connected pin does not leave a square behind.
@@ -190,6 +192,7 @@ export function ComponentSymbol({
   onPinMouseDown,
   onPinHover,
   onDoubleClick,
+  onHover,
   markedPins,
   captions,
   onCaptionDrag,
@@ -219,6 +222,8 @@ export function ComponentSymbol({
       onDblClick={(e) => {
         if (e.evt.button === 0) onDoubleClick?.();
       }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: snap(node.x()), y: snap(node.y()) });

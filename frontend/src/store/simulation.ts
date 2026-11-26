@@ -2,8 +2,15 @@
 // it shows of the answer on the schematic. Texts in French.
 
 import type { Schematic, SimulationRequest, SimulationResult } from "../api/client";
-import { normalizeContacts, partPath, type EditorDoc, type GridPoint } from "./document";
-import { getDef } from "./library";
+import {
+  normalizeContacts,
+  partPath,
+  pinPosition,
+  type EditorDoc,
+  type GridPoint,
+} from "./document";
+import { describeNet, netItem } from "./netNames";
+import type { NodeItem } from "./nodes";
 
 /**
  * The editor document in the contract format (`Schematic`, docs/format-schema.md), with what
@@ -221,12 +228,12 @@ const PREFIXES: [number, string][] = [
   [1e-12, "p"],
 ];
 
-/** 0.005, "A" -> "5 mA"; 3 significant digits, SI prefixes. */
+/** 0.0045, "A" -> "4,5 mA"; 3 significant digits, SI prefixes, French decimal comma. */
 export function formatSI(value: number, unit: string): string {
   if (value === 0 || !Number.isFinite(value)) return `0 ${unit}`;
   const abs = Math.abs(value);
   const [factor, prefix] = PREFIXES.find(([f]) => abs >= f * 0.9995) ?? [1e-12, "p"];
-  const shown = Number((value / factor).toPrecision(3));
+  const shown = String(Number((value / factor).toPrecision(3))).replace(".", ",");
   return `${shown} ${prefix}${unit}`;
 }
 
@@ -242,9 +249,10 @@ export interface OperatingPointLabel {
 }
 
 /**
- * Labels of an operating point (.op) result: each node voltage on the longest segment of one of
- * its wires (`nets`, from the netlist, gives them), each two-pin component's current beside it,
- * on the side away from its caption. The ground (0 V) is not labelled.
+ * Potential labels of an operating point (.op) result: each node voltage on the longest segment of
+ * one of its wires (`nets`, from the netlist, gives them), or next to one of its pins for a node
+ * without a wire on screen (two pins touching). The ground (0 V) is not labelled. The currents
+ * are drawn as arrows (`currentArrows`, #290).
  */
 export function operatingPointLabels(
   doc: EditorDoc,
@@ -255,46 +263,114 @@ export function operatingPointLabels(
   const labels: OperatingPointLabel[] = [];
   for (const trace of result.traces ?? []) {
     const value = trace.values[0];
-    if (value === undefined) continue;
-    if (trace.kind === "voltage" && trace.net && trace.net !== "0") {
-      const wire = (nets[trace.net] ?? [])
-        .map((id) => doc.wires.find((w) => w.id === id))
-        .find((w) => w !== undefined);
-      if (!wire) continue;
-      const path = partPath(doc, wire);
-      let best: [GridPoint, GridPoint] | null = null;
-      for (let i = 0; i + 1 < path.length; i++) {
-        const a = path[i] as GridPoint;
-        const b = path[i + 1] as GridPoint;
-        const length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-        if (!best || length > Math.abs(best[1].x - best[0].x) + Math.abs(best[1].y - best[0].y)) {
-          best = [a, b];
-        }
-      }
-      if (!best) continue;
-      const [a, b] = best;
-      labels.push({
-        key: `v:${trace.net}`,
-        kind: "voltage",
-        text: formatSI(value, "V"),
-        position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-        side: a.y === b.y ? "above" : "right",
-      });
-    } else if (trace.kind === "current" && trace.component_id) {
-      const c = doc.components.find((x) => x.id === trace.component_id);
-      if (!c || getDef(c.type).pins.length !== 2) continue;
-      // The caption is right of a vertical symbol and above a horizontal one.
-      const vertical = c.rotation === 0 || c.rotation === 180;
-      labels.push({
-        key: `i:${c.id}`,
-        kind: "current",
-        text: formatSI(Math.abs(value), "A"),
-        position: vertical
-          ? { x: c.position.x - 1.2, y: c.position.y }
-          : { x: c.position.x, y: c.position.y + 1.2 },
-        side: vertical ? "left" : "below",
-      });
+    if (value === undefined || trace.kind !== "voltage" || !trace.net || trace.net === "0") {
+      continue;
     }
+    const key = `v:${trace.net}`;
+    const text = formatSI(value, "V");
+    const wire = (nets[trace.net] ?? [])
+      .map((id) => doc.wires.find((w) => w.id === id))
+      .find((w) => w !== undefined);
+    if (!wire) {
+      const item = netItem(doc, nets[trace.net] ?? []);
+      const c = item && "comp" in item ? doc.components.find((x) => x.id === item.comp) : null;
+      if (c && item && "comp" in item) {
+        labels.push({
+          key,
+          kind: "voltage",
+          text,
+          position: pinPosition(c, item.pin),
+          side: "right",
+        });
+      }
+      continue;
+    }
+    const path = partPath(doc, wire);
+    let best: [GridPoint, GridPoint] | null = null;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i] as GridPoint;
+      const b = path[i + 1] as GridPoint;
+      const length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+      if (!best || length > Math.abs(best[1].x - best[0].x) + Math.abs(best[1].y - best[0].y)) {
+        best = [a, b];
+      }
+    }
+    if (!best) continue;
+    const [a, b] = best;
+    labels.push({
+      key,
+      kind: "voltage",
+      text,
+      position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      side: a.y === b.y ? "above" : "right",
+    });
   }
   return labels;
+}
+
+// --- Operating point table of the results panel (#292) ------------------------------------------
+
+/** One line of the operating point table. */
+export interface OperatingPointRow {
+  key: string;
+  /** What the value is about ("Base de Q1", "V1 fournit"…). */
+  label: string;
+  /** The value, formatted ("4,27 mA"). */
+  value: string;
+  /** What to highlight on the schematic while the line is hovered. */
+  highlight: NodeItem | { component: string } | null;
+}
+
+/** A group of lines of the table, with its title. */
+export interface OperatingPointGroup {
+  title: string;
+  rows: OperatingPointRow[];
+}
+
+/**
+ * The values of an operating point (.op) result, as shown in the results panel: node potentials
+ * named after the schematic (`describeNet`, never "n1"), sorted by name, then the voltages across
+ * the transistors given in `terminals` (`terminalVoltageRows`, #290), then currents. A voltage
+ * source's current is given as what it supplies (SPICE counts it negative then) or receives; the
+ * other currents without sign, their direction being shown on the schematic. Empty groups are
+ * left out.
+ */
+export function operatingPointTable(
+  doc: EditorDoc,
+  result: SimulationResult,
+  nets: Record<string, string[]>,
+  terminals: OperatingPointRow[] = [],
+): OperatingPointGroup[] {
+  if (result.analysis !== "op") return [];
+  const potentials: OperatingPointRow[] = [];
+  const currents: OperatingPointRow[] = [];
+  for (const trace of result.traces ?? []) {
+    const value = trace.values[0];
+    if (value === undefined) continue;
+    if (trace.kind === "voltage") {
+      const net = trace.net ?? trace.name;
+      const { name, item } = describeNet(doc, net, nets[net] ?? []);
+      potentials.push({
+        key: trace.name,
+        label: name,
+        value: formatSI(value, "V"),
+        highlight: item,
+      });
+      continue;
+    }
+    const c = doc.components.find((x) => x.id === trace.component_id);
+    const name = c?.name ?? trace.component_id ?? trace.name;
+    const highlight = c ? { component: c.id } : null;
+    const label =
+      c?.type === "voltage_source"
+        ? `${name} ${value <= 0 ? "fournit" : "reçoit"}`
+        : `Courant dans ${name}`;
+    currents.push({ key: trace.name, label, value: formatSI(Math.abs(value), "A"), highlight });
+  }
+  potentials.sort((a, b) => a.label.localeCompare(b.label, "fr", { numeric: true }));
+  return [
+    { title: "Potentiels des nœuds (par rapport à la masse)", rows: potentials },
+    { title: "Tensions aux bornes des transistors", rows: terminals },
+    { title: "Courants", rows: currents },
+  ].filter((g) => g.rows.length > 0);
 }

@@ -46,7 +46,7 @@ import {
 import { moveCaption, releaseCoveredCaptions, resetCaptions, type CaptionKind } from "./captions";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
-import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
+import { DEFAULT_ANALYSIS, type AnalysisSettings, type OperatingPointRow } from "./simulation";
 
 /** Grid units a component placed on top of another one is shifted by, until it is free. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
@@ -145,6 +145,8 @@ interface EditorState {
   simulationError: string | null;
   /** Show the operating point values (.op) on the schematic. */
   showValues: boolean;
+  /** What a hovered line of the results panel points at, highlighted on the schematic (#292). */
+  reportHighlight: OperatingPointRow["highlight"];
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
@@ -258,6 +260,7 @@ interface EditorState {
   /** Records that a simulation started (`true`), or ended with this error (or none). */
   setSimulating: (running: boolean, error?: string | null) => void;
   setShowValues: (show: boolean) => void;
+  setReportHighlight: (highlight: OperatingPointRow["highlight"]) => void;
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
@@ -358,6 +361,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   simulationError: null,
   notice: null,
   showValues: true,
+  reportHighlight: null,
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [], notice: null }),
 
@@ -555,6 +559,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set({ simulating: running, simulationError: running ? null : error }),
 
   setShowValues: (show) => set({ showValues: show }),
+
+  setReportHighlight: (highlight) => set({ reportHighlight: highlight }),
 
   newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 

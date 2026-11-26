@@ -1,7 +1,7 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
+import { Arrow, Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 
 import {
   animatable,
@@ -16,7 +16,9 @@ import {
   moveItems,
   moveWirePart,
   nodeIndex,
+  currentArrows,
   operatingPointLabels,
+  voltageArrows,
   resolveCaptionDrop,
   pinPosition,
   rectFrom,
@@ -32,6 +34,7 @@ import {
   type EditorText,
   type GridRect,
   type NodeItem,
+  type OperatingPointLabel,
   type PlacedComponent,
   type WirePart,
   NEW_TEXT,
@@ -51,7 +54,7 @@ import { useFileDrop } from "./fileDrop";
 import { CurrentLayer } from "./CurrentLayer";
 import { LedGlow } from "./LedGlow";
 import { focusInspector } from "./inspectorFocus";
-import { NodeHighlight } from "./NodeHighlight";
+import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
@@ -98,6 +101,33 @@ interface Press {
 }
 
 /** Actions of the menu opened by a right click on a component; they apply to the selection. */
+/** Width of the box of a value written on the schematic, in pixels. */
+const VALUE_WIDTH = 90;
+
+/** A value of the operating point written on the schematic, on its side of its anchor (#102). */
+function ValueText({ label: l, color }: { label: OperatingPointLabel; color: string }) {
+  const x = l.position.x * GRID;
+  const y = l.position.y * GRID;
+  const width = VALUE_WIDTH;
+  const at = {
+    above: { x: x - width / 2, y: y - 16, align: "center" },
+    below: { x: x - width / 2, y: y + 4, align: "center" },
+    right: { x: x + 6, y: y - 6, align: "left" },
+    left: { x: x - width - 2, y: y - 6, align: "right" },
+  }[l.side];
+  return (
+    <Text
+      text={l.text}
+      {...at}
+      width={width}
+      fontSize={11}
+      fontStyle="bold"
+      fill={color}
+      listening={false}
+    />
+  );
+}
+
 function componentMenu(selectionSize: number): MenuItem[] {
   const s = () => useEditorStore.getState();
   return [
@@ -245,6 +275,8 @@ export function SchematicCanvas() {
   const theme = useThemeStore((s) => s.theme);
   // An exported image goes in a report, on white: it is always drawn in the light colours.
   const canvasColors = PALETTES[exporting ? "light" : theme];
+  const valueColor = (kind: "voltage" | "current") =>
+    kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel;
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
   /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
@@ -274,6 +306,7 @@ export function SchematicCanvas() {
 
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
+  const reportHighlight = useEditorStore((s) => s.reportHighlight);
   const wirePart = useEditorStore((s) => s.wirePart);
   const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
@@ -298,6 +331,20 @@ export function SchematicCanvas() {
       showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
     [showValues, simulation, nets, storeDoc],
   );
+  /** Component under the pointer: its voltage is shown in detail after a .op (#290). */
+  const [hoveredComponent, setHoveredComponent] = useState<string | null>(null);
+  // Arrows of the currents and voltages of an operating point (#290): the voltage across a
+  // component only for the hovered and selected ones (and the one of a hovered table line).
+  const valueArrows = useMemo(() => {
+    if (!showValues || !simulation || !nets) return [];
+    const detail = new Set(selection);
+    if (hoveredComponent) detail.add(hoveredComponent);
+    if (reportHighlight && "component" in reportHighlight) detail.add(reportHighlight.component);
+    return [
+      ...currentArrows(storeDoc, simulation),
+      ...voltageArrows(storeDoc, simulation, nets, detail),
+    ];
+  }, [showValues, simulation, nets, storeDoc, selection, hoveredComponent, reportHighlight]);
   // What the errors and warnings of the simulation point at (#253).
   const marks = useMemo(
     () => (simulation ? diagnosticMarks(storeDoc, simulation, nets ?? {}) : []),
@@ -379,8 +426,15 @@ export function SchematicCanvas() {
     if (wirePart) wireIds.add(wirePart.wire);
     for (const wire of wireIds) add(index({ wire }), true);
     if (hovered) add(index(hovered), false);
+    if (reportHighlight && !("component" in reportHighlight)) add(index(reportHighlight), true);
     return out;
-  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered]);
+  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered, reportHighlight]);
+
+  /** The component of a hovered line of the results panel (#292), glowing on the schematic. */
+  const highlightedComponent =
+    !exporting && doc === storeDoc && reportHighlight && "component" in reportHighlight
+      ? storeDoc.components.find((c) => c.id === reportHighlight.component)
+      : undefined;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: { id: string }): ReadonlySet<string> =>
@@ -874,6 +928,7 @@ export function SchematicCanvas() {
                   animated={simulation.analysis === "tran"}
                 />
               )}
+            {highlightedComponent && <ComponentHighlight component={highlightedComponent} />}
             {highlightedNodes.map(({ node, strong }, i) => (
               <NodeHighlight key={i} doc={storeDoc} node={node} strong={strong} />
             ))}
@@ -921,6 +976,11 @@ export function SchematicCanvas() {
                     : undefined
                 }
                 onPinHover={(pin) => setHovered(pin === null ? null : { comp: c.id, pin })}
+                onHover={(over) =>
+                  setHoveredComponent((current) =>
+                    over ? c.id : current === c.id ? null : current,
+                  )
+                }
                 onPinMouseDown={
                   tool.kind === "select"
                     ? (pin) => {
@@ -954,31 +1014,22 @@ export function SchematicCanvas() {
               />
             ))}
             {!drag &&
-              valueLabels.map((l) => {
-                const width = 80;
-                const x = l.position.x * GRID;
-                const y = l.position.y * GRID;
-                const at = {
-                  above: { x: x - width / 2, y: y - 16, align: "center" },
-                  below: { x: x - width / 2, y: y + 4, align: "center" },
-                  right: { x: x + 6, y: y - 6, align: "left" },
-                  left: { x: x - width - 2, y: y - 6, align: "right" },
-                }[l.side];
-                return (
-                  <Text
-                    key={l.key}
-                    text={l.text}
-                    {...at}
-                    width={width}
-                    fontSize={11}
-                    fontStyle="bold"
-                    fill={
-                      l.kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel
-                    }
-                    listening={false}
-                  />
-                );
-              })}
+              valueArrows.map((a) => (
+                <Arrow
+                  key={a.key}
+                  points={[a.from.x * GRID, a.from.y * GRID, a.to.x * GRID, a.to.y * GRID]}
+                  stroke={valueColor(a.kind)}
+                  fill={valueColor(a.kind)}
+                  strokeWidth={1.5}
+                  pointerLength={6}
+                  pointerWidth={6}
+                  listening={false}
+                />
+              ))}
+            {!drag &&
+              [...valueLabels, ...valueArrows.map((a) => a.label)].map((l) => (
+                <ValueText key={l.key} label={l} color={valueColor(l.kind)} />
+              ))}
             {freePins.map((p) => (
               <Circle
                 key={`${p.comp}/${p.pin}`}

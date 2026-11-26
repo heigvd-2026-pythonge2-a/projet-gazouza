@@ -1,20 +1,22 @@
 // Simulation group of the toolbar (#100): the analysis and its settings, the Simulate button; and
 // the report of the last simulation shown in the results panel (errors, values).
 
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 
 import {
   analysisSources,
   chosenSource,
   dcRangeFor,
   diagnosticMarks,
-  formatSI,
   freshSimulation,
+  operatingPointTable,
+  terminalVoltageRows,
   useEditorStore,
   type AnalysisKind,
   type AnalysisSettings,
   type AnalysisSource,
   type DiagnosticMark,
+  type OperatingPointGroup,
 } from "../store";
 import { runSimulation } from "./simulationActions";
 import { COLORS, UI } from "./theme";
@@ -285,6 +287,46 @@ function DiagnosticItem({ message, mark }: { message: string; mark: DiagnosticMa
   );
 }
 
+/**
+ * Values of an operating point, by group (#292). Hovering a line, or focusing it with the
+ * keyboard, highlights its node or component on the schematic.
+ */
+function OperatingPointTable({ groups }: { groups: OperatingPointGroup[] }) {
+  const setReportHighlight = useEditorStore((s) => s.setReportHighlight);
+  return (
+    <table style={{ borderCollapse: "collapse" }}>
+      {groups.map((g) => (
+        <tbody key={g.title}>
+          <tr>
+            <th
+              colSpan={2}
+              scope="colgroup"
+              style={{ padding: "6px 0 2px", textAlign: "left", fontWeight: 600 }}
+            >
+              {g.title}
+            </th>
+          </tr>
+          {g.rows.map((r) => (
+            <tr
+              key={r.key}
+              tabIndex={r.highlight ? 0 : undefined}
+              title={r.highlight ? "Survolez pour le voir sur le schéma" : undefined}
+              onMouseEnter={() => setReportHighlight(r.highlight)}
+              onMouseLeave={() => setReportHighlight(null)}
+              onFocus={() => setReportHighlight(r.highlight)}
+              onBlur={() => setReportHighlight(null)}
+              style={{ cursor: r.highlight ? "default" : undefined }}
+            >
+              <td style={{ padding: "1px 12px 1px 0" }}>{r.label}</td>
+              <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
+  );
+}
+
 /** Errors and warnings of the last simulation, and the values of an operating point. */
 export function SimulationReport() {
   const simulating = useEditorStore((s) => s.simulating);
@@ -299,6 +341,16 @@ export function SimulationReport() {
     () => new Map((result ? diagnosticMarks(doc, result, nets ?? {}) : []).map((m) => [m.key, m])),
     [doc, result, nets],
   );
+  const table = useMemo(
+    () =>
+      result
+        ? operatingPointTable(doc, result, nets ?? {}, terminalVoltageRows(doc, result, nets ?? {}))
+        : [],
+    [doc, result, nets],
+  );
+  const setReportHighlight = useEditorStore((s) => s.setReportHighlight);
+  // A line hovered when the table goes away (new simulation, edit) must not stay highlighted.
+  useEffect(() => () => setReportHighlight(null), [table, setReportHighlight]);
 
   if (simulating) return <p style={{ color: UI.muted }}>Simulation en cours…</p>;
   if (error) return <p style={{ color: UI.error }}>{error}</p>;
@@ -314,8 +366,6 @@ export function SimulationReport() {
   }
   const errors = result.errors ?? [];
   const warnings = result.warnings ?? [];
-  const name = (id: string | null | undefined) =>
-    doc.components.find((c) => c.id === id)?.name ?? id ?? "";
   return (
     <div style={{ fontSize: 12 }}>
       {errors.length > 0 && (
@@ -345,22 +395,7 @@ export function SimulationReport() {
             />
             Afficher les valeurs sur le schéma
           </label>
-          <table style={{ borderCollapse: "collapse" }}>
-            <tbody>
-              {(result.traces ?? []).map((t) => (
-                <tr key={t.name}>
-                  <td style={{ padding: "1px 12px 1px 0" }}>
-                    {t.kind === "voltage"
-                      ? `Tension du nœud ${t.net ?? t.name}`
-                      : `Courant dans ${name(t.component_id)}`}
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {formatSI(t.values[0] ?? 0, t.unit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <OperatingPointTable groups={table} />
         </>
       )}
       {errors.length === 0 && result.analysis !== "op" && (

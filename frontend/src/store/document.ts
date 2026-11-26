@@ -989,6 +989,8 @@ const isPoint = (doc: EditorDoc, w: EditorWire): boolean =>
  * - a junction lying on a pin: its wires are attached to the pin instead, and it goes;
  * - a junction lying on another junction: both become one;
  * - a free wire end lying on a pin or a junction: attached to it (a pin first);
+ * - free ends of different wires at the same point: two wires are merged into one, three or more
+ *   meet at a new junction (#291);
  * - a pin lying on another pin: a wire of zero length joins them, unless wires already do (the
  *   same contact wire as `moveItems` adds, #124).
  * A wire then joining a point to itself, or of zero length with a free end, connects nothing and
@@ -1034,9 +1036,38 @@ export function normalizeContacts(doc: EditorDoc): EditorDoc {
     changed = true;
     return { ...w, from, to };
   });
+  const taken = allIds(doc);
+  // 2b. Free ends of different wires meeting where there is no pin or junction (#291): joined by
+  //     a new junction, which `cleanJunctions` turns into a single wire when only two meet.
+  const isFree = (end: WireEnd): end is GridPoint => !("comp" in end) && !("junction" in end);
+  const freeWiresAt = new Map<string, Set<string>>();
+  for (const w of wires) {
+    for (const end of [w.from, w.to]) {
+      if (!isFree(end)) continue;
+      const k = key(end);
+      freeWiresAt.set(k, (freeWiresAt.get(k) ?? new Set()).add(w.id));
+    }
+  }
+  const meeting = new Map<string, string>();
+  const added: EditorJunction[] = [];
+  for (const [k, ids] of freeWiresAt) {
+    if (ids.size < 2) continue;
+    const id = nextIndexed("j", taken);
+    taken.push(id);
+    meeting.set(k, id);
+    const [x, y] = k.split(",").map(Number) as [number, number];
+    added.push({ id, position: { x, y } });
+  }
+  if (added.length > 0) {
+    const join = (end: WireEnd): WireEnd => {
+      const junction = isFree(end) ? meeting.get(key(end)) : undefined;
+      return junction ? { junction } : end;
+    };
+    wires = wires.map((w) => ({ ...w, from: join(w.from), to: join(w.to) }));
+    changed = true;
+  }
   // 3. Pins on pins: join each one to the first pin there, unless wires already join them (a
   //    contact wire would then close a loop of wires, see `removeHiddenWires`).
-  const taken = allIds(doc);
   const groups = wireGroups(wires);
   for (const [first, ...others] of pinsAt.values()) {
     for (const other of others) {
@@ -1050,16 +1081,15 @@ export function normalizeContacts(doc: EditorDoc): EditorDoc {
     }
   }
   // 4. Wires that connect nothing any more.
-  const junctions = doc.junctions.filter((j) => !replaced.has(j.id));
+  const junctions = [...doc.junctions.filter((j) => !replaced.has(j.id)), ...added];
   const attached = { ...doc, junctions, wires };
-  const free = (end: WireEnd) => !("comp" in end) && !("junction" in end);
   const useless = (w: EditorWire) =>
-    sameEnd(w.from, w.to) || (isPoint(attached, w) && (free(w.from) || free(w.to)));
+    sameEnd(w.from, w.to) || (isPoint(attached, w) && (isFree(w.from) || isFree(w.to)));
   const dropped = wires.filter(useless);
-  if (dropped.length === 0) return changed ? attached : doc;
+  if (dropped.length === 0 && added.length === 0) return changed ? attached : doc;
   return cleanJunctions(
     { ...attached, wires: wires.filter((w) => !useless(w)) },
-    junctionsOf(dropped),
+    new Set([...junctionsOf(dropped), ...added.map((j) => j.id)]),
   );
 }
 
