@@ -8,7 +8,7 @@ import { pinPosition, type EditorDoc, type GridPoint, type PlacedComponent } fro
 import { getDef } from "./library";
 import { netItem } from "./netNames";
 import { nodeIndex } from "./nodes";
-import { formatSI, type OperatingPointLabel } from "./simulation";
+import { formatSI, type OperatingPointLabel, type OperatingPointRow } from "./simulation";
 
 /** An arrow with its value, in grid units. */
 export interface ValueArrow {
@@ -73,6 +73,8 @@ function freeSide(a: GridPoint, b: GridPoint): GridPoint {
 
 /** Distance between a component's axis and the arrow of its voltage, in grid units. */
 const VOLTAGE_OFFSET = 1;
+/** The same for the V_CE / V_DS of a transistor, just outside its envelope. */
+const TRANSISTOR_VOLTAGE_OFFSET = 0.6;
 /** Distance between an arrow and its value, in grid units. */
 const TEXT_GAP = 0.15;
 
@@ -114,32 +116,47 @@ export function currentArrows(doc: EditorDoc, result: SimulationResult): ValueAr
   return arrows;
 }
 
-/** Pins between which a transistor's main voltage is shown, and its name. */
-const MAIN_VOLTAGE: Record<string, { plus: string; minus: string; away: string; name: string }> = {
-  npn: { plus: "C", minus: "E", away: "B", name: "V_CE" },
-  pnp: { plus: "C", minus: "E", away: "B", name: "V_CE" },
-  nmos: { plus: "D", minus: "S", away: "G", name: "V_DS" },
-  pmos: { plus: "D", minus: "S", away: "G", name: "V_DS" },
+/** Two pins of a transistor between which a voltage is shown, and the pin the text avoids. */
+interface PinPair {
+  plus: string;
+  minus: string;
+  away: string;
+}
+
+/** Pins between which a transistor's main voltage (V_CE, V_DS) is shown. */
+const MAIN_VOLTAGE: Record<string, PinPair> = {
+  npn: { plus: "C", minus: "E", away: "B" },
+  pnp: { plus: "C", minus: "E", away: "B" },
+  nmos: { plus: "D", minus: "S", away: "G" },
+  pmos: { plus: "D", minus: "S", away: "G" },
 };
-/** Its control voltage, shown in the detail only. */
-const CONTROL_VOLTAGE: Record<string, { plus: string; minus: string; away: string; name: string }> =
-  {
-    npn: { plus: "B", minus: "E", away: "C", name: "V_BE" },
-    pnp: { plus: "B", minus: "E", away: "C", name: "V_BE" },
-    nmos: { plus: "G", minus: "S", away: "D", name: "V_GS" },
-    pmos: { plus: "G", minus: "S", away: "D", name: "V_GS" },
-  };
+/** Its control voltage (V_BE, V_GS), shown in the detail only. */
+const CONTROL_VOLTAGE: Record<string, PinPair> = {
+  npn: { plus: "B", minus: "E", away: "C" },
+  pnp: { plus: "B", minus: "E", away: "C" },
+  nmos: { plus: "G", minus: "S", away: "D" },
+  pmos: { plus: "G", minus: "S", away: "D" },
+};
+
+/**
+ * Name of the voltage between two pins, the more positive one first so the value is positive:
+ * V_CE for a conducting NPN, V_EC for a PNP (whose collector is below its emitter).
+ */
+export const voltageName = (plus: string, minus: string, u: number): string =>
+  u >= 0 ? `V_${plus}${minus}` : `V_${minus}${plus}`;
 
 /**
  * Voltage arrow between pins `plus` and `minus` of `c`: along them, shortened, moved aside by
  * `offset` (away from `away`, a point the text must not cover), pointing at the more positive pin.
- * `name` prefixes the value ("V_CE = 4,3 V"). Null if a potential is unknown.
+ * With `named`, the value is prefixed by the name of the voltage ("V_CE = 4,3 V", see
+ * `voltageName`). Null if a potential is unknown.
  */
 function voltageArrow(
   c: PlacedComponent,
-  pins: { plus: string; minus: string; name?: string },
+  pins: { plus: string; minus: string; named?: boolean },
   potentials: ReadonlyMap<string, number>,
   side: GridPoint,
+  { offset = VOLTAGE_OFFSET, textAtPlus = false }: { offset?: number; textAtPlus?: boolean } = {},
 ): ValueArrow | null {
   const vPlus = potentials.get(pinKey(c.id, pins.plus));
   const vMinus = potentials.get(pinKey(c.id, pins.minus));
@@ -147,7 +164,7 @@ function voltageArrow(
   const u = vPlus - vMinus;
   const a = pinPosition(c, pins.plus);
   const b = pinPosition(c, pins.minus);
-  const shift = scale(side, VOLTAGE_OFFSET);
+  const shift = scale(side, offset);
   const nearPlus = add(lerp(a, b, 0.2), shift);
   const nearMinus = add(lerp(a, b, 0.8), shift);
   const [from, to] = u >= 0 ? [nearMinus, nearPlus] : [nearPlus, nearMinus];
@@ -161,8 +178,8 @@ function voltageArrow(
     label: {
       key,
       kind: "voltage",
-      text: pins.name ? `${pins.name} = ${text}` : text,
-      position: add(lerp(nearPlus, nearMinus, 0.5), scale(side, TEXT_GAP)),
+      text: pins.named ? `${voltageName(pins.plus, pins.minus, u)} = ${text}` : text,
+      position: add(textAtPlus ? nearPlus : lerp(nearPlus, nearMinus, 0.5), scale(side, TEXT_GAP)),
       side: sideOf(side),
     },
   };
@@ -199,7 +216,12 @@ export function voltageArrows(
         pinPosition(c, main.minus),
         pinPosition(c, main.away),
       );
-      const arrow = voltageArrow(c, main, potentials, side);
+      // Close to the transistor, its text at the collector (drain) end: the transistor's name and
+      // model are written on the same side, level with its middle.
+      const arrow = voltageArrow(c, { ...main, named: true }, potentials, side, {
+        offset: TRANSISTOR_VOLTAGE_OFFSET,
+        textAtPlus: true,
+      });
       if (arrow) arrows.push(arrow);
       const control = CONTROL_VOLTAGE[c.type];
       if (control && detail.has(c.id)) {
@@ -208,7 +230,7 @@ export function voltageArrows(
           pinPosition(c, control.minus),
           pinPosition(c, control.away),
         );
-        const arrow = voltageArrow(c, control, potentials, side);
+        const arrow = voltageArrow(c, { ...control, named: true }, potentials, side);
         if (arrow) arrows.push(arrow);
       }
       continue;
@@ -237,4 +259,35 @@ function pushedAside(
     to: add(arrow.to, extra),
     label: { ...arrow.label, position: add(arrow.label.position, extra) },
   };
+}
+
+/**
+ * Lines of the operating point table for the voltages across the transistors (#290): V_CE (or
+ * V_EC, see `voltageName`) and V_BE of each bipolar transistor, V_DS and V_GS of each MOSFET, in
+ * drawing order. Hovering one highlights its transistor.
+ */
+export function terminalVoltageRows(
+  doc: EditorDoc,
+  result: SimulationResult,
+  nets: Record<string, string[]>,
+): OperatingPointRow[] {
+  if (result.analysis !== "op") return [];
+  const potentials = pinPotentials(doc, result, nets);
+  const rows: OperatingPointRow[] = [];
+  for (const c of doc.components) {
+    for (const pair of [MAIN_VOLTAGE[c.type], CONTROL_VOLTAGE[c.type]]) {
+      if (!pair) continue;
+      const vPlus = potentials.get(pinKey(c.id, pair.plus));
+      const vMinus = potentials.get(pinKey(c.id, pair.minus));
+      if (vPlus === undefined || vMinus === undefined) continue;
+      const u = vPlus - vMinus;
+      rows.push({
+        key: `u:${c.id}:${pair.plus}-${pair.minus}`,
+        label: `${voltageName(pair.plus, pair.minus, u)} de ${c.name ?? c.id}`,
+        value: formatSI(Math.abs(u), "V"),
+        highlight: { component: c.id },
+      });
+    }
+  }
+  return rows;
 }

@@ -46,6 +46,10 @@ une résistance, elle va en sens contraire du courant (convention récepteur) ; 
 fournit de l'énergie, dans le même sens (convention générateur). Pour un transistor, le survol
 ajoute **V_BE** (ou **V_GS**).
 
+Le nom de la tension met toujours la borne la plus positive en premier, pour que la valeur soit
+positive : sur un transistor PNP qui conduit, le collecteur est plus bas que l'émetteur, et Psice
+écrit donc **V_EC** et **V_EB**.
+
 Les valeurs s'écrivent avec la virgule décimale : `4,27 mA`.
 
 ## Lire une courbe

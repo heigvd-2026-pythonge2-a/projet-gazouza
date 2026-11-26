@@ -329,7 +329,8 @@ export interface OperatingPointGroup {
 
 /**
  * The values of an operating point (.op) result, as shown in the results panel: node potentials
- * named after the schematic (`describeNet`, never "n1"), sorted by name, then currents. A voltage
+ * named after the schematic (`describeNet`, never "n1"), sorted by name, then the voltages across
+ * the transistors given in `terminals` (`terminalVoltageRows`, #290), then currents. A voltage
  * source's current is given as what it supplies (SPICE counts it negative then) or receives; the
  * other currents without sign, their direction being shown on the schematic. Empty groups are
  * left out.
@@ -338,6 +339,7 @@ export function operatingPointTable(
   doc: EditorDoc,
   result: SimulationResult,
   nets: Record<string, string[]>,
+  terminals: OperatingPointRow[] = [],
 ): OperatingPointGroup[] {
   if (result.analysis !== "op") return [];
   const potentials: OperatingPointRow[] = [];
@@ -368,6 +370,7 @@ export function operatingPointTable(
   potentials.sort((a, b) => a.label.localeCompare(b.label, "fr", { numeric: true }));
   return [
     { title: "Potentiels des nœuds (par rapport à la masse)", rows: potentials },
+    { title: "Tensions aux bornes des transistors", rows: terminals },
     { title: "Courants", rows: currents },
   ].filter((g) => g.rows.length > 0);
 }

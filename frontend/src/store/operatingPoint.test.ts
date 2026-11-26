@@ -3,11 +3,19 @@ import { describe, expect, it } from "vitest";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
 import type { SimulationResult } from "../api/client";
 import { addComponent, emptyDoc, pinPosition, type EditorDoc, type GridPoint } from "./document";
-import { currentArrows, pinPotentials, voltageArrows } from "./operatingPoint";
+import {
+  currentArrows,
+  pinPotentials,
+  terminalVoltageRows,
+  voltageArrows,
+  voltageName,
+} from "./operatingPoint";
 import { operatingPointLabels } from "./simulation";
 import { fixtureDoc, fixtureResult } from "./testFixtures";
 
 const p = (x: number, y: number): GridPoint => ({ x, y });
+/** A point 3 steps further from the x axis than `q`: where a wire from a pin at the top or bottom ends. */
+const away = (q: GridPoint): GridPoint => p(q.x, q.y + 3 * Math.sign(q.y));
 
 /** Direction of an arrow, as a unit step on the grid axes. */
 const direction = (a: { from: GridPoint; to: GridPoint }) => ({
@@ -93,10 +101,10 @@ describe("voltageArrows (#290)", () => {
     expect(direction(u!)).toEqual({ x: -d.x || 0, y: -d.y || 0 });
   });
 
-  /** An NPN (Q1) at the origin: C at (1,-2), B at (-2,0), E at (1,2), nodes c, b and e. */
-  function transistor(): { doc: EditorDoc; nets: Record<string, string[]> } {
+  /** A transistor (Q1) at the origin, base on the left, nodes c, b and e on its pins. */
+  function transistor(type = "npn"): { doc: EditorDoc; nets: Record<string, string[]> } {
     let doc = addComponent(emptyDoc(), {
-      type: "npn",
+      type,
       position: p(0, 0),
       rotation: 0,
       mirror: false,
@@ -105,9 +113,9 @@ describe("voltageArrows (#290)", () => {
     doc = {
       ...doc,
       wires: [
-        { id: "wc", from: { comp: q.id, pin: "C" }, to: p(1, -5), points: [] },
+        { id: "wc", from: { comp: q.id, pin: "C" }, to: away(pinPosition(q, "C")), points: [] },
         { id: "wb", from: { comp: q.id, pin: "B" }, to: p(-5, 0), points: [] },
-        { id: "we", from: { comp: q.id, pin: "E" }, to: p(1, 5), points: [] },
+        { id: "we", from: { comp: q.id, pin: "E" }, to: away(pinPosition(q, "E")), points: [] },
       ],
     };
     return { doc, nets: { c: ["wc"], b: ["wb"], e: ["we"] } };
@@ -127,6 +135,31 @@ describe("voltageArrows (#290)", () => {
     // V_BE in detail.
     const detail = voltageArrows(doc, result, nets, new Set([doc.components[0]!.id]));
     expect(detail.map((a) => a.label.text)).toEqual(["V_CE = 5 V", "V_BE = 700 mV"]);
+  });
+
+  it("names a PNP's voltages emitter first, so their values stay positive", () => {
+    const { doc, nets } = transistor("pnp");
+    const result = opResult({ c: 0, b: 4.3, e: 5 });
+    const arrows = voltageArrows(doc, result, nets, new Set([doc.components[0]!.id]));
+    expect(arrows.map((a) => a.label.text)).toEqual(["V_EC = 5 V", "V_EB = 700 mV"]);
+    // The arrow points at the emitter, the more positive pin (at the top of a PNP).
+    const q = doc.components[0]!;
+    const e = pinPosition(q, "E");
+    const c = pinPosition(q, "C");
+    expect(direction(arrows[0]!)).toEqual({ x: Math.sign(e.x - c.x), y: Math.sign(e.y - c.y) });
+    expect(voltageName("C", "E", -1)).toBe("V_EC");
+    expect(voltageName("C", "E", 0)).toBe("V_CE");
+  });
+
+  it("gives the voltages across the transistors for the table", () => {
+    const { doc, nets } = transistor();
+    const rows = terminalVoltageRows(doc, opResult({ c: 5, b: 0.7, e: 0 }), nets);
+    const q = doc.components[0]!;
+    expect(rows.map((r) => [r.label, r.value, r.highlight])).toEqual([
+      [`V_CE de ${q.name}`, "5 V", { component: q.id }],
+      [`V_BE de ${q.name}`, "700 mV", { component: q.id }],
+    ]);
+    expect(terminalVoltageRows(doc, fixtureResult("rc_tran"), nets)).toEqual([]);
   });
 
   it("shows nothing when a potential is unknown", () => {
