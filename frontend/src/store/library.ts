@@ -12,7 +12,8 @@ export type ParamOption = NonNullable<ApiParamDef["options"]>[number];
 export type ParamDef = Required<ApiParamDef>;
 
 export type SymbolShape =
-  | { kind: "line"; points: number[] }
+  /** `tone: "light"`: drawn in the component's own light colour (the arrows of an LED, #294). */
+  | { kind: "line"; points: number[]; tone?: "light" }
   | { kind: "rect"; x: number; y: number; width: number; height: number }
   | { kind: "circle"; x: number; y: number; radius: number }
   /** Arc from `start` to `start + sweep` degrees, clockwise (y axis points down). */
@@ -63,8 +64,8 @@ const DIODE_BAR: SymbolShape = { kind: "line", points: [-0.7, 0.6, 0.7, 0.6] };
 
 /** Arrow pointing away from the diode, for the light of an LED; (x, y) is its tail. */
 const lightArrow = (x: number, y: number): SymbolShape[] => [
-  { kind: "line", points: [x, y, x + 0.6, y - 0.6] },
-  { kind: "line", points: [x + 0.3, y - 0.6, x + 0.6, y - 0.6, x + 0.6, y - 0.3] },
+  { kind: "line", points: [x, y, x + 0.6, y - 0.6], tone: "light" },
+  { kind: "line", points: [x + 0.3, y - 0.6, x + 0.6, y - 0.6, x + 0.6, y - 0.3], tone: "light" },
 ];
 
 // Op-amp: inverting input (-) at the top left, non-inverting (+) at the bottom left, output on
