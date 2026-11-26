@@ -1,0 +1,23 @@
+{
+  "type": "pnp",
+  "label": "Transistor PNP",
+  "prefix": "Q",
+  "pins": [
+    { "name": "C", "x": 1, "y": 2 },
+    { "name": "B", "x": -2, "y": 0 },
+    { "name": "E", "x": 1, "y": -2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Modèle",
+      "default": "Q_PNP_GP",
+      "kind": "choice",
+      "options": [{ "value": "Q_PNP_GP", "label": "Usage général (type 2N3906)" }]
+    }
+  ],
+  "spice": "{name} {pin:C} {pin:B} {pin:E} {model}",
+  "models": {
+    "Q_PNP_GP": ".model Q_PNP_GP PNP(Is=6.5f Bf=180 Vaf=100 Br=4 Rb=10 Rc=2.5 Re=0.3 Cje=4.5p Cjc=4.5p Tf=0.3n Tr=60n)"
+  }
+}

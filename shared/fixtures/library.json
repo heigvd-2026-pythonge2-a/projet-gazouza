@@ -377,6 +377,82 @@
     ]
   },
   {
+    "type": "nmos",
+    "label": "MOSFET canal N",
+    "prefix": "M",
+    "pins": [
+      {
+        "name": "D",
+        "x": 1,
+        "y": -2
+      },
+      {
+        "name": "G",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "S",
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "M_NMOS_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "M_NMOS_GP",
+            "label": "Usage général (type 2N7000, seuil 2 V)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "npn",
+    "label": "Transistor NPN",
+    "prefix": "Q",
+    "pins": [
+      {
+        "name": "C",
+        "x": 1,
+        "y": -2
+      },
+      {
+        "name": "B",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "E",
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "Q_NPN_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "Q_NPN_GP",
+            "label": "Usage général (type 2N3904)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
     "type": "opamp",
     "label": "Ampli-op idéal",
     "prefix": "X",
@@ -456,6 +532,44 @@
           {
             "value": "OA_GENERIC",
             "label": "Générique (type 741 : gain 10⁵, 1 MHz)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "pnp",
+    "label": "Transistor PNP",
+    "prefix": "Q",
+    "pins": [
+      {
+        "name": "C",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "name": "B",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "E",
+        "x": 1,
+        "y": -2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "Q_PNP_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "Q_PNP_GP",
+            "label": "Usage général (type 2N3906)"
           }
         ],
         "waveforms": []
