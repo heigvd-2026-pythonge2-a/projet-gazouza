@@ -1,0 +1,148 @@
+---
+title: Analyses
+description: Les quatre analyses de Psice — point de fonctionnement, temporelle, fréquentielle (Bode) et balayage DC — et comment les régler.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+Une **analyse** dit à ngspice ce qu'il doit calculer. Dans Psice, tu la choisis dans la barre
+d'outils : tu n'écris jamais de directive SPICE. L'analyse est enregistrée **à côté** du schéma,
+pas dedans : le même circuit peut être simulé de plusieurs façons.
+
+| Analyse | Directive | Ce qu'elle calcule | Résultat |
+|---|---|---|---|
+| Point de fonctionnement | `.op` | Les tensions et courants **continus** | Une valeur par nœud et par composant |
+| Temporelle | `.tran` | L'évolution **dans le temps** | Des courbes en fonction de *t* |
+| Fréquentielle | `.ac` | La réponse **en fréquence** (Bode) | Gain et phase en fonction de *f* |
+| Balayage DC | `.dc` | Le point de fonctionnement pour **une source qui varie** | Des courbes en fonction de la source |
+
+Les quatre analyses se choisissent dans le menu **Analyse** de la barre d'outils. Le panneau
+**Résultats** affiche pour l'instant les valeurs du `.op` ; les courbes du `.tran`, le diagramme
+de Bode du `.ac` et les courbes du `.dc` arrivent avec le visualiseur.
+
+## Lancer une simulation
+
+1. Choisis l'analyse dans le menu **Analyse** de la barre d'outils, puis tape ses réglages à côté,
+   avec les suffixes habituels (`5m` = 5 ms, `10u` = 10 µs, `100k` = 100 kHz, `1Meg` = 1 MHz) :
+   - `.tran` : la **Durée** et, si tu veux, le **Pas max** (vide : automatique) ;
+   - `.ac` : la source d'**Entrée**, les fréquences de début et de fin, et les **Points** par
+     décade ;
+   - `.dc` : la **Source** balayée, ses valeurs de début et de fin, et le **Pas**.
+
+   Un réglage invalide (fin plus petite que le début, pas nul…) est signalé avant le calcul.
+2. Clique sur **▶ Simuler**. Pendant le calcul, le bouton devient **■ Arrêter**.
+3. Le panneau **Résultats** affiche le résultat, ou les erreurs en français. Après un `.op`, les
+   **tensions des nœuds** (en violet) et les **courants** des composants (en orange) s'affichent
+   aussi sur le schéma ; une case du panneau les masque.
+
+Si tu modifies le schéma après une simulation, Psice te le signale : relance-la pour voir des
+résultats à jour.
+
+Le bouton **Exporter la netlist SPICE** de la barre d'outils enregistre la netlist (`.cir`) du
+schéma avec l'analyse choisie : ngspice la simule telle quelle, ou tu peux la comparer avec
+LTspice.
+
+<Tabs>
+<TabItem label=".op">
+
+**Point de fonctionnement.** Les condensateurs sont des circuits ouverts, les bobines des
+courts-circuits, et les sources prennent leur valeur continue.
+
+Aucun réglage. C'est l'analyse idéale pour vérifier un diviseur de tension ou la polarisation
+d'un transistor.
+
+```
+.op
+```
+
+</TabItem>
+<TabItem label=".tran">
+
+**Temporelle.** Simule le circuit de *t* = 0 jusqu'à la durée choisie.
+
+| Réglage | Unité | Rôle |
+|---|---|---|
+| Durée | s | Fin de la simulation (obligatoire) |
+| Pas maximal | s | Facultatif : force une courbe plus fine |
+
+Sans pas maximal, Psice demande environ 1000 points sur la durée. Par exemple, pour 5 ms :
+
+```
+.tran 5u 5m
+```
+
+Avec un pas maximal de 10 µs :
+
+```
+.tran 10u 5m 0 10u
+```
+
+<Aside type="tip">
+	Choisis une durée de 5 fois la constante de temps de ton circuit (5 τ) : le régime transitoire
+	est alors terminé à 99 %.
+</Aside>
+
+</TabItem>
+<TabItem label=".ac">
+
+**Fréquentielle (Bode).** Calcule le gain et la phase du circuit pour une petite excitation
+sinusoïdale, fréquence par fréquence.
+
+| Réglage | Unité | Rôle |
+|---|---|---|
+| Source d'entrée | — | La source qui excite le circuit |
+| Fréquence de début | Hz | Début du balayage (10 Hz par défaut) |
+| Fréquence de fin | Hz | Fin du balayage, plus grande que le début (100 kHz par défaut) |
+| Points par décade | — | Nombre entier, 20 par défaut |
+
+Tu n'as **rien à régler sur la source** : Psice ajoute lui-même `AC 1` à la source d'entrée
+choisie, et à elle seule.
+
+```
+V1 in 0 DC 0 AC 1
+.ac dec 20 10 100k
+```
+
+</TabItem>
+<TabItem label=".dc">
+
+**Balayage DC.** Refait un point de fonctionnement pour chaque valeur d'une source, par exemple
+pour tracer la caractéristique d'une diode.
+
+| Réglage | Unité | Rôle |
+|---|---|---|
+| Source balayée | — | La source de tension ou de courant qui varie |
+| Début, fin | V ou A | Bornes du balayage, la fin plus grande que le début (0 à 5 V par défaut, 0 à 10 mA pour une source de courant) |
+| Pas | V ou A | Écart entre deux points (100m par défaut, 100u pour une source de courant) |
+
+L'unité suit la source choisie : des volts pour une source de tension, des ampères pour une source
+de courant. Si tu n'as pas encore touché aux bornes, elles prennent celles de l'unité de la source
+choisie ; des bornes que tu as tapées restent telles quelles. Ce balayage va toujours vers le haut :
+la fin doit être plus grande que le début.
+
+```
+.dc V1 0 10 1
+```
+
+</TabItem>
+</Tabs>
+
+## Désigner une source
+
+Les analyses `.ac` et `.dc` désignent leur source par son **identifiant interne**, pas par son
+nom. Tu peux donc renommer `V1` en `Vin` sans casser l'analyse. Le menu de la source propose les
+sources de tension et de courant du schéma ; si tu supprimes la source choisie, Psice prend la
+première qui reste.
+
+## Pendant la simulation
+
+1. Psice **vérifie** le schéma et rassemble **toutes** les erreurs d'un coup (pas seulement la
+   première).
+2. S'il n'y en a pas, il **génère la netlist** SPICE.
+3. Il lance **ngspice** en local, avec un délai maximal : une simulation qui ne se termine pas est
+   arrêtée (`SIMULATION_TIMEOUT`).
+4. Les résultats reviennent sous forme de **traces** (tensions de nœuds, courants de
+   composants), prêtes à être affichées.
+
+Si ngspice échoue, son message est traduit en une erreur compréhensible : voir
+[Messages d'erreur](/projet-gazouza/guide/erreurs/).

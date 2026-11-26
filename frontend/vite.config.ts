@@ -10,9 +10,13 @@ export default defineConfig({
       "/api": "http://127.0.0.1:8000",
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+  },
   test: {
     // A simulated browser (DOM, events), so that components can be rendered in the tests.
     environment: "jsdom",
+    pool: "vmThreads",
     setupFiles: ["./src/test/setup.ts"],
   },
 });

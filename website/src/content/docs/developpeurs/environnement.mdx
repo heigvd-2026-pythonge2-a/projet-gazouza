@@ -1,0 +1,204 @@
+---
+title: Environnement de développement
+description: Installer les outils, lancer le backend, le frontend, l'application bureau et ce site, et construire l'application Windows.
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Prérequis
+
+- **Windows 10 ou 11**
+- **Python 3.12+** et [**uv**](https://docs.astral.sh/uv/)
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+- **Node.js 22.12+** et **pnpm** (la version est fixée dans `package.json`)
+  ```powershell
+  corepack enable
+  ```
+- **ngspice** : rien à installer, les binaires Windows sont dans `backend/vendor/ngspice/`.
+
+## Lancer en mode développement
+
+<Steps>
+
+1. **Backend** (port 8000), dans un premier terminal :
+
+   ```powershell
+   cd backend
+   uv sync
+   uv run uvicorn app.main:app --reload
+   ```
+
+2. **Frontend** (port 5173), dans un deuxième terminal :
+
+   ```powershell
+   cd frontend
+   pnpm install
+   pnpm dev
+   ```
+
+3. Ouvre http://localhost:5173. Vite redirige les appels `/api` vers le backend.
+
+</Steps>
+
+## Lancer la fenêtre bureau
+
+<Tabs>
+<TabItem label="Frontend compilé">
+
+Le lanceur démarre lui-même le serveur backend et ouvre la fenêtre pywebview :
+
+```powershell
+cd frontend
+pnpm build
+cd ../backend
+uv run python -m app.engines.launcher
+```
+
+</TabItem>
+<TabItem label="Rechargement à chaud">
+
+Garde les deux serveurs de développement en marche (backend sur 8000, frontend sur 5173), puis,
+dans un troisième terminal :
+
+```powershell
+cd backend
+uv run python -m app.engines.launcher --dev-url http://127.0.0.1:5173
+```
+
+Avec `--dev-url`, le lanceur ne démarre pas de serveur backend.
+
+</TabItem>
+</Tabs>
+
+## Vérifications avant commit
+
+Une fois par clone, active les hooks (ruff et Prettier lancés à chaque commit) :
+
+```powershell
+cd backend
+uv run pre-commit install
+```
+
+Puis, avant chaque PR, les mêmes vérifications que la CI :
+
+<Tabs>
+<TabItem label="Backend">
+
+```powershell
+cd backend
+uv run pytest                                      # tests + fixtures du contrat
+uv run ruff check --fix . ; uv run ruff format .   # lint + formatage
+```
+
+La CI exige **80 % de couverture** du code Python.
+
+</TabItem>
+<TabItem label="Frontend">
+
+```powershell
+cd frontend
+pnpm test                 # tests unitaires (vitest)
+pnpm lint ; pnpm format   # lint + formatage
+pnpm build                # vérification de types + build
+pnpm build:demo           # démo en ligne, construite dans website/public/demo/
+```
+
+</TabItem>
+<TabItem label="Site web">
+
+```powershell
+cd website
+pnpm install
+pnpm dev                  # http://localhost:4321/projet-gazouza/
+pnpm build                # build du site statique
+```
+
+</TabItem>
+</Tabs>
+
+## Modifier le contrat d'API
+
+Le contrat est défini dans `backend/app/models/`. Après une modification :
+
+```powershell
+cd backend
+uv run python scripts/export_openapi.py   # → shared/openapi.json
+cd ../frontend
+pnpm gen:api                              # → src/api/schema.gen.ts
+```
+
+<Aside type="caution">
+	Une modification du contrat est une **PR dédiée**, relue par les modules qui consomment ce
+	format, avec la mise à jour de `shared/fixtures/`. La CI échoue si `shared/openapi.json` ou
+	`schema.gen.ts` ne sont pas à jour. Ne modifie jamais ces fichiers générés à la main.
+</Aside>
+
+## Construire l'application Windows
+
+```powershell
+.\build.ps1
+```
+
+Le script compile le frontend, le copie dans le backend, puis lance PyInstaller avec ngspice et
+le frontend inclus. Résultat : `dist/Psice/Psice.exe` et l'archive `dist/Psice.zip`. Aucune
+installation n'est nécessaire sur la machine cible. Avec `-Verify`, le script extrait aussi le
+zip et lance `Psice.exe --self-check` depuis le dossier extrait (frontend, `/api/health`,
+bibliothèque de composants, simulation RC hors ligne et composants .NET de la fenêtre).
+
+Avant ce dernier `--self-check`, le script marque les fichiers extraits comme téléchargés depuis
+Internet, comme le fait Windows pour un zip téléchargé avec un navigateur. .NET refuse alors de
+charger les DLL de pythonnet et de WebView2, sauf si `Psice.exe.config` (copié depuis
+`assets/windows/`) l'autorise. Sans ce fichier, la fenêtre ne s'ouvre pas chez l'utilisateur.
+
+### Le workflow « Application Windows »
+
+Le workflow `release.yml` lance `.\build.ps1 -Verify` sur un runner Windows de GitHub. Il ne
+tourne pas à chaque PR (le build prend plusieurs minutes), seulement :
+
+- **à la main**, depuis l'onglet Actions du dépôt (« Application Windows », puis « Run
+  workflow ») : l'application construite est gardée comme artefact du workflow, sans rien
+  publier. C'est le moyen de vérifier le build avant une livraison ou après un changement de
+  `build.ps1` ;
+- **sur un tag `vX.Y.Z`** (SemVer, `0.x` avant la livraison finale) : le zip est publié dans la
+  release GitHub du tag, toujours sous le nom `Psice.zip`. Un tag avec un suffixe
+  (`v1.0.0-rc.1`) donne une pré-version.
+
+```powershell
+git tag v0.2.0 origin/main
+git push origin v0.2.0
+```
+
+Une release est publique dès que le tag est poussé : on l'annonce à l'équipe avant, et on pose
+le tag sur un commit de `main` dont la CI est verte. La page
+[Installation](/projet-gazouza/demarrer/installation/) pointe vers la dernière release.
+
+## Le site web
+
+Ce site est dans `website/` (Astro + [Starlight](https://starlight.astro.build)). Les pages sont
+des fichiers Markdown / MDX en français dans `website/src/content/docs/`, et le menu se règle dans
+`website/astro.config.mjs`. Le workflow `pages.yml` construit le site à chaque PR qui le touche,
+et le publie sur GitHub Pages à chaque fusion sur `main`.
+
+Les liens internes s'écrivent avec le chemin de base du site :
+`[Analyses](/projet-gazouza/guide/analyses/)`.
+
+### La démo en ligne
+
+La page [Essayer en ligne](/projet-gazouza/demarrer/essayer/) affiche le vrai frontend, construit
+en mode `demo` (`pnpm build:demo` dans `frontend/`) dans `website/public/demo/` (ignoré par git).
+Dans ce mode, le client API ne contacte pas de backend : `src/api/demoBackend.ts` répond à
+`/api/health`, sert `/api/library` depuis `shared/fixtures/library.json`, et répond à
+`/api/simulate` et `/api/netlist` avec les fichiers de `shared/fixtures/` quand on simule un
+circuit de référence tel quel (mêmes composants, valeurs, connexions et analyse ; les positions
+ne comptent pas). Pour tout autre circuit, la démo explique qu'il faut l'application. Les
+circuits de référence s'ouvrent avec `?demo=<circuit>`, avec leur résultat et leur analyse.
+`pages.yml` reconstruit la démo à chaque fusion sur `main` qui touche `frontend/` ou
+`shared/fixtures/`, et la CI vérifie qu'elle se construit sur chaque PR. Pour la voir en local,
+lance `pnpm build:demo` dans `frontend/` avant `pnpm dev` dans `website/`.
+
+La capture de l'application sur la page d'accueil (`website/src/assets/psice-app.png`) est prise
+dans cette démo. Quand l'interface change, refais-la avec `.\scripts\capture-app.ps1` dans
+`website/`, après `pnpm build:demo` : Edge (fourni avec Windows) ouvre la démo, simule le diviseur
+de tension et enregistre l'image.

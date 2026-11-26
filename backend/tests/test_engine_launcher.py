@@ -1,5 +1,9 @@
 """Unit and integration tests for backend.app.engines.launcher."""
 
+import asyncio
+import http.client
+import json
+import re
 import socket
 import sys
 import threading
@@ -14,9 +18,21 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 from starlette.routing import Match, NoMatchFound
+from starlette.types import Receive, Scope, Send
 
 from app.engines import launcher
+from app.engines.locator import NgspiceNotFoundError, locate_ngspice
 from app.main import app as backend_app
+from app.models.netlist import Diagnostic
+from app.models.simulation import Axis, SimulationResult, Trace
+
+
+def _has_ngspice() -> bool:
+    try:
+        locate_ngspice()
+    except NgspiceNotFoundError:
+        return False
+    return True
 
 
 def _touch(path: Path, content: str = "") -> Path:
@@ -73,6 +89,12 @@ def test_validate_dev_url_accepts_localhost(valid_url: str) -> None:
         "javascript:alert(1)",
         "http://user:pass@127.0.0.1:5173",
         "http://127.0.0.1:99999",
+        "http://localhost\n:5173",
+        "http://localhost\r:5173",
+        "http://localhost\t:5173",
+        "http://localhost:5173/app path",
+        "http://localhost:5173\x00",
+        "http://localhost:5173\x7f",
     ],
 )
 def test_validate_dev_url_rejects_unsafe_or_remote_urls(invalid_url: str) -> None:
@@ -394,7 +416,7 @@ def test_on_window_closing_prompts_french_dialog_when_unsaved(
     window = MagicMock()
     window.native = None
     window.events._pywebviewready.is_set.return_value = True
-    window.evaluate_js.return_value = True
+    window.evaluate_js.side_effect = lambda script, **_kw: script == launcher.UNSAVED_CHANGES_JS
     window.create_confirmation_dialog.return_value = dialog_choice
 
     assert launcher.on_window_closing(window) is expected_close
@@ -446,12 +468,131 @@ def test_on_window_closing_allows_close_when_confirmation_dialog_fails(
     window = MagicMock()
     window.native = None
     window.events._pywebviewready.is_set.return_value = True
-    window.evaluate_js.return_value = True
+    window.evaluate_js.side_effect = lambda script, **_kw: script == launcher.UNSAVED_CHANGES_JS
     window.create_confirmation_dialog.side_effect = RuntimeError("dialog error")
 
     with caplog.at_level("ERROR"):
         assert launcher.on_window_closing(window) is True
     assert "Failed to show unsaved changes confirmation dialog" in caplog.text
+
+
+def test_on_window_closing_delegates_to_psice_request_close_and_destroys_without_guard() -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    destroy_results: list[bool] = []
+
+    class _FakeWindow:
+        native = None
+        events = SimpleNamespace(_pywebviewready=SimpleNamespace(is_set=lambda: True))
+        create_confirmation_dialog = MagicMock()
+
+        def evaluate_js(
+            self, script: str, callback: Callable[[object], None] | None = None
+        ) -> object:
+            if script == launcher.UNSAVED_CHANGES_JS:
+                return True
+            if script == launcher.CLOSE_REQUEST_CHECK_JS:
+                return True
+            if script == launcher.CLOSE_REQUEST_JS:
+                assert callback is not None
+                captured_callbacks.append(callback)
+                return True
+            raise AssertionError(f"Unexpected JS: {script}")
+
+        def destroy(self) -> None:
+            # Simulate pywebview FormClosing firing on destroy while psiceHasUnsavedChanges() is
+            # still true (e.g. after "Fermer sans enregistrer").
+            destroy_results.append(launcher.on_window_closing(self))
+
+    window = _FakeWindow()
+    assert launcher.on_window_closing(window) is False
+    window.create_confirmation_dialog.assert_not_called()
+    assert len(captured_callbacks) == 1
+
+    # Duplicate close clicks while the page dialog is open must be ignored cleanly.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+
+    captured_callbacks[0](True)
+    assert destroy_results == [True]
+    # Bypass flag is consumed once, so a later close check runs normally.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 2
+    captured_callbacks[1](False)
+
+
+@pytest.mark.parametrize("decision", [False, None, {"message": "rejected"}])
+def test_on_window_closing_psice_request_close_cancel_or_error_keeps_window_open(
+    decision: object,
+) -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
+
+    def fake_eval(script: str, callback: Callable[[object], None] | None = None) -> object:
+        if script in (launcher.UNSAVED_CHANGES_JS, launcher.CLOSE_REQUEST_CHECK_JS):
+            return True
+        if script == launcher.CLOSE_REQUEST_JS:
+            assert callback is not None
+            captured_callbacks.append(callback)
+            return "true"
+        raise AssertionError(f"Unexpected JS: {script}")
+
+    window.evaluate_js.side_effect = fake_eval
+
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+
+    captured_callbacks[0](decision)
+    window.destroy.assert_not_called()
+    window.create_confirmation_dialog.assert_not_called()
+
+    # Pending state is cleared, so closing again prompts a new dialog request.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 2
+    captured_callbacks[1](False)
+
+
+@pytest.mark.parametrize("bad_start", [None, False, RuntimeError("eval failed")])
+def test_on_window_closing_falls_back_if_request_close_fails_to_start(
+    bad_start: object,
+) -> None:
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
+    window.create_confirmation_dialog.return_value = True
+
+    def fake_eval(script: str, callback: Callable[[object], None] | None = None) -> object:
+        if script in (launcher.UNSAVED_CHANGES_JS, launcher.CLOSE_REQUEST_CHECK_JS):
+            return True
+        if script == launcher.CLOSE_REQUEST_JS:
+            assert callback is not None
+            if isinstance(bad_start, Exception):
+                raise bad_start
+            return bad_start
+        raise AssertionError(f"Unexpected JS: {script}")
+
+    window.evaluate_js.side_effect = fake_eval
+
+    assert launcher.on_window_closing(window) is True
+    window.create_confirmation_dialog.assert_called_once_with(
+        "Psice",
+        "Le schéma contient des modifications non enregistrées. Fermer quand même ?",
+    )
+    assert id(window) not in launcher._pending_async_close_windows
+
+
+def test_force_close_window_clears_bypass_and_logs_on_destroy_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    window = MagicMock()
+    window.destroy.side_effect = RuntimeError("destroy failed")
+
+    with caplog.at_level("ERROR"):
+        launcher._force_close_window(window)
+
+    assert "Failed to destroy window after close confirmation" in caplog.text
+    assert id(window) not in launcher._bypass_close_guard_windows
 
 
 def test_has_unsaved_changes_timeout_and_winforms_do_events(
@@ -562,6 +703,181 @@ class _FakeEventHook:
         self.handlers.append(handler)
         return self
 
+    def fire(self) -> None:
+        for handler in list(self.handlers):
+            handler()
+
+
+def _make_fake_window() -> SimpleNamespace:
+    return SimpleNamespace(
+        events=SimpleNamespace(
+            closing=_FakeEventHook(),
+            loaded=_FakeEventHook(),
+            closed=_FakeEventHook(),
+        ),
+        load_url=MagicMock(),
+        load_html=MagicMock(),
+    )
+
+
+def test_resolve_app_icon_meipass_frozen_dev_and_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    fake_launcher = repo / "backend" / "app" / "engines" / "launcher.py"
+    _touch(fake_launcher)
+    monkeypatch.setattr(launcher, "__file__", str(fake_launcher))
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+
+    assert launcher.resolve_app_icon() is None
+
+    dev_ico = _touch(repo / "assets" / "brand" / "psice.ico", "ico")
+    assert launcher.resolve_app_icon() == str(dev_ico.resolve())
+
+    fake_exe = _touch(tmp_path / "dist" / "Psice.exe")
+    exe_ico = _touch(tmp_path / "dist" / "assets" / "brand" / "psice.ico", "ico")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    assert launcher.resolve_app_icon() == str(exe_ico.resolve())
+
+    meipass = tmp_path / "bundle"
+    meipass_ico = _touch(meipass / "assets" / "brand" / "psice.ico", "ico")
+    monkeypatch.setattr(sys, "_MEIPASS", str(meipass), raising=False)
+    assert launcher.resolve_app_icon() == str(meipass_ico.resolve())
+
+    # Non-.ico paths are never returned even if candidate list yields one.
+    png_file = _touch(tmp_path / "psice.png", "png")
+    monkeypatch.setattr(launcher, "_candidate_icon_paths", lambda: [png_file])
+    assert launcher.resolve_app_icon() is None
+
+
+def test_build_splash_html_is_offline_animated_and_respects_reduced_motion() -> None:
+    splash_html = launcher.build_splash_html()
+    assert '<html lang="fr">' in splash_html
+    assert "Démarrage du simulateur…" in splash_html
+    assert "background: #ffffff;" in splash_html
+    assert 'viewBox="420.01 299.80 765.99 349.20"' in splash_html
+    for color in ("#0F172A", "#2563EB", "#DC2626", "#FADEDE"):
+        assert color in splash_html
+    for marker in (
+        "psice-terminal",
+        "psice-p-stroke",
+        "psice-spark",
+        "psice-dot",
+        "psice-letter-s",
+        "psice-letter-i",
+        "psice-letter-c",
+        "psice-letter-e",
+        "psice-pin",
+        "psice-pin-pulse",
+        "stroke-dasharray",
+        "stroke-dashoffset",
+        "@media (prefers-reduced-motion: reduce)",
+    ):
+        assert marker in splash_html
+
+    # Only the SVG XML namespace URL may appear; no external fonts, scripts, or stylesheets.
+    urls = re.findall(r"https?://[^\s\"'<>]+", splash_html)
+    assert urls == ["http://www.w3.org/2000/svg"]
+    assert "<script" not in splash_html.lower()
+    assert "<link" not in splash_html.lower()
+
+
+def test_build_startup_error_html_escapes_html_and_uses_french_ui() -> None:
+    error_html = launcher.build_startup_error_html('Port <8000> "occupé" & bloqué')
+    assert '<html lang="fr">' in error_html
+    assert "Impossible de démarrer Psice" in error_html
+    assert 'role="alert"' in error_html
+    assert "Port &lt;8000&gt; &quot;occupé&quot; &amp; bloqué" in error_html
+    assert "<8000>" not in error_html
+    assert "Fermez cette fenêtre" in error_html
+    assert "http://" not in error_html
+    assert "https://" not in error_html
+
+
+def test_wait_for_health_endpoint_polls_handles_errors_stops_and_times_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Real HTTP health check succeeds against RunningServer.
+    app = launcher.create_launcher_app(frontend_dist=tmp_path / "missing")
+    with launcher.RunningServer(app) as srv:
+        launcher._wait_for_health_endpoint(srv.url, timeout=2.0)
+
+    # Retries on OSError and non-200 status, then succeeds when 200 arrives.
+    attempts = 0
+
+    class _FlakyConn:
+        def __init__(self, _host: str, _port: int, timeout: float = 1.0) -> None:
+            self.timeout = timeout
+            self.closed = False
+
+        def request(self, _method: str, _path: str) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OSError("connection refused")
+
+        def getresponse(self) -> SimpleNamespace:
+            status = 503 if attempts == 2 else 200
+            return SimpleNamespace(status=status, read=lambda: b'{"status":"ok"}')
+
+        def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(launcher.http.client, "HTTPConnection", _FlakyConn)
+    monkeypatch.setattr(launcher, "HEALTH_POLL_INTERVAL_S", 0.001)
+    launcher._wait_for_health_endpoint("http://127.0.0.1:49999/", timeout=1.0)
+    assert attempts == 3
+
+    # Timeout raises TimeoutError cleanly (both without and with stop_event).
+    class _FailingConn:
+        def __init__(self, _host: str, _port: int, timeout: float = 1.0) -> None:
+            self.timeout = timeout
+
+        def request(self, _method: str, _path: str) -> None:
+            raise http.client.HTTPException("bad gateway")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(launcher.http.client, "HTTPConnection", _FailingConn)
+    with pytest.raises(TimeoutError, match="health endpoint"):
+        launcher._wait_for_health_endpoint("http://127.0.0.1:49999/", timeout=0.01)
+
+    stop_never = threading.Event()
+    with pytest.raises(TimeoutError, match="health endpoint"):
+        launcher._wait_for_health_endpoint(
+            "http://127.0.0.1:49999/", stop_event=stop_never, timeout=0.01
+        )
+
+    # Already-set stop_event exits before connecting.
+    stop_now = threading.Event()
+    stop_now.set()
+    launcher._wait_for_health_endpoint("http://127.0.0.1:49999/", stop_event=stop_now, timeout=1.0)
+
+    # Stop event triggered during an error stops polling immediately without TimeoutError.
+    stop_during = threading.Event()
+
+    class _StoppingConn(_FailingConn):
+        def request(self, _method: str, _path: str) -> None:
+            stop_during.set()
+            raise OSError("aborted")
+
+    monkeypatch.setattr(launcher.http.client, "HTTPConnection", _StoppingConn)
+    launcher._wait_for_health_endpoint(
+        "http://127.0.0.1:49999/", stop_event=stop_during, timeout=1.0
+    )
+
+    # Constructor failure leaves conn=None and is still handled safely.
+    monkeypatch.setattr(
+        launcher.http.client,
+        "HTTPConnection",
+        lambda *_a, **_kw: (_ for _ in ()).throw(OSError("cannot allocate")),
+    )
+    with pytest.raises(TimeoutError, match="health endpoint"):
+        launcher._wait_for_health_endpoint("http://127.0.0.1:49999/", timeout=0.005)
+
 
 def test_launch_starts_server_creates_window_and_shuts_down(
     monkeypatch: pytest.MonkeyPatch,
@@ -569,6 +885,7 @@ def test_launch_starts_server_creates_window_and_shuts_down(
 ) -> None:
     created_windows: list[dict[str, object]] = []
     started_servers: list[object] = []
+    health_calls: list[tuple[str, threading.Event | None]] = []
 
     class _FakeServer:
         def __init__(self, config: uvicorn.Config) -> None:
@@ -582,18 +899,32 @@ def test_launch_starts_server_creates_window_and_shuts_down(
             while not self.should_exit:
                 time.sleep(0.01)
 
-    closing_hook = _FakeEventHook()
-    fake_window = SimpleNamespace(events=SimpleNamespace(closing=closing_hook))
+    fake_window = _make_fake_window()
 
-    def fake_create_window(title: str, url: str, **kwargs: object) -> SimpleNamespace:
+    def fake_create_window(title: str, url: str | None, **kwargs: object) -> SimpleNamespace:
         created_windows.append({"title": title, "url": url, "kwargs": kwargs})
         return fake_window
 
     start_calls: list[dict[str, object]] = []
 
-    def fake_start(*, debug: bool = False) -> None:
-        start_calls.append({"debug": debug})
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        start_calls.append({"debug": debug, "icon": icon, "has_func": func is not None})
+        fake_window.events.loaded.fire()
+        assert func is not None
+        func()
+        fake_window.events.closed.fire()
 
+    monkeypatch.setattr(launcher, "resolve_app_icon", lambda: r"C:\brand\psice.ico")
+    monkeypatch.setattr(
+        launcher,
+        "_wait_for_health_endpoint",
+        lambda url, stop_event=None, timeout=10.0: health_calls.append((url, stop_event)),
+    )
     monkeypatch.setattr(launcher.uvicorn, "Server", _FakeServer)
     monkeypatch.setattr(launcher.webview, "create_window", fake_create_window)
     monkeypatch.setattr(launcher.webview, "start", fake_start)
@@ -608,9 +939,15 @@ def test_launch_starts_server_creates_window_and_shuts_down(
 
     assert len(created_windows) == 1
     assert created_windows[0]["title"] == "Psice"
-    assert created_windows[0]["url"] == "http://127.0.0.1:49152/"
-    assert launcher.on_window_closing in closing_hook.handlers
-    assert start_calls == [{"debug": True}]
+    assert created_windows[0]["url"] is None
+    splash_html = str(created_windows[0]["kwargs"]["html"])  # type: ignore[index]
+    assert "Démarrage du simulateur…" in splash_html
+    assert launcher.on_window_closing in fake_window.events.closing.handlers
+    assert len(health_calls) == 1
+    assert health_calls[0][0] == "http://127.0.0.1:49152/"
+    fake_window.load_url.assert_called_once_with("http://127.0.0.1:49152/")
+    fake_window.load_html.assert_not_called()
+    assert start_calls == [{"debug": True, "icon": r"C:\brand\psice.ico", "has_func": True}]
 
 
 @pytest.mark.parametrize(
@@ -630,10 +967,9 @@ def test_launch_dev_url_opens_directly_without_starting_backend(
         monkeypatch.setenv(launcher.DEV_URL_ENV_VAR, env_dev_url)
 
     created_windows: list[dict[str, object]] = []
-    closing_hook = _FakeEventHook()
-    fake_window = SimpleNamespace(events=SimpleNamespace(closing=closing_hook))
+    fake_window = _make_fake_window()
 
-    def fake_create_window(title: str, url: str, **kwargs: object) -> SimpleNamespace:
+    def fake_create_window(title: str, url: str | None, **kwargs: object) -> SimpleNamespace:
         created_windows.append({"title": title, "url": url, "kwargs": kwargs})
         return fake_window
 
@@ -642,11 +978,14 @@ def test_launch_dev_url_opens_directly_without_starting_backend(
     def fail_if_called(*_args: object, **_kwargs: object) -> object:
         raise AssertionError("Backend server must not be created or started in --dev-url mode")
 
+    monkeypatch.setattr(launcher, "resolve_app_icon", lambda: r"C:\brand\psice.ico")
     monkeypatch.setattr(launcher, "RunningServer", fail_if_called)
     monkeypatch.setattr(launcher, "create_launcher_app", fail_if_called)
     monkeypatch.setattr(launcher.webview, "create_window", fake_create_window)
     monkeypatch.setattr(
-        launcher.webview, "start", lambda *, debug=False: start_calls.append({"debug": debug})
+        launcher.webview,
+        "start",
+        lambda *, debug=False, icon=None: start_calls.append({"debug": debug, "icon": icon}),
     )
 
     launcher.launch(dev_url=cli_dev_url, debug=True)
@@ -654,8 +993,8 @@ def test_launch_dev_url_opens_directly_without_starting_backend(
     assert len(created_windows) == 1
     assert created_windows[0]["title"] == "Psice"
     assert created_windows[0]["url"] == expected_url
-    assert launcher.on_window_closing in closing_hook.handlers
-    assert start_calls == [{"debug": True}]
+    assert launcher.on_window_closing in fake_window.events.closing.handlers
+    assert start_calls == [{"debug": True, "icon": r"C:\brand\psice.ico"}]
 
 
 @pytest.mark.parametrize(
@@ -707,7 +1046,7 @@ def test_launch_stops_server_if_webview_start_raises(monkeypatch: pytest.MonkeyP
             while not self.should_exit:
                 time.sleep(0.01)
 
-    fake_window = SimpleNamespace(events=SimpleNamespace(closing=_FakeEventHook()))
+    fake_window = _make_fake_window()
     monkeypatch.setattr(launcher.uvicorn, "Server", _FakeServer)
     monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
     monkeypatch.setattr(
@@ -719,6 +1058,234 @@ def test_launch_stops_server_if_webview_start_raises(monkeypatch: pytest.MonkeyP
 
     assert len(servers) == 1
     assert servers[0].should_exit is True  # type: ignore[attr-defined]
+
+
+def test_launch_early_close_aborts_startup_without_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    servers: list[object] = []
+
+    class _AbortOnExitServer:
+        def __init__(self, config: uvicorn.Config) -> None:
+            self.config = config
+            self.started = False
+            self.should_exit = False
+            servers.append(self)
+
+        def run(self) -> None:
+            while not self.should_exit:
+                time.sleep(0.01)
+
+    fake_window = _make_fake_window()
+
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        fake_window.events.closed.fire()
+        assert func is not None
+        func()
+
+    monkeypatch.setattr(launcher.uvicorn, "Server", _AbortOnExitServer)
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
+    launcher.launch()
+
+    assert len(servers) == 1
+    assert servers[0].should_exit is True  # type: ignore[attr-defined]
+    fake_window.load_url.assert_not_called()
+    fake_window.load_html.assert_not_called()
+
+
+def test_launch_displays_in_window_error_and_handles_load_html_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    notifications: list[str] = []
+    monkeypatch.setattr(sys, "stderr", None)
+    monkeypatch.setattr(launcher, "_notify_error", notifications.append)
+
+    class _ErrorServer:
+        def __init__(self, config: uvicorn.Config) -> None:
+            self.config = config
+            self.started = False
+            self.should_exit = False
+
+        def run(self) -> None:
+            raise OSError("address already in use")
+
+    fake_window = _make_fake_window()
+
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        fake_window.events.loaded.fire()
+        assert func is not None
+        func()
+        fake_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher.uvicorn, "Server", _ErrorServer)
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
+    with caplog.at_level("ERROR"):
+        exit_code = launcher.main(["--port", "8123"])
+
+    assert exit_code == 1
+    fake_window.load_html.assert_called_once()
+    rendered = str(fake_window.load_html.call_args.args[0])
+    assert "Impossible de démarrer Psice" in rendered
+    assert "8123" in rendered
+    # Error was already presented inside the window, so no duplicate MessageBoxW is shown.
+    assert notifications == []
+    assert "Launcher failed (RuntimeError)" in caplog.text
+
+    # If displaying in-window fails, windowed mode falls back to _notify_error.
+    broken_window = _make_fake_window()
+    broken_window.load_html.side_effect = RuntimeError("webview disposed")
+
+    def fake_start_broken(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        broken_window.events.loaded.fire()
+        assert func is not None
+        func()
+        broken_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: broken_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start_broken)
+
+    with caplog.at_level("DEBUG"):
+        assert launcher.main(["--port", "8124"]) == 1
+
+    assert len(notifications) == 1
+    assert "8124" in notifications[0]
+    assert "Failed to display startup error in window." in caplog.text
+
+
+def test_launch_displays_in_window_error_for_unexpected_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+    fake_window = _make_fake_window()
+    fake_window.load_url.side_effect = TypeError("unexpected webview error")
+
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        fake_window.events.loaded.fire()
+        assert func is not None
+        func()
+        fake_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
+    exit_code = launcher.main(["--frontend-dist", str(dist_dir)])
+
+    assert exit_code == 1
+    fake_window.load_html.assert_called_once()
+    rendered = str(fake_window.load_html.call_args.args[0])
+    assert "Impossible de démarrer Psice" in rendered
+    assert "unexpected webview error" in rendered
+
+
+def test_launch_real_server_waits_for_loaded_before_load_url_and_closed_during_wait(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # 1. Real threaded startup: health passes before `loaded`, load_url runs only after `loaded`.
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+    timeline: list[str] = []
+    health_done = threading.Event()
+    load_url_called = threading.Event()
+    fake_window = _make_fake_window()
+
+    def record_load_url(url: str) -> None:
+        timeline.append(f"load_url:{url}")
+        load_url_called.set()
+
+    fake_window.load_url.side_effect = record_load_url
+    orig_wait_health = launcher._wait_for_health_endpoint
+
+    def tracked_wait_health(
+        url: str, *, stop_event: threading.Event | None = None, timeout: float = 10.0
+    ) -> None:
+        orig_wait_health(url, stop_event=stop_event, timeout=timeout)
+        timeline.append("health_ok")
+        health_done.set()
+
+    def fake_start_threaded(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        assert func is not None
+        worker = threading.Thread(target=func)
+        worker.start()
+        assert health_done.wait(3.0)
+        assert not load_url_called.is_set()
+        timeline.append("loaded")
+        fake_window.events.loaded.fire()
+        assert load_url_called.wait(2.0)
+        fake_window.events.closed.fire()
+        worker.join(timeout=2.0)
+
+    monkeypatch.setattr(launcher, "_wait_for_health_endpoint", tracked_wait_health)
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start_threaded)
+
+    launcher.launch(frontend_dist=dist_dir)
+
+    assert timeline[0] == "health_ok"
+    assert timeline[1] == "loaded"
+    assert timeline[2].startswith("load_url:http://127.0.0.1:")
+
+    # 2. If closed fires after health succeeds while waiting for loaded, load_url is skipped.
+    health_done.clear()
+    closed_window = _make_fake_window()
+
+    def fake_start_close_before_loaded(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        assert func is not None
+        worker = threading.Thread(target=func)
+        worker.start()
+        assert health_done.wait(3.0)
+        closed_window.events.closed.fire()
+        worker.join(timeout=2.0)
+
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: closed_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start_close_before_loaded)
+
+    launcher.launch(frontend_dist=dist_dir)
+    closed_window.load_url.assert_not_called()
+    closed_window.load_html.assert_not_called()
 
 
 def test_launch_stops_server_if_window_creation_returns_none(
@@ -833,9 +1400,27 @@ def test_main_cli_success_and_validation_errors(
 
 
 def test_main_occupied_port_returns_error_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    fake_window = _make_fake_window()
+
+    def fake_start(
+        *,
+        func: Callable[[], None] | None = None,
+        debug: bool = False,
+        icon: str | None = None,
+    ) -> None:
+        del debug, icon
+        fake_window.events.loaded.fire()
+        assert func is not None
+        func()
+        fake_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
         blocker.bind((launcher.LOCALHOST_HOST, 0))
         blocker.listen(1)
@@ -845,6 +1430,10 @@ def test_main_occupied_port_returns_error_without_traceback(
             exit_code = launcher.main(["--port", str(occupied_port)])
 
     assert exit_code == 1
+    fake_window.load_html.assert_called_once()
+    error_html = str(fake_window.load_html.call_args.args[0])
+    assert "Impossible de démarrer Psice" in error_html
+    assert str(occupied_port) in error_html
     err = capsys.readouterr().err
     assert "Erreur :" in err
     assert str(occupied_port) in err
@@ -955,3 +1544,214 @@ def test_notify_error_behavior_across_frozen_and_non_frozen_modes(
         user32=SimpleNamespace(MessageBoxW=broken_message_box)
     )
     launcher._notify_error("Port occupé")
+
+
+def test_run_self_check_success_and_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+    fake_ngspice = tmp_path / "vendor" / "ngspice" / "bin" / "ngspice_con.exe"
+    _touch(fake_ngspice)
+
+    monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(launcher, "_verify_desktop_runtime", lambda: "ok")
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda _netlist, _analysis, ngspice_path=None: SimulationResult(
+            analysis="tran",
+            axis=Axis(name="time", unit="s", values=[0.0, 0.005]),
+            traces=[
+                Trace(
+                    name="v(out)",
+                    kind="voltage",
+                    unit="V",
+                    net="out",
+                    values=[0.0, 4.9663],
+                )
+            ],
+        ),
+    )
+
+    exit_code = launcher.main(["--self-check", "--frontend-dist", str(dist_dir)])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Self-check OK:" in out
+    assert "rc_points=2" in out
+    assert "v_out_final=4.9663V" in out
+    assert "desktop_runtime=ok" in out
+
+    # Windowed mode with sys.stdout=None completes cleanly without crashing.
+    monkeypatch.setattr(sys, "stdout", None)
+    assert launcher.main(["--self-check", "--frontend-dist", str(dist_dir)]) == 0
+
+
+def test_run_self_check_auto_resolves_frontend_and_validates_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Missing auto-resolved frontend/dist fails cleanly.
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: None)
+    with pytest.raises(RuntimeError, match="index.html"):
+        launcher.run_self_check()
+
+    # Empty library fails cleanly.
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<html></html>")
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: dist_dir)
+    monkeypatch.setattr(launcher, "load_library", dict)
+    with pytest.raises(RuntimeError, match="bibliothèque"):
+        launcher.run_self_check()
+    monkeypatch.undo()
+
+    # Missing ngspice binary fails cleanly.
+    monkeypatch.setattr(launcher, "resolve_frontend_dist", lambda: dist_dir)
+    monkeypatch.setattr(
+        launcher,
+        "locate_ngspice",
+        lambda: (_ for _ in ()).throw(NgspiceNotFoundError("missing")),
+    )
+    with pytest.raises(RuntimeError, match="ngspice est introuvable"):
+        launcher.run_self_check()
+
+    # Simulation error diagnostic fails cleanly.
+    fake_ngspice = tmp_path / "ngspice_con.exe"
+    _touch(fake_ngspice)
+    monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(
+            analysis="tran",
+            errors=[Diagnostic(code="SIMULATION_FAILED", message="échec test", targets=[])],
+        ),
+    )
+    with pytest.raises(RuntimeError, match="échec test"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # Empty traces/axis fails cleanly.
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(analysis="tran", axis=None, traces=[]),
+    )
+    with pytest.raises(RuntimeError, match="aucune courbe valide"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # Out-of-range final RC voltage fails cleanly.
+    monkeypatch.setattr(
+        launcher,
+        "run_simulation",
+        lambda *_args, **_kwargs: SimulationResult(
+            analysis="tran",
+            axis=Axis(name="time", unit="s", values=[0.0, 0.005]),
+            traces=[Trace(name="v(out)", kind="voltage", unit="V", net="out", values=[0.0, 1.0])],
+        ),
+    )
+    with pytest.raises(RuntimeError, match="tension finale incohérente"):
+        launcher.run_self_check(frontend_dist=dist_dir)
+
+    # CLI rejects --self-check combined with --dev-url or --port with exit code 2.
+    assert launcher.main(["--self-check", "--port", "8000"]) == 2
+    assert "--self-check" in capsys.readouterr().err
+    assert launcher.main(["--self-check", "--dev-url", "http://127.0.0.1:5173"]) == 2
+    assert "--self-check" in capsys.readouterr().err
+
+    # CLI returns exit code 1 when self-check fails at runtime.
+    assert launcher.main(["--self-check", "--frontend-dist", str(tmp_path / "missing")]) == 1
+    assert "Erreur :" in capsys.readouterr().err
+
+
+def test_verify_desktop_runtime_skips_outside_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_called(_name: str) -> object:
+        raise AssertionError("the Windows backend must not be imported outside Windows")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(launcher.importlib, "import_module", fail_if_called)
+    assert launcher._verify_desktop_runtime() == "skipped"
+
+
+def test_verify_desktop_runtime_imports_the_windows_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    imported: list[str] = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", imported.append)
+    assert launcher._verify_desktop_runtime() == "ok"
+    assert imported == ["webview.platforms.edgechromium"]
+
+
+def test_verify_desktop_runtime_reports_blocked_assemblies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def blocked(_name: str) -> object:
+        raise RuntimeError("Failed to resolve Python.Runtime.Loader.Initialize")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", blocked)
+    with pytest.raises(RuntimeError, match=r"\.NET.*Python\.Runtime\.Loader") as exc_info:
+        launcher._verify_desktop_runtime()
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="pywebview's .NET backend is Windows-only")
+def test_verify_desktop_runtime_loads_real_assemblies() -> None:
+    assert launcher._verify_desktop_runtime() == "ok"
+
+
+def test_verify_launcher_app_detects_broken_routes(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<html></html>")
+    valid_app = launcher.create_launcher_app(frontend_dist=dist_dir)
+    asyncio.run(launcher._verify_launcher_app(valid_app))
+
+    async def _send_reply(send: Send, status: int, body: bytes) -> None:
+        await send({"type": "http.response.start", "status": status, "headers": []})
+        await send({"type": "http.response.body", "body": body})
+
+    class _MockApp:
+        def __init__(self, handler: Callable[[Scope, Receive, Send], object]) -> None:
+            self._handler = handler
+            self.router = valid_app.router
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            await self._handler(scope, receive, send)  # type: ignore[misc]
+
+    async def _bad_health(_scope: Scope, _receive: Receive, send: Send) -> None:
+        await _send_reply(send, 500, b"{}")
+
+    with pytest.raises(RuntimeError, match="/api/health"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_bad_health)))  # type: ignore[arg-type]
+
+    async def _bad_index(scope: Scope, _receive: Receive, send: Send) -> None:
+        if scope.get("path") == "/api/health":
+            await _send_reply(send, 200, json.dumps({"status": "ok"}).encode())
+            return
+        await _send_reply(send, 404, b"missing")
+
+    with pytest.raises(RuntimeError, match="page d'accueil"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_bad_index)))  # type: ignore[arg-type]
+
+    async def _allow_evil_host(scope: Scope, _receive: Receive, send: Send) -> None:
+        if scope.get("path") == "/api/health":
+            await _send_reply(send, 200, json.dumps({"status": "ok"}).encode())
+            return
+        await _send_reply(send, 200, b"<html></html>")
+
+    with pytest.raises(RuntimeError, match="TrustedHostMiddleware"):
+        asyncio.run(launcher._verify_launcher_app(_MockApp(_allow_evil_host)))  # type: ignore[arg-type]
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_run_self_check_real_ngspice_with_temp_frontend_dist(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    _touch(dist_dir / "index.html", "<!doctype html><html><body>Psice</body></html>")
+
+    summary = launcher.run_self_check(frontend_dist=dist_dir)
+    assert "Self-check OK:" in summary
+    assert "v_out_final=4.96" in summary

@@ -1,7 +1,13 @@
 // Wire routing while drawing: orthogonal paths on the grid that go around the components.
 
-import { samePoint, toWorld, type EditorDoc, type GridPoint } from "./document";
-import { getDef, symbolBounds } from "./library";
+import {
+  samePoint,
+  toWorld,
+  type EditorDoc,
+  type GridPoint,
+  type PlacedComponent,
+} from "./document";
+import { getDef, symbolBounds, type SymbolShape } from "./library";
 
 /** Extra cost of a bend, in grid steps: a slightly longer path with fewer bends is preferred. */
 const BEND_COST = 3;
@@ -13,24 +19,82 @@ const MAX_EXPANSIONS = 50_000;
 const key = (p: GridPoint) => `${p.x},${p.y}`;
 
 const obstacleCache = new WeakMap<EditorDoc, Set<string>>();
+const pinCache = new WeakMap<EditorDoc, Set<string>>();
+
+/** Grid points of every component pin. Cached per document. */
+function pinPoints(doc: EditorDoc): Set<string> {
+  const cached = pinCache.get(doc);
+  if (cached) return cached;
+  const pins = new Set<string>();
+  for (const c of doc.components)
+    for (const pin of getDef(c.type).pins) pins.add(key(toWorld(pin, c)));
+  pinCache.set(doc, pins);
+  return pins;
+}
 
 /**
- * Grid points a wire may not go through: every point of a component's symbol box (borders
- * included, so a wire does not run along a symbol), its pins included. Cached per document.
+ * Box of what a wire must go around: the symbol without its leads (the straight lines that join
+ * a pin to the body). A lead only blocks the grid points on its own line, so a wire can leave a
+ * pin sideways right away, even next to a wide body such as the circle of a source (#88).
+ */
+function bodyAndLeads(c: PlacedComponent): { body: GridPoint[]; leads: GridPoint[][] } {
+  const def = getDef(c.type);
+  const isPin = (x: number, y: number) => def.pins.some((pin) => pin.x === x && pin.y === y);
+  const leads: GridPoint[][] = [];
+  const body: SymbolShape[] = [];
+  for (const shape of def.symbol) {
+    const [x1, y1, x2, y2] = shape.kind === "line" ? shape.points : [];
+    const isLead =
+      shape.kind === "line" &&
+      shape.points.length === 4 &&
+      (x1 === x2 || y1 === y2) &&
+      (isPin(x1 as number, y1 as number) || isPin(x2 as number, y2 as number));
+    if (isLead) {
+      leads.push([
+        toWorld({ x: x1 as number, y: y1 as number }, c),
+        toWorld({ x: x2 as number, y: y2 as number }, c),
+      ]);
+    } else {
+      body.push(shape);
+    }
+  }
+  if (body.length === 0) return { body: [], leads };
+  const b = symbolBounds({ ...def, pins: [], symbol: body });
+  return { body: [toWorld(b.min, c), toWorld(b.max, c)], leads };
+}
+
+/**
+ * Grid points a wire may not go through: every point of a component's body box (borders
+ * included, so a wire does not run along a symbol), and the points of its leads, pins included.
+ * Cached per document.
  */
 export function obstacles(doc: EditorDoc): Set<string> {
   const cached = obstacleCache.get(doc);
   if (cached) return cached;
   const blocked = new Set<string>();
   for (const c of doc.components) {
-    const b = symbolBounds(getDef(c.type));
-    const p = toWorld(b.min, c);
-    const q = toWorld(b.max, c);
-    for (let x = Math.ceil(Math.min(p.x, q.x)); x <= Math.floor(Math.max(p.x, q.x)); x++) {
-      for (let y = Math.ceil(Math.min(p.y, q.y)); y <= Math.floor(Math.max(p.y, q.y)); y++) {
-        blocked.add(`${x},${y}`);
+    const { body, leads } = bodyAndLeads(c);
+    const [p, q] = body;
+    if (p && q) {
+      for (let x = Math.ceil(Math.min(p.x, q.x)); x <= Math.floor(Math.max(p.x, q.x)); x++) {
+        for (let y = Math.ceil(Math.min(p.y, q.y)); y <= Math.floor(Math.max(p.y, q.y)); y++) {
+          blocked.add(`${x},${y}`);
+        }
       }
     }
+    for (const [a, b] of leads) {
+      if (!a || !b) continue;
+      const dx = Math.sign(b.x - a.x);
+      const dy = Math.sign(b.y - a.y);
+      const n = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      for (let k = 0; k <= Math.floor(n); k++) {
+        const x = a.x + dx * k;
+        const y = a.y + dy * k;
+        if (Number.isInteger(x) && Number.isInteger(y)) blocked.add(`${x},${y}`);
+      }
+    }
+    // Pins are always obstacles, whatever the symbol looks like.
+    for (const pin of getDef(c.type).pins) blocked.add(key(toWorld(pin, c)));
   }
   obstacleCache.set(doc, blocked);
   return blocked;
@@ -164,19 +228,35 @@ function search(
   return null;
 }
 
+export interface RouteOptions {
+  /**
+   * The plain L route may go through pins (#244): a wire drawn across a pin stays on its line and
+   * gets connected there (see `connectPinsOnWires`). A detour still avoids every pin, so that a
+   * wire going around a component is never connected to it by chance.
+   */
+  throughPins?: boolean;
+}
+
 /**
  * Route from `a` to `b` while drawing a wire: orthogonal, on the grid, around the components
  * (`a` and `b` themselves may be pins). The plain L route (horizontal then vertical) is kept when
  * it is free; otherwise the shortest route with few bends; if there is none, the plain L route
  * anyway, so the user is never blocked. Returns the points after `a` (the corners, then `b`).
  */
-export function routeAround(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
+export function routeAround(
+  doc: EditorDoc,
+  a: GridPoint,
+  b: GridPoint,
+  { throughPins = false }: RouteOptions = {},
+): GridPoint[] {
   const routes = lRoutes(a, b);
   const plain = routes[0] as GridPoint[];
   if (samePoint(a, b)) return [b];
   const blocked = obstacles(doc);
   const free = (p: GridPoint) => samePoint(p, a) || samePoint(p, b) || !blocked.has(key(p));
-  const freeRoute = routes.find((r) => isFree(a, r, free));
+  const pins = throughPins ? pinPoints(doc) : null;
+  const freeOrPin = (p: GridPoint) => free(p) || (pins?.has(key(p)) ?? false);
+  const freeRoute = routes.find((r) => isFree(a, r, freeOrPin));
   if (freeRoute) return freeRoute;
 
   // Search area: the end points and every obstacle, with some room around them.
@@ -192,4 +272,46 @@ export function routeAround(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoi
     max: { x: Math.max(...xs) + MARGIN, y: Math.max(...ys) + MARGIN },
   };
   return search(a, b, free, area) ?? plain;
+}
+
+/**
+ * True if the orthogonal `path` goes through an obstacle, its two ends excepted, and the points of
+ * `through` ("x,y" keys) too.
+ */
+export function pathBlocked(
+  doc: EditorDoc,
+  path: readonly GridPoint[],
+  through?: ReadonlySet<string>,
+): boolean {
+  const a = path[0];
+  const b = path[path.length - 1];
+  if (!a || !b) return false;
+  const blocked = obstacles(doc);
+  const free = (p: GridPoint) =>
+    samePoint(p, a) || samePoint(p, b) || through?.has(key(p)) === true || !blocked.has(key(p));
+  return !isFree(a, path.slice(1), free);
+}
+
+/**
+ * Full path (ends included) of a wire from `a` to `b` around the components, or null if there is
+ * no free one. A wire end on a pin first leaves it outwards (`aOut`, `bOut`: one grid step away
+ * from the component), as a wire drawn by hand would.
+ */
+export function routeBetween(
+  doc: EditorDoc,
+  a: GridPoint,
+  b: GridPoint,
+  aOut: GridPoint | null,
+  bOut: GridPoint | null,
+): GridPoint[] | null {
+  const blocked = obstacles(doc);
+  const stub = (p: GridPoint, out: GridPoint | null) => {
+    const q = out ? { x: p.x + out.x, y: p.y + out.y } : p;
+    return blocked.has(key(q)) ? p : q;
+  };
+  const a2 = stub(a, aOut);
+  const b2 = stub(b, bOut);
+  // Repeated points (no stub, or a stub at the other end) are removed by the caller.
+  const path = [a, a2, ...routeAround(doc, a2, b2), b];
+  return pathBlocked(doc, path) ? null : path;
 }

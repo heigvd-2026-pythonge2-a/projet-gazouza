@@ -1,17 +1,21 @@
-// Development only: loads a circuit of shared/fixtures/ with its simulation result, to try the
-// current animation before the simulation is wired to the backend.
+// Development and online demo (website) only: loads a circuit of shared/fixtures/ with its
+// simulation result, and sets the toolbar to its analysis, so that Simulate gives that result again
+// in the demo (src/api/demoBackend.ts).
 //   - in the browser console: psiceDemo("rc_tran")
 //   - or in the URL: http://localhost:5173/?demo=divider_op
 
-import type { SimulationResult } from "../api/client";
-import { loadLibrary, useEditorStore, type EditorDoc, type EditorWire } from "../store";
+import type { NetlistResult, SimulationRequest, SimulationResult } from "../api/client";
+import { loadLibrary, useEditorStore, type EditorDoc } from "../store";
+import { analysisSettings, fixtureDocument } from "./examples";
 
-const files = import.meta.glob<unknown>("../../../shared/fixtures/*/{schematic,result}.json", {
-  eager: true,
-  import: "default",
-});
+type FixtureFile = "schematic" | "analysis" | "result" | "netlist";
 
-function fixture(name: string, file: "schematic" | "result"): unknown {
+const files = import.meta.glob<unknown>(
+  "../../../shared/fixtures/*/{schematic,analysis,result,netlist}.json",
+  { eager: true, import: "default" },
+);
+
+function fixture(name: string, file: FixtureFile): unknown {
   return files[`../../../shared/fixtures/${name}/${file}.json`];
 }
 
@@ -27,15 +31,15 @@ export function loadDemo(name: string) {
     console.warn(`psiceDemo : circuits disponibles : ${demoNames().join(", ")}`);
     return;
   }
-  // The contract schematic (version 2) has the editor's fields; bends are optional there.
-  const doc: EditorDoc = {
-    components: schematic.components,
-    junctions: schematic.junctions,
-    wires: schematic.wires.map((w: EditorWire) => ({ ...w, points: w.points ?? [] })),
-  };
-  useEditorStore.getState().openDocument(doc);
-  useEditorStore.getState().setSimulation(result);
-  useEditorStore.getState().setAnimation({ on: true });
+  const doc = fixtureDocument(schematic);
+  const analysis = fixture(name, "analysis") as SimulationRequest["analysis"] | undefined;
+  const settings = analysis ? analysisSettings(analysis) : null;
+  const nets = (fixture(name, "netlist") as NetlistResult | undefined)?.nets ?? {};
+  const store = useEditorStore.getState();
+  store.openDocument(doc);
+  if (settings) store.setAnalysis(settings);
+  store.setSimulation(result, nets);
+  store.setAnimation({ on: true });
 }
 
 declare global {

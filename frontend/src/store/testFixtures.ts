@@ -20,13 +20,14 @@ const file = (name: string, kind: "schematic" | "result"): unknown => {
 export const fixtureNames = (): string[] =>
   [...new Set(Object.keys(files).map((k) => k.split("/").at(-2) ?? ""))].sort();
 
-/** The fixture's schematic as an editor document (bends are optional in the contract). */
+/** The fixture's schematic as an editor document (bends and texts are optional in the contract). */
 export function fixtureDoc(name: string): EditorDoc {
   const s = structuredClone(file(name, "schematic")) as EditorDoc;
   return {
     components: s.components,
     junctions: s.junctions,
     wires: s.wires.map((w: EditorWire) => ({ ...w, points: w.points ?? [] })),
+    texts: s.texts ?? [],
   };
 }
 

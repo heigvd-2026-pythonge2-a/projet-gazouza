@@ -6,13 +6,13 @@ repos:
     hooks:
       - id: ruff-check
         name: ruff check (backend)
-        entry: uv run --project backend ruff check --fix --force-exclude
+        entry: uv run --no-sync --project backend ruff check --fix --force-exclude
         language: system
         types: [python]
         files: ^backend/
       - id: ruff-format
         name: ruff format (backend)
-        entry: uv run --project backend ruff format --force-exclude
+        entry: uv run --no-sync --project backend ruff format --force-exclude
         language: system
         types: [python]
         files: ^backend/

@@ -6,39 +6,82 @@ import { create } from "zustand";
 import type { SimulationResult } from "../api/client";
 import {
   addComponent,
+  addText,
   addWire,
   anchorAt,
+  connectPinsOnWires,
   copyItems,
-  deleteBend,
   deleteItems,
   deleteSegment,
+  deleteSegments,
+  docBounds,
+  docIds,
   emptyDoc,
+  freeMove,
+  itemsInRect,
+  itemsTouchingRect,
   mirrorComponents,
   moveComponent,
-  moveItems,
+  closesWireLoop,
   moveWirePart,
+  normalizeContacts,
+  nudgeFree,
   pasteClip,
+  removeHiddenWires,
   renameComponent,
   rotateComponents,
   rotateCw,
   samePoint,
+  segmentsInRect,
   setParam,
+  setTextContent,
+  turnClip,
   type Clip,
   type EditorDoc,
   type GridPoint,
+  type GridRect,
   type Rotation,
   type WirePart,
 } from "./document";
+import { moveCaption, releaseCoveredCaptions, resetCaptions, type CaptionKind } from "./captions";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
+import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
 
-/** Grid units between a copied (or pasted) group and the next paste. */
+/** Grid units a component placed on top of another one is shifted by, until it is free. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
 
 export type Tool =
   | { kind: "select" }
   | { kind: "place"; type: string; rotation: Rotation; mirror: boolean }
-  | { kind: "wire" };
+  | { kind: "wire" }
+  /**
+   * Pasted or duplicated items follow the mouse until a click drops them (#166). R and M turn
+   * `clip` before it is dropped (#260).
+   */
+  | { kind: "paste"; clip: Clip }
+  /** Click on the schematic to write a free text there (#123). */
+  | { kind: "text" };
+
+/** Content of a free text just placed, selected in the properties panel to be typed over. */
+export const NEW_TEXT = "Texte";
+
+/**
+ * Grid point of a clip that follows the mouse while pasting: the middle of its items, rounded,
+ * so the copy is centred on the pointer.
+ */
+export function clipAnchor(clip: Clip): GridPoint {
+  const bounds = docBounds(clip);
+  if (!bounds) return { x: 0, y: 0 };
+  return {
+    x: Math.round((bounds.min.x + bounds.max.x) / 2),
+    y: Math.round((bounds.min.y + bounds.max.y) / 2),
+  };
+}
+
+/** True if a clipboard holds something to paste (a junction alone is not worth it). */
+const hasItems = (clip: Clip | null): clip is Clip =>
+  clip !== null && clip.components.length + clip.wires.length + clip.texts.length > 0;
 
 /** Wire being drawn: not part of the document until it is finished. */
 export interface WireDraft {
@@ -53,11 +96,12 @@ export interface WireDraft {
 
 /**
  * Route from `a` to `b` as seen while drawing: around the components (see `routeAround`),
- * straight or as an L when nothing is in the way. Returns the points after `a` (the corners,
+ * straight or as an L when nothing is in the way. Pins do not get in the way: a wire drawn across
+ * one stays straight and is connected there (#244). Returns the points after `a` (the corners,
  * then `b`).
  */
 export function routeTo(doc: EditorDoc, a: GridPoint, b: GridPoint): GridPoint[] {
-  return routeAround(doc, a, b);
+  return routeAround(doc, a, b, { throughPins: true });
 }
 
 /** Full path through the clicked points, with the corners `routeTo` adds between them. */
@@ -76,36 +120,76 @@ interface EditorState {
   selection: string[];
   /** Bend or segment of a wire selected on its own (then `selection` is empty). */
   wirePart: WirePart | null;
+  /** Wire sections selected with the selection rectangle (#121), next to `selection`. */
+  segments: WirePart[];
   tool: Tool;
   draft: WireDraft | null;
   /** Items copied with Ctrl+C (an internal clipboard, not the system one). */
   clipboard: Clip | null;
   /** Undo/redo history of `doc` (the selection and the active tool are not part of it). */
   history: History<EditorDoc>;
-  /** Last simulation, with the document it was run on: stale once `doc` is another one. */
-  simulation: { result: SimulationResult; doc: EditorDoc } | null;
+  /**
+   * Last simulation, with the document it was run on: stale once `doc` is another one. `nets`
+   * (SPICE node -> wire ids, from the netlist) places the node voltages on the schematic.
+   */
+  simulation: {
+    result: SimulationResult;
+    doc: EditorDoc;
+    nets: Record<string, string[]>;
+  } | null;
+  /** The analysis set in the toolbar, used by the Simulate button and the netlist export. */
+  analysis: AnalysisSettings;
+  /** A simulation is running (the Simulate button then stops it). */
+  simulating: boolean;
+  /** Why the last simulation could not run (backend unreachable, invalid settings...), in French. */
+  simulationError: string | null;
+  /** Show the operating point values (.op) on the schematic. */
+  showValues: boolean;
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
   savedDoc: EditorDoc;
+  /**
+   * Why the last gesture did nothing (a wire refused...), in French, for the status bar. Cleared
+   * by the next change of the document, of the tool, or the next click with the wire tool.
+   */
+  notice: string | null;
 
   setTool: (tool: Tool) => void;
   /** Starts placing a component of this type (keeps placing until Escape). */
   startPlacing: (type: string) => void;
-  /** Places the component of the active "place" tool at this grid position. */
+  /**
+   * Places the component of the active "place" tool at this grid position, or a bit further
+   * if another component is already there (see `nudgeFree`).
+   */
   placeAt: (position: GridPoint) => void;
   /** Adds a component dropped from the palette, selects it and goes back to the select tool. */
   dropComponent: (type: string, position: GridPoint) => void;
   moveComponent: (id: string, position: GridPoint) => void;
   /**
-   * Moves the selected items by `delta` (grid units). `merge` makes consecutive moves one undo
-   * step (arrow keys held down).
+   * Moves the selected items by `delta` (grid units), or to the nearest place where no component
+   * lies on another one (see `freeMove`). `merge` makes consecutive moves one undo step (arrow
+   * keys held down); `detach` leaves the wires where they are (Ctrl + drag). Except while merging,
+   * a pin that lands on a wire is connected to it (see `connectPinsOnWires`).
    */
-  moveSelection: (delta: GridPoint, merge?: boolean) => void;
+  moveSelection: (delta: GridPoint, options?: { merge?: boolean; detach?: boolean }) => void;
   renameComponent: (id: string, name: string) => void;
   setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
+  /** Starts the text tool (T). */
+  startText: () => void;
+  /**
+   * Click with the text tool: adds a text there, selects it and goes back to the select tool (its
+   * content is then typed in the properties panel).
+   */
+  placeText: (position: GridPoint) => void;
+  /** Changes the content of a free text (one undo step per field edit, like the other fields). */
+  setTextContent: (id: string, content: string) => void;
+  /** Moves the name or the value of a component: `centre` is where the text is drawn. */
+  moveCaption: (id: string, kind: CaptionKind, centre: GridPoint) => void;
+  /** Puts the texts of the selected components back to their automatic place. */
+  resetCaptions: () => void;
   /** Presses on a pin with the select tool: starts a wire there. */
   startWireFrom: (position: GridPoint) => void;
   /**
@@ -117,36 +201,48 @@ interface EditorState {
   removeLastBend: () => void;
   /** Drops the wire being drawn. */
   cancelDraft: () => void;
-  /** Rotates the selection, or the component about to be placed. */
+  /** Rotates the selection, or the component or the copy about to be placed. */
   rotate: () => void;
-  /** Mirrors the selection, or the component about to be placed. */
+  /** Mirrors the selection, or the component or the copy about to be placed. */
   mirror: () => void;
   deleteSelection: () => void;
   select: (ids: string[]) => void;
+  /**
+   * Releases the selection rectangle `r`. "inside" selects what lies entirely in it, and the
+   * sections of wires (segments) whose two ends do; "touching" (Shift) adds what touches it and
+   * removes what touches it and was already selected (#93).
+   */
+  selectInRect: (r: GridRect, mode: "inside" | "touching") => void;
   /** Selects one bend or segment of a wire (clears the other selection). */
   selectWirePart: (part: WirePart | null) => void;
   /**
-   * Moves the selected wire part through `target` (see `moveWirePart`) and keeps it selected
-   * where it lands (`landing`, a point on the part after the move).
+   * Moves the selected wire part through `target`, a segment sliding by as much as `target` is
+   * from `grab` (see `moveWirePart`), and keeps it selected where it lands (`landing`).
    */
-  moveWirePart: (target: GridPoint, landing: WirePart | null) => void;
+  moveWirePart: (target: GridPoint, landing: WirePart | null, grab?: GridPoint) => void;
   toggleSelected: (id: string) => void;
   /**
    * Escape: removes the last bend of the wire being drawn (see `removeLastBend`), else leaves the
    * current tool, else clears the selection.
    */
   cancel: () => void;
-  /** Ctrl+A: selects every component, wire and junction. */
+  /** Ctrl+A: selects every component, wire, junction and text. */
   selectAll: () => void;
   /** Ctrl+C: copies the selection (and the wires between selected items) to the clipboard. */
   copy: () => void;
-  /**
-   * Ctrl+V: pastes the clipboard a few grid units further, and selects the pasted items. Pasting
-   * again goes further again.
-   */
+  /** Ctrl+V: the clipboard follows the mouse (tool "paste") until `pasteAt`. */
   paste: () => void;
-  /** Ctrl+D: copies and pastes the selection in one go (the clipboard is left as it is). */
+  /**
+   * Ctrl+D: a copy of the selection follows the mouse (tool "paste") until `pasteAt`. The
+   * clipboard is left as it is.
+   */
   duplicate: () => void;
+  /**
+   * Click with the "paste" tool: drops the copy centred on `position` (or on the nearest place
+   * where it covers no component), selects it and goes back to the select tool. Escape or a
+   * right click (`cancel`) drops nothing.
+   */
+  pasteAt: (position: GridPoint) => void;
   /** Ctrl+Z: goes back to the document before the last change. */
   undo: () => void;
   /** Ctrl+Y / Ctrl+Shift+Z: re-applies the last undone change. */
@@ -157,7 +253,11 @@ interface EditorState {
    */
   sealHistory: () => void;
   /** Keeps the result of a simulation of the current document (null: forget it). */
-  setSimulation: (result: SimulationResult | null) => void;
+  setSimulation: (result: SimulationResult | null, nets?: Record<string, string[]>) => void;
+  setAnalysis: (patch: Partial<AnalysisSettings>) => void;
+  /** Records that a simulation started (`true`), or ended with this error (or none). */
+  setSimulating: (running: boolean, error?: string | null) => void;
+  setShowValues: (show: boolean) => void;
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
@@ -193,12 +293,23 @@ function freshDocument(doc: EditorDoc) {
     history: emptyHistory<EditorDoc>(),
     selection: [],
     wirePart: null,
+    segments: [],
     tool: { kind: "select" } as const,
     draft: null,
     // A result of another document would show as stale: forget it.
     simulation: null,
   };
 }
+
+/**
+ * The analysis kept for another document: its settings, but not the sources chosen for `.ac` and
+ * `.dc`, whose ids may name another source there (the first one is taken instead).
+ */
+const forgetSources = (s: Pick<EditorState, "analysis">): AnalysisSettings => ({
+  ...s.analysis,
+  acSource: "",
+  dcSource: "",
+});
 
 /** True if the document has changes that were not saved. */
 export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
@@ -208,18 +319,33 @@ export const isUnsaved = (s: Pick<EditorState, "doc" | "savedDoc">): boolean =>
  * State update for a document change, recorded in the history. `key` merges consecutive edits of
  * the same field into one undo step. No change, no step.
  */
-function change(s: EditorState, doc: EditorDoc, key: string | null = null) {
+function change(s: EditorState, edited: EditorDoc, key: string | null = null) {
+  const doc = tidy(edited);
   if (doc === s.doc) return {};
-  return { doc, history: record(s.history, s.doc, key) };
+  // The wire sections are kept by index: once the wires change, they may point elsewhere.
+  return { doc, history: record(s.history, s.doc, key), segments: [], notice: null };
 }
+
+/**
+ * After turning or mirroring components: their texts moved by hand turn with them, unless they
+ * would then cover something (they go back to their automatic place).
+ */
+function turned(doc: EditorDoc, selection: string[]): EditorDoc {
+  return releaseCoveredCaptions(doc, new Set(selection));
+}
+
+/**
+ * The document after any edit: what touches on the schematic is connected for the simulation
+ * (#256), and the duplicate wires an edit may leave under others are removed (#259).
+ */
+const tidy = (doc: EditorDoc): EditorDoc => removeHiddenWires(normalizeContacts(doc));
+
+/** Why a wire is not added (see `closesWireLoop`), shown in the status bar (#257). */
+export const WIRE_LOOP_NOTICE = "Fil non ajouté : ces deux points sont déjà reliés par des fils.";
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
 function existing(doc: EditorDoc, selection: string[]): string[] {
-  const ids = new Set([
-    ...doc.components.map((c) => c.id),
-    ...doc.wires.map((w) => w.id),
-    ...doc.junctions.map((j) => j.id),
-  ]);
+  const ids = new Set(docIds(doc));
   return selection.filter((id) => ids.has(id));
 }
 
@@ -227,14 +353,20 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   ...freshDocument(emptyDoc()),
   clipboard: null,
   animation: { on: false, electrons: false, playing: true, speed: 1 },
+  analysis: DEFAULT_ANALYSIS,
+  simulating: false,
+  simulationError: null,
+  notice: null,
+  showValues: true,
 
-  setTool: (tool) => set({ tool, draft: null, wirePart: null }),
+  setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [], notice: null }),
 
   startPlacing: (type) =>
     set({
       tool: { kind: "place", type, rotation: 0, mirror: false },
       selection: [],
       wirePart: null,
+      segments: [],
       draft: null,
     }),
 
@@ -242,17 +374,20 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => {
       if (s.tool.kind !== "place") return {};
       const { type, rotation, mirror } = s.tool;
-      const { doc } = addComponent(s.doc, { type, position, rotation, mirror });
-      return change(s, doc);
+      const added = addComponent(s.doc, { type, position, rotation, mirror });
+      const ids = new Set([added.id]);
+      return change(s, connectPinsOnWires(nudgeFree(added.doc, ids, PASTE_OFFSET), { comps: ids }));
     }),
 
   dropComponent: (type, position) =>
     set((s) => {
       const added = addComponent(s.doc, { type, position, rotation: 0, mirror: false });
+      const ids = new Set([added.id]);
       return {
-        ...change(s, added.doc),
+        ...change(s, connectPinsOnWires(nudgeFree(added.doc, ids, PASTE_OFFSET), { comps: ids })),
         selection: [added.id],
         wirePart: null,
+        segments: [],
         tool: { kind: "select" },
         draft: null,
       };
@@ -265,9 +400,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return change(s, moveComponent(s.doc, id, position));
     }),
 
-  moveSelection: (delta, merge = false) =>
+  moveSelection: (delta, { merge = false, detach = false } = {}) =>
     set((s) => {
-      const doc = moveItems(s.doc, new Set(s.selection), delta);
+      const ids = new Set(s.selection);
+      let doc = freeMove(s.doc, ids, delta, { detach });
+      // Arrow keys step through the wires: connecting each one passed over would be a trap.
+      if (doc !== s.doc && !merge) {
+        doc = connectPinsOnWires(connectPinsOnWires(doc, { comps: ids }), { wires: ids });
+      }
       return change(s, doc, merge ? `move:${s.selection.join(",")}` : null);
     }),
 
@@ -278,13 +418,36 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setParam: (id, param, value) =>
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
 
-  startWiring: () => set({ tool: { kind: "wire" }, selection: [], wirePart: null, draft: null }),
+  startWiring: () =>
+    set({ tool: { kind: "wire" }, selection: [], wirePart: null, segments: [], draft: null }),
+
+  startText: () => set({ tool: { kind: "text" }, selection: [], wirePart: null, draft: null }),
+
+  placeText: (position) =>
+    set((s) => {
+      if (s.tool.kind !== "text") return {};
+      const added = addText(s.doc, position, NEW_TEXT);
+      return {
+        ...change(s, added.doc),
+        selection: [added.id],
+        wirePart: null,
+        tool: { kind: "select" },
+      };
+    }),
+
+  setTextContent: (id, content) =>
+    set((s) => change(s, setTextContent(s.doc, id, content), `text:${id}`)),
+
+  moveCaption: (id, kind, centre) => set((s) => change(s, moveCaption(s.doc, id, kind, centre))),
+
+  resetCaptions: () => set((s) => change(s, resetCaptions(s.doc, new Set(s.selection)))),
 
   startWireFrom: (position) =>
     set({
       tool: { kind: "wire" },
       selection: [],
       wirePart: null,
+      segments: [],
       draft: { points: [{ ...position }], returnToSelect: true },
     }),
 
@@ -292,7 +455,9 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) => {
       if (s.tool.kind !== "wire") return {};
       const draft = s.draft;
-      if (!draft) return { draft: { points: [{ ...position }], returnToSelect: false } };
+      if (!draft) {
+        return { draft: { points: [{ ...position }], returnToSelect: false }, notice: null };
+      }
 
       const last = draft.points[draft.points.length - 1] ?? position;
       const doubleClick = samePoint(last, position);
@@ -300,9 +465,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (!doubleClick && !anchorAt(s.doc, position)) return { draft: { ...draft, points } };
 
       const added = addWire(s.doc, routeThrough(s.doc, points));
+      const doc = added && connectPinsOnWires(added.doc, { wires: new Set([added.id]) });
+      // A wire only closing a loop of wires connects nothing new: refuse it, and say why (#257).
+      const loop =
+        added !== null && doc !== null && closesWireLoop(normalizeContacts(doc), added.id);
       return {
-        ...(added ? change(s, added.doc) : {}),
+        ...(doc && !loop ? change(s, doc) : {}),
         draft: null,
+        notice: loop ? WIRE_LOOP_NOTICE : null,
         ...(draft.returnToSelect ? { tool: { kind: "select" } as const } : {}),
       };
     }),
@@ -325,65 +495,111 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
-        : s.selection.length > 0
-          ? change(s, rotateComponents(s.doc, new Set(s.selection)))
-          : {},
+        : s.tool.kind === "paste"
+          ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "rotate") } }
+          : s.selection.length > 0
+            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection)), s.selection))
+            : {},
     ),
 
   mirror: () =>
     set((s) =>
       s.tool.kind === "place"
         ? { tool: { ...s.tool, mirror: !s.tool.mirror } }
-        : s.selection.length > 0
-          ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
-          : {},
+        : s.tool.kind === "paste"
+          ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "mirror") } }
+          : s.selection.length > 0
+            ? change(s, turned(mirrorComponents(s.doc, new Set(s.selection)), s.selection))
+            : {},
     ),
 
   deleteSelection: () =>
     set((s) => {
       const part = s.wirePart;
-      // A bend goes only if the wire stays orthogonal; a segment cuts its wire in two.
+      // A segment cuts its wire in two. A bend is there to be moved: deleting it deletes its
+      // whole wire, rather than redrawing part of it (#158).
       if (part) {
-        const doc = part.kind === "bend" ? deleteBend(s.doc, part) : deleteSegment(s.doc, part);
-        return doc === s.doc ? {} : { ...change(s, doc), wirePart: null };
+        const doc =
+          part.kind === "bend"
+            ? deleteItems(s.doc, new Set([part.wire]))
+            : deleteSegment(s.doc, part);
+        return doc === s.doc ? {} : { ...change(s, doc), wirePart: null, segments: [] };
       }
-      return s.selection.length > 0
-        ? { ...change(s, deleteItems(s.doc, new Set(s.selection))), selection: [] }
-        : {};
+      if (s.selection.length === 0 && s.segments.length === 0) return {};
+      // Sections first: deleting items may merge wires around a junction (see `cleanJunctions`).
+      const ids = new Set(s.selection);
+      const cut = deleteSegments(
+        s.doc,
+        s.segments.filter((seg) => !ids.has(seg.wire)),
+      );
+      return { ...change(s, deleteItems(cut, ids)), selection: [], segments: [] };
     }),
 
   // Changing the selection ends a field edit: editing the same field again later is a new step.
-  select: (ids) => set((s) => ({ selection: ids, wirePart: null, history: seal(s.history) })),
+  select: (ids) =>
+    set((s) => ({ selection: ids, wirePart: null, segments: [], history: seal(s.history) })),
 
   sealHistory: () => set((s) => ({ history: seal(s.history) })),
 
-  setSimulation: (result) =>
+  setSimulation: (result, nets = {}) =>
     set((s) => ({
-      simulation: result ? { result, doc: s.doc } : null,
+      simulation: result ? { result, doc: s.doc, nets } : null,
       animation: { ...s.animation, on: false },
     })),
 
   setAnimation: (patch) => set((s) => ({ animation: { ...s.animation, ...patch } })),
 
-  newDocument: () => set(freshDocument(emptyDoc())),
+  setAnalysis: (patch) => set((s) => ({ analysis: { ...s.analysis, ...patch } })),
 
-  openDocument: (doc) => set(freshDocument(doc)),
+  setSimulating: (running, error = null) =>
+    set({ simulating: running, simulationError: running ? null : error }),
+
+  setShowValues: (show) => set({ showValues: show }),
+
+  newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
+
+  // An older file may have pins touching without a wire: connect them, without marking it changed.
+  openDocument: (doc) => set((s) => ({ ...freshDocument(tidy(doc)), analysis: forgetSources(s) })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 
-  selectWirePart: (part) =>
-    set((s) => ({ selection: [], wirePart: part, history: seal(s.history) })),
+  selectInRect: (r, mode) =>
+    set((s) => {
+      if (mode === "inside") {
+        return {
+          selection: itemsInRect(s.doc, r),
+          segments: segmentsInRect(s.doc, r),
+          wirePart: null,
+          history: seal(s.history),
+        };
+      }
+      const touched = itemsTouchingRect(s.doc, r);
+      const kept = s.selection.filter((id) => !touched.includes(id));
+      const added = touched.filter((id) => !s.selection.includes(id));
+      return { selection: [...kept, ...added], wirePart: null, history: seal(s.history) };
+    }),
 
-  moveWirePart: (target, landing) =>
+  selectWirePart: (part) =>
+    set((s) => ({ selection: [], segments: [], wirePart: part, history: seal(s.history) })),
+
+  moveWirePart: (target, landing, grab) =>
     set((s) => {
       if (!s.wirePart) return {};
-      return { ...change(s, moveWirePart(s.doc, s.wirePart, target)), wirePart: landing };
+      const moved = moveWirePart(s.doc, s.wirePart, target, grab);
+      const doc =
+        moved === s.doc ? moved : connectPinsOnWires(moved, { wires: new Set([s.wirePart.wire]) });
+      // A cut changes the parts of the wire: the landing part may not exist any more.
+      return {
+        ...change(s, doc),
+        wirePart: doc.wires.length === moved.wires.length ? landing : null,
+      };
     }),
 
   toggleSelected: (id) =>
     set((s) => ({
       history: seal(s.history),
       wirePart: null,
+      segments: [],
       selection: s.selection.includes(id)
         ? s.selection.filter((x) => x !== id)
         : [...s.selection, id],
@@ -393,17 +609,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const s = get();
     if (s.draft) s.removeLastBend();
     else if (s.tool.kind !== "select") set({ tool: { kind: "select" } });
-    else set({ selection: [], wirePart: null });
+    else set({ selection: [], wirePart: null, segments: [] });
   },
 
   selectAll: () =>
     set((s) => ({
-      selection: [
-        ...s.doc.components.map((c) => c.id),
-        ...s.doc.wires.map((w) => w.id),
-        ...s.doc.junctions.map((j) => j.id),
-      ],
+      selection: docIds(s.doc),
       wirePart: null,
+      segments: [],
       tool: { kind: "select" },
       draft: null,
       history: seal(s.history),
@@ -415,27 +628,57 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     ),
 
   paste: () =>
-    set((s) => {
-      if (!s.clipboard || s.clipboard.components.length + s.clipboard.wires.length === 0) return {};
-      const pasted = pasteClip(s.doc, s.clipboard, PASTE_OFFSET);
-      return {
-        ...change(s, pasted.doc),
-        selection: pasted.ids,
-        wirePart: null,
-        tool: { kind: "select" },
-        draft: null,
-        // The next paste lands next to this one, not on top of it.
-        clipboard: copyItems(pasted.doc, new Set(pasted.ids)),
-      };
-    }),
+    set((s) =>
+      hasItems(s.clipboard)
+        ? {
+            tool: { kind: "paste", clip: s.clipboard },
+            selection: [],
+            wirePart: null,
+            segments: [],
+            draft: null,
+          }
+        : {},
+    ),
 
   duplicate: () =>
     set((s) => {
       if (s.selection.length === 0) return {};
       const clip = copyItems(s.doc, new Set(s.selection));
-      if (clip.components.length + clip.wires.length === 0) return {};
-      const pasted = pasteClip(s.doc, clip, PASTE_OFFSET);
-      return { ...change(s, pasted.doc), selection: pasted.ids, wirePart: null };
+      return hasItems(clip)
+        ? {
+            tool: { kind: "paste", clip },
+            selection: [],
+            wirePart: null,
+            segments: [],
+            draft: null,
+          }
+        : {};
+    }),
+
+  pasteAt: (position) =>
+    set((s) => {
+      if (s.tool.kind !== "paste") return {};
+      const anchor = clipAnchor(s.tool.clip);
+      const offset = { x: position.x - anchor.x, y: position.y - anchor.y };
+      const pasted = pasteClip(s.doc, s.tool.clip, offset);
+      // Every overlap is new: the pasted items were not there before. Nothing outside is wired
+      // to them yet, and pins they touch where they were dropped must not get wired either.
+      const ids = new Set(pasted.ids);
+      const placed = freeMove(
+        pasted.doc,
+        ids,
+        { x: 0, y: 0 },
+        { allowed: new Set(), detach: true },
+      );
+      const doc = connectPinsOnWires(connectPinsOnWires(placed, { comps: ids }), { wires: ids });
+      return {
+        ...change(s, doc),
+        selection: pasted.ids,
+        wirePart: null,
+        segments: [],
+        tool: { kind: "select" },
+        draft: null,
+      };
     }),
 
   undo: () =>
@@ -447,6 +690,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         history: step.history,
         selection: existing(step.state, s.selection),
         wirePart: null,
+        segments: [],
         draft: null,
       };
     }),
@@ -460,6 +704,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         history: step.history,
         selection: existing(step.state, s.selection),
         wirePart: null,
+        segments: [],
         draft: null,
       };
     }),

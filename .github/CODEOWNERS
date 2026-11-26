@@ -1,0 +1,31 @@
+# Module owners, from the "Qui possède quoi" table in AGENTS.md: GitHub requests their
+# review automatically on every pull request that touches their files.
+# Keep this file and that table in step. The last matching line wins.
+
+# Frontend
+/frontend/src/editor/        @Guenin04
+/frontend/src/store/         @Guenin04
+/frontend/src/plot/          @VOELINNOEMI
+
+# Backend: library, netlist, importers, API and the API contract
+/backend/app/models/         @Bignensdamien
+/backend/app/netlist/        @Bignensdamien
+/backend/app/importers/      @Bignensdamien
+/backend/app/api/            @Bignensdamien
+
+# Simulation engine and packaging
+/backend/app/engines/        @AntoineBezencon
+/backend/vendor/ngspice/     @AntoineBezencon
+/build.ps1                   @AntoineBezencon
+
+# Website, CI and repository settings
+/website/                    @Guenin04
+/.github/                    @Guenin04
+
+# Root configuration and AI agent settings
+/.claude/                    @Guenin04
+/.gemini/                    @Guenin04
+/.editorconfig               @Guenin04
+/.gitattributes              @Guenin04
+/.gitignore                  @Guenin04
+/.pre-commit-config.yaml     @Guenin04

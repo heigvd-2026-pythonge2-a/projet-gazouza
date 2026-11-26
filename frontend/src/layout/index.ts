@@ -5,3 +5,4 @@ export { useElementSize } from "./useElementSize";
 export { MaximizeButton } from "./MaximizeButton";
 export { PanelErrorBoundary } from "./PanelErrorBoundary";
 export { loadLayout, parseLayout, saveLayout } from "./storage";
+export { PanelHandle, HANDLE_SIZE } from "./PanelHandle";

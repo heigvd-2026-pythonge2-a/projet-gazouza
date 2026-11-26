@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
-import { UI } from "./theme";
+import { COLORS, UI } from "./theme";
 
 export interface MenuItem {
   label: string;
@@ -123,10 +123,10 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         zIndex: 10,
         minWidth: 180,
         padding: 4,
-        background: "#ffffff",
+        background: UI.surface,
         border: `1px solid ${UI.border}`,
         borderRadius: 6,
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.12)",
+        boxShadow: `0 4px 12px ${UI.shadow}`,
         fontSize: 13,
         outline: "none",
       }}
@@ -172,7 +172,7 @@ function MenuButton(props: {
         border: 0,
         borderRadius: 4,
         background: active ? UI.activeBackground : "transparent",
-        color: item.disabled ? "#9ca3af" : "#1f2937",
+        color: item.disabled ? UI.faint : COLORS.symbol,
         font: "inherit",
         textAlign: "left",
         cursor: item.disabled ? "default" : "pointer",
