@@ -50,6 +50,9 @@ afficher cette liste à tout moment.
 | Geste | Action |
 |---|---|
 | <kbd>1</kbd> à <kbd>9</kbd> | Choisir l'un des neuf premiers outils de la palette |
+| <kbd>Ctrl+F</kbd> | Rechercher un composant dans la palette |
+| <kbd>Entrée</kbd> (recherche) | Choisir le premier composant trouvé |
+| <kbd>Échap</kbd> (recherche) | Effacer la recherche |
 | Clic (outil composant) | Poser le composant |
 | <kbd>Échap</kbd> ou clic droit | Arrêter de poser |
 

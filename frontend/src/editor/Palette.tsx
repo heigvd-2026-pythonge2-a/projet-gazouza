@@ -1,7 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { useEditorStore } from "../store";
-import { paletteLayout, shortcutKey } from "./paletteLayout";
+import { WIRE_LABEL, paletteLayout, searchPalette, type PaletteEntry } from "./paletteLayout";
 import { SymbolIcon } from "./SymbolIcon";
 import { COLORS, UI } from "./theme";
 
@@ -87,17 +87,51 @@ const groupTitleStyle: CSSProperties = {
   color: UI.muted,
 };
 
+const searchStyle: CSSProperties = {
+  boxSizing: "border-box",
+  width: "100%",
+  padding: "5px 8px",
+  border: `1px solid ${UI.inputBorder}`,
+  borderRadius: 5,
+  background: UI.surface,
+  color: "inherit",
+  font: "inherit",
+};
+
+/** True for Ctrl+F (Cmd+F on a Mac), the shortcut of the search field. */
+const isSearchShortcut = (e: KeyboardEvent) =>
+  (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f";
+
 /**
  * Component palette, grouped by category (`category` in the library): one tile per library
  * type, to drag onto the schematic or click. The wire tool closes the "Connexions" group. Keys 1
- * to 9 pick the tiles in order (see `paletteLayout`).
+ * to 9 pick the tiles in order (see `paletteLayout`). The search field above (Ctrl+F) narrows it
+ * to the components whose name matches (#276); Enter picks the first one.
  */
 export function Palette() {
   const tool = useEditorStore((s) => s.tool);
   const startPlacing = useEditorStore((s) => s.startPlacing);
   const startWiring = useEditorStore((s) => s.startWiring);
-  /** Position of each tile in the whole palette, for its digit key. */
-  let position = 0;
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const groups = searchPalette(paletteLayout(), query);
+
+  const pick = (entry: PaletteEntry) => {
+    if (entry.kind === "wire") startWiring();
+    else startPlacing(entry.def.type);
+  };
+
+  // Ctrl+F goes to the search field from anywhere, instead of the browser's find bar.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isSearchShortcut(e)) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <aside
@@ -111,16 +145,46 @@ export function Palette() {
       }}
     >
       <h3 style={UI.heading}>Composants</h3>
-      {paletteLayout().map((group) => (
+      <input
+        ref={searchRef}
+        type="search"
+        value={query}
+        placeholder="Rechercher (Ctrl+F)"
+        aria-label="Rechercher un composant"
+        aria-keyshortcuts="Control+F"
+        title="Filtrer les composants par nom. Entrée : choisir le premier, Échap : effacer"
+        spellCheck={false}
+        style={searchStyle}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const first = groups[0]?.entries[0];
+            if (!first) return;
+            e.preventDefault();
+            pick(first.entry);
+            // Back to the schematic: R, M, Escape... act on the tool again.
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            if (query) setQuery("");
+            else e.currentTarget.blur();
+          }
+        }}
+      />
+      {groups.length === 0 && (
+        <p role="status" style={{ fontSize: 12, color: UI.muted, marginTop: 8 }}>
+          Aucun composant
+        </p>
+      )}
+      {groups.map((group) => (
         <section key={group.id} aria-label={group.label}>
           <h4 style={groupTitleStyle}>{group.label}</h4>
           <div style={gridStyle}>
-            {group.entries.map((entry) => {
-              const shortcut = shortcutKey(position++);
-              return entry.kind === "wire" ? (
+            {group.entries.map(({ entry, shortcut }) =>
+              entry.kind === "wire" ? (
                 <Tile
                   key="wire"
-                  label="Fil"
+                  label={WIRE_LABEL}
                   active={tool.kind === "wire"}
                   onClick={startWiring}
                   shortcut={shortcut}
@@ -138,8 +202,8 @@ export function Palette() {
                 >
                   <SymbolIcon def={entry.def} />
                 </Tile>
-              );
-            })}
+              ),
+            )}
           </div>
         </section>
       ))}
