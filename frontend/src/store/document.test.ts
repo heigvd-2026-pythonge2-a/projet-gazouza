@@ -17,11 +17,13 @@ import {
   pinPosition,
   simplifyPath,
   toWorld,
+  turnClip,
   unconnectedPins,
   wirePath,
   type EditorDoc,
   type GridPoint,
 } from "./document";
+import { getDef } from "./library";
 import { fixtureDoc } from "./testFixtures";
 
 /** A resistor at `position` (pins 2 grid units above and below when not rotated). */
@@ -268,6 +270,47 @@ describe("copy and paste", () => {
     const clip = copyItems(doc, new Set(["c3"]));
     expect(clip.components).toHaveLength(1);
     expect(clip.wires).toEqual([]);
+  });
+
+  it("turns a copy as a whole, pins and wires together (#260)", () => {
+    const centre = { x: 3, y: -1 };
+    const turns = {
+      rotate: (p: GridPoint) => ({ x: centre.x - (p.y - centre.y), y: centre.y + p.x - centre.x }),
+      mirror: (p: GridPoint) => ({ x: 2 * centre.x - p.x, y: p.y }),
+    };
+    const pins = (doc: EditorDoc) =>
+      doc.components.map((c) => getDef(c.type).pins.map((pin) => pinPosition(c, pin.name)));
+    let clip: EditorDoc = fixtureDoc("divider_op");
+    // Turns mixed so that mirrored and rotated components are turned again.
+    for (const turn of ["rotate", "mirror", "rotate", "rotate", "mirror", "rotate"] as const) {
+      const move = turns[turn];
+      const turned = turnClip(clip, centre, turn);
+      expect(pins(turned)).toEqual(pins(clip).map((ps) => ps.map(move)));
+      expect(turned.wires.map((w) => wirePath(turned, w))).toEqual(
+        clip.wires.map((w) => wirePath(clip, w).map(move)),
+      );
+      expect(turned.junctions.map((j) => j.position)).toEqual(
+        clip.junctions.map((j) => move(j.position)),
+      );
+      clip = turned;
+    }
+    // Four quarter turns and two flips: back where it started.
+    expect(clip).toEqual(fixtureDoc("divider_op"));
+  });
+
+  it("keeps the texts of a turned copy upright, their middle turned with the rest", () => {
+    // Box of 2 x 0.9 grid units: its middle, rounded to the grid, is (1, 0).
+    const text = { id: "t1", position: { x: 0, y: 0 }, content: "abcde" };
+    const clip = { ...emptyDoc(), texts: [text] };
+    const centre = { x: 4, y: 0 };
+    // Middle turned around (4, 0) to (4, -3): the box starts at (3, -3).
+    expect(turnClip(clip, centre, "rotate").texts).toEqual([
+      { id: "t1", position: { x: 3, y: -3 }, content: "abcde" },
+    ]);
+    // Middle flipped to (7, 0): the box starts at (6, 0) and still reads left to right.
+    expect(turnClip(clip, centre, "mirror").texts).toEqual([
+      { id: "t1", position: { x: 6, y: 0 }, content: "abcde" },
+    ]);
   });
 });
 

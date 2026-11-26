@@ -8,6 +8,7 @@ import {
   getDef,
   layoutCaptions,
   symbolBounds,
+  symbolOf,
   type Caption,
   type CaptionKind,
   type GridPoint,
@@ -232,7 +233,7 @@ export function ComponentSymbol({
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
-        {def.symbol.map((shape, i) => (
+        {symbolOf(def, c.params).map((shape, i) => (
           <SymbolShapeNode key={i} shape={shape} color={color} />
         ))}
         {def.pins

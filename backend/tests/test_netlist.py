@@ -114,6 +114,26 @@ def test_labels_with_the_same_name_are_one_node() -> None:
     assert result.nets["mid"] == ["w2", "w3"]
 
 
+def test_label_direction_only_changes_the_drawing() -> None:
+    # Absent (a file saved before the parameter existed) or set: the same netlist, no error.
+    wires = [*LOOP, wire("w4", "c1.+", "l1.1")]
+    netlists = set()
+    for direction in [None, "none", "input", "output", "bidir"]:
+        params = {"net": "out"} if direction is None else {"net": "out", "direction": direction}
+        result = generate_netlist(
+            schematic([SOURCE, RESISTOR, GROUND, comp("l1", "label", **params)], wires), OP
+        )
+        assert result.errors == []
+        netlists.add(result.netlist)
+    assert len(netlists) == 1
+
+
+def test_bad_label_direction() -> None:
+    label = comp("l1", "label", net="out", direction="up")
+    errors = check([SOURCE, RESISTOR, GROUND, label], [*LOOP, wire("w4", "c1.+", "l1.1")])
+    assert codes(errors) == ["BAD_VALUE"]
+
+
 def test_junction_joins_three_wires() -> None:
     r2 = comp("c3", "resistor", "R2", resistance="1k")
     wires = [

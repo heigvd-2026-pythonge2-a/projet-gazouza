@@ -170,7 +170,8 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           />
         )}
         {params.map((p) => {
-          const value = c.params[p.name] ?? "";
+          // A choice missing from an older file (a label's direction) shows its default.
+          const value = c.params[p.name] ?? (p.kind === "choice" ? p.default : "");
           return (
             <Field
               key={p.name}

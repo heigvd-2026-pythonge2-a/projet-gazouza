@@ -54,7 +54,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Suppr", action: "Supprimer" },
       { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },
-      { keys: "Clic (après coller ou dupliquer)", action: "Poser la copie qui suit la souris" },
+      {
+        keys: "Clic (après coller ou dupliquer)",
+        action: "Poser la copie qui suit la souris (R / M avant : la tourner / la retourner)",
+      },
       { keys: "Ctrl+Z / Ctrl+Y", action: "Annuler / rétablir" },
       { keys: "Double-clic sur un composant", action: "Changer sa valeur sur le schéma" },
       { keys: "Clic droit sur un composant", action: "Menu des actions" },
@@ -75,7 +78,10 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Clic (outil fil)", action: "Coude, ou fin du fil sur une broche ou un fil" },
       { keys: "Double-clic (outil fil)", action: "Finir le fil dans le vide" },
       { keys: "Échap (outil fil)", action: "Enlever le dernier coude" },
-      { keys: "Clic sur un fil", action: "Sélectionner un coude ou un tronçon, à glisser" },
+      {
+        keys: "Clic sur un fil",
+        action: "Sélectionner un coude ou un tronçon, à glisser (dans tous les sens)",
+      },
       { keys: "Double-clic sur un fil", action: "Sélectionner le fil entier" },
       {
         keys: "Suppr (coude / tronçon)",

@@ -40,7 +40,7 @@ afficher cette liste à tout moment.
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
-| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris |
+| Clic (après coller ou dupliquer) | Poser la copie qui suit la souris (<kbd>R</kbd> / <kbd>M</kbd> avant : la tourner / la retourner) |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Double-clic sur un composant | Changer sa valeur sur le schéma |
 | Clic droit sur un composant | Menu des actions |
@@ -61,7 +61,7 @@ afficher cette liste à tout moment.
 | Clic (outil fil) | Coude, ou fin du fil sur une broche ou un fil |
 | Double-clic (outil fil) | Finir le fil dans le vide |
 | <kbd>Échap</kbd> (outil fil) | Enlever le dernier coude |
-| Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser |
+| Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser (dans tous les sens) |
 | Double-clic sur un fil | Sélectionner le fil entier |
 
 ## Texte libre

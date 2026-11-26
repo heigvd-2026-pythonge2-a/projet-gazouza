@@ -221,6 +221,11 @@ Le script :
 Résultat : `dist/Psice/Psice.exe`, à distribuer sous forme de dossier zippé.
 Aucune installation n'est nécessaire sur la machine cible.
 
+Le workflow [`release.yml`](.github/workflows/release.yml) fait le même build sur GitHub : lancé à
+la main pour tester, ou sur un tag `vX.Y.Z` pour publier `Psice.zip` dans une
+[release](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases) (règles dans
+[AGENTS.md](AGENTS.md#conventions)).
+
 > Au premier lancement, Windows SmartScreen peut afficher un avertissement car l'exécutable
 > n'est pas signé : cliquer sur « Informations complémentaires » puis « Exécuter quand même ».
 
@@ -265,7 +270,9 @@ ferme depuis la PR plutôt que d'en créer une nouvelle.
 ### Issues et labels
 
 Les tâches sont suivies dans GitHub Issues. Chaque issue (et chaque PR) porte en principe un
-label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`.
+label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`. Elle est
+aussi assignée dès sa création à qui fera le travail, par défaut le propriétaire du module
+concerné (voir [AGENTS.md](AGENTS.md)).
 
 | Famille | Labels | Usage |
 |---|---|---|

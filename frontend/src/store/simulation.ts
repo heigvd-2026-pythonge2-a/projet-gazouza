@@ -2,12 +2,15 @@
 // it shows of the answer on the schematic. Texts in French.
 
 import type { Schematic, SimulationRequest, SimulationResult } from "../api/client";
-import { partPath, type EditorDoc, type GridPoint } from "./document";
+import { normalizeContacts, partPath, type EditorDoc, type GridPoint } from "./document";
 import { getDef } from "./library";
 
-/** The editor document in the contract format (`Schematic`, docs/format-schema.md). */
+/**
+ * The editor document in the contract format (`Schematic`, docs/format-schema.md), with what
+ * touches connected (`normalizeContacts`): the backend only follows the wires.
+ */
 export function toSchematic(doc: EditorDoc): Schematic {
-  const copy = structuredClone(doc);
+  const copy = structuredClone(normalizeContacts(doc));
   return {
     version: 2,
     components: copy.components,

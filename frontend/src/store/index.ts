@@ -2,6 +2,7 @@
 
 export * from "./captions";
 export * from "./currents";
+export * from "./diagnostics";
 export * from "./document";
 export * from "./editorStore";
 export * from "./fileFormat";

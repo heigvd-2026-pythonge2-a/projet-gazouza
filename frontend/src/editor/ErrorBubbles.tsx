@@ -1,6 +1,12 @@
 import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from "react";
 
-import { componentBox, componentProblems, type ComponentProblem, type EditorDoc } from "../store";
+import {
+  componentBox,
+  componentProblems,
+  type DiagnosticMark,
+  type EditorDoc,
+  type ValueProblem,
+} from "../store";
 import type { Viewport } from "./Grid";
 import { GRID, UI } from "./theme";
 
@@ -36,13 +42,16 @@ const arrowStyle: CSSProperties = {
 function Bubble({
   problem,
   label,
+  title,
   x,
   y,
   container,
   onPick,
 }: {
-  problem: ComponentProblem;
+  problem: ValueProblem;
   label: string;
+  /** What clicking it does. */
+  title: string;
   x: number;
   y: number;
   container: RefObject<HTMLDivElement | null>;
@@ -85,7 +94,7 @@ function Bubble({
         ref={ref}
         type="button"
         onClick={onPick}
-        title="Corriger dans le panneau Propriétés"
+        title={title}
         aria-label={`${label} : ${problem.message}`}
         data-level={problem.level}
         style={{
@@ -117,22 +126,31 @@ function Bubble({
 
 /**
  * Bubbles pointing at the components whose name or values are wrong (#196), with the same message
- * as the properties panel. They are HTML over the canvas: same size at every zoom, above every
- * drawn item, and left out of the PNG export of the stage. Clicking one calls `onPick` with the
- * component and the field to correct (null for the name).
+ * as the properties panel, and at what the errors and warnings of the last simulation point at
+ * (`marks`, #253). They are HTML over the canvas: same size at every zoom, above every drawn item,
+ * and left out of the PNG export of the stage. Clicking a component's bubble calls `onPick` with
+ * the component and the field to correct (null for the name); a simulation's, `onPickMark`.
  */
 export function ErrorBubbles({
   doc,
   viewport,
   onPick,
+  marks = [],
+  onPickMark,
 }: {
   doc: EditorDoc;
   viewport: Viewport;
   onPick: (comp: string, param: string | null) => void;
+  marks?: DiagnosticMark[];
+  onPickMark?: (mark: DiagnosticMark) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const problems = componentProblems(doc);
-  if (problems.length === 0) return null;
+  if (problems.length === 0 && marks.length === 0) return null;
+  const at = (x: number, y: number) => ({
+    x: x * GRID * viewport.scale + viewport.x,
+    y: y * GRID * viewport.scale + viewport.y,
+  });
   return (
     <div
       ref={container}
@@ -147,13 +165,24 @@ export function ErrorBubbles({
             key={p.comp}
             problem={p}
             label={c.name ?? c.params.net ?? c.id}
-            x={((box.min.x + box.max.x) / 2) * GRID * viewport.scale + viewport.x}
-            y={(box.max.y + GAP) * GRID * viewport.scale + viewport.y}
+            title="Corriger dans le panneau Propriétés"
+            {...at((box.min.x + box.max.x) / 2, box.max.y + GAP)}
             container={container}
             onPick={() => onPick(p.comp, p.param)}
           />
         );
       })}
+      {marks.map((m) => (
+        <Bubble
+          key={m.key}
+          problem={m}
+          label={m.level === "error" ? "Erreur de simulation" : "Avertissement de simulation"}
+          title="Sélectionner les éléments concernés"
+          {...at(m.anchor.x, m.anchor.y)}
+          container={container}
+          onPick={() => onPickMark?.(m)}
+        />
+      ))}
     </div>
   );
 }

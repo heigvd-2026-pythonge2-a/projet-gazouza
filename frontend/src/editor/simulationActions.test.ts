@@ -52,6 +52,19 @@ describe("runSimulation (#100)", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
+  it("fetches the nodes when an error names one, to highlight its wires (#253)", async () => {
+    const failed = {
+      analysis: "tran",
+      traces: [],
+      errors: [{ code: "SINGULAR_MATRIX", message: "Flottant", targets: [{ net: "out" }] }],
+    };
+    const fetch = stubBackend(() => Response.json(failed));
+    editorState().openDocument(fixtureDoc("divider_op"));
+    await runSimulation();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(editorState().simulation?.nets).toEqual(netlist.nets);
+  });
+
   it("shows the errors in French, without calling the backend for invalid settings", async () => {
     const fetch = stubBackend(() => Response.json({ detail: "Erreur interne" }, { status: 500 }));
     await runSimulation();

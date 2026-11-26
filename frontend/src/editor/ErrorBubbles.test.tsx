@@ -43,4 +43,33 @@ describe("ErrorBubbles", () => {
     render(<ErrorBubbles doc={resistor("1M").doc} viewport={viewport} onPick={() => {}} />);
     expect(screen.getByRole("button", { name: /milli/ })).toHaveAttribute("data-level", "warning");
   });
+
+  it("points at what a simulation error names, and picks it on click (#253)", async () => {
+    const onPickMark = vi.fn();
+    const mark = {
+      key: "error:0",
+      level: "error" as const,
+      message: "Le nœud « out » est flottant.",
+      wires: ["w2"],
+      components: [],
+      junctions: [],
+      pins: [],
+      anchor: { x: 5, y: 1.4 },
+      bounds: { min: { x: 4, y: 1 }, max: { x: 6, y: 1 } },
+    };
+    render(
+      <ErrorBubbles
+        doc={resistor("1k").doc}
+        viewport={viewport}
+        onPick={() => {}}
+        marks={[mark]}
+        onPickMark={onPickMark}
+      />,
+    );
+    const bubble = screen.getByRole("button", { name: /^Erreur de simulation : Le nœud « out »/ });
+    expect(parseFloat(bubble.parentElement?.style.left ?? "")).toBeCloseTo(5 * GRID * 2 + 100);
+    expect(parseFloat(bubble.parentElement?.style.top ?? "")).toBeCloseTo(1.4 * GRID * 2 + 50);
+    await userEvent.click(bubble);
+    expect(onPickMark).toHaveBeenCalledWith(mark);
+  });
 });

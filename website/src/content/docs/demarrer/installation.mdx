@@ -3,7 +3,7 @@ title: Installation
 description: Obtenir l'application Windows de Psice et la lancer, sans rien installer.
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
 
 Psice est livré comme une **application Windows portable** : un dossier zippé qui contient tout ce
 qu'il faut, y compris le moteur de simulation ngspice. Il n'y a **rien à installer** et la
@@ -16,16 +16,11 @@ simulation fonctionne **hors ligne**.
 
 ## Obtenir l'application
 
-<Aside type="caution" title="Pas encore de version publiée">
-	La première version téléchargeable sera publiée sur la page
-	[Releases du dépôt GitHub](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases)
-	lors du jalon S11-12. En attendant, l'application se construit depuis les sources avec
-	`build.ps1` (voir [Environnement de développement](/projet-gazouza/developpeurs/environnement/#construire-lapplication-windows)).
-</Aside>
-
 <Steps>
 
-1. Télécharge l'archive `.zip` de Psice depuis la page Releases.
+1. Télécharge **[`Psice.zip`](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases/latest/download/Psice.zip)**,
+   la dernière version. Les versions précédentes et leurs nouveautés sont sur la page
+   [Releases du dépôt GitHub](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases).
 
 2. Fais un clic droit sur le fichier, puis **Extraire tout…**, et choisis un dossier (par exemple
    `Documents\Psice`).
@@ -43,6 +38,16 @@ L'exécutable n'est pas signé numériquement. Au premier lancement, Windows peu
 2. Clique sur **Exécuter quand même**.
 
 Windows s'en souvient ensuite pour ce fichier.
+
+## Psice ne démarre pas (version 0.1.0)
+
+La version 0.1.0 ne démarre pas quand le zip a été téléchargé avec un navigateur : un message
+d'erreur parle de `Python.Runtime`. Les versions suivantes corrigent ce problème. Avec la
+0.1.0, débloque le zip avant de l'extraire :
+
+1. Fais un clic droit sur `Psice.zip`, puis **Propriétés**.
+2. Coche **Débloquer** en bas de l'onglet **Général**, puis clique sur **OK**.
+3. Extrais le zip à nouveau.
 
 ## Désinstaller
 

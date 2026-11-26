@@ -389,10 +389,11 @@ export function EditorToolbar() {
   const canDelete = useEditorStore(
     (s) => s.selection.length > 0 || s.wirePart !== null || s.segments.length > 0,
   );
-  // Turning applies to the selected components, or to the one about to be placed.
+  // Turning applies to the selected components, or to what is about to be placed or pasted.
   const canTurn = useEditorStore(
     (s) =>
       s.tool.kind === "place" ||
+      s.tool.kind === "paste" ||
       s.selection.some((id) => s.doc.components.some((c) => c.id === id)),
   );
   const canPaste = useEditorStore((s) => s.clipboard !== null);

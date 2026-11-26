@@ -274,13 +274,21 @@ export function routeAround(
   return search(a, b, free, area) ?? plain;
 }
 
-/** True if the orthogonal `path` goes through an obstacle, its two ends excepted. */
-export function pathBlocked(doc: EditorDoc, path: readonly GridPoint[]): boolean {
+/**
+ * True if the orthogonal `path` goes through an obstacle, its two ends excepted, and the points of
+ * `through` ("x,y" keys) too.
+ */
+export function pathBlocked(
+  doc: EditorDoc,
+  path: readonly GridPoint[],
+  through?: ReadonlySet<string>,
+): boolean {
   const a = path[0];
   const b = path[path.length - 1];
   if (!a || !b) return false;
   const blocked = obstacles(doc);
-  const free = (p: GridPoint) => samePoint(p, a) || samePoint(p, b) || !blocked.has(key(p));
+  const free = (p: GridPoint) =>
+    samePoint(p, a) || samePoint(p, b) || through?.has(key(p)) === true || !blocked.has(key(p));
   return !isFree(a, path.slice(1), free);
 }
 

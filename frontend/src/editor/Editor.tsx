@@ -6,6 +6,8 @@ import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 import {
   animatable,
   clipAnchor,
+  connectPinsOnWires,
+  diagnosticMarks,
   docBounds,
   freshSimulation,
   getDef,
@@ -32,11 +34,13 @@ import {
   NEW_TEXT,
 } from "../store";
 import { AnimationControls } from "./AnimationControls";
+import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { DiagnosticHalos } from "./DiagnosticHalos";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
-import { fitViewport } from "./fitView";
+import { fitViewport, showViewport } from "./fitView";
 import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
@@ -250,8 +254,11 @@ export function SchematicCanvas() {
     delta: GridPoint;
     detach: boolean;
   } | null>(null);
-  /** Where the selected wire part is being dragged (grid point), before the store changes. */
-  const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
+  /**
+   * Where the selected wire part is being dragged (grid point) and where it was grabbed, before
+   * the store changes.
+   */
+  const [partTarget, setPartTarget] = useState<{ grab: GridPoint; target: GridPoint } | null>(null);
   /** Component whose main value is being edited in the menu over it (double-click). */
   const [editing, setEditing] = useState<string | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
@@ -283,6 +290,11 @@ export function SchematicCanvas() {
       showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
     [showValues, simulation, nets, storeDoc],
   );
+  // What the errors and warnings of the simulation point at (#253).
+  const marks = useMemo(
+    () => (simulation ? diagnosticMarks(storeDoc, simulation, nets ?? {}) : []),
+    [simulation, nets, storeDoc],
+  );
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
@@ -308,9 +320,23 @@ export function SchematicCanvas() {
   const doc = drag
     ? moveItems(storeDoc, drag.ids, drag.delta, { detach: drag.detach })
     : partTarget && wirePart
-      ? moveWirePart(storeDoc, wirePart, partTarget)
+      ? moveWirePart(storeDoc, wirePart, partTarget.target, partTarget.grab)
       : storeDoc;
-  const freePins = useMemo(() => (exporting ? [] : unconnectedPins(doc)), [doc, exporting]);
+  // While dragging, the free pins are those left once dropped: a pin landing on a wire is cut in
+  // as the drop would do, and what touches is connected (see `unconnectedPins`).
+  const freePins = useMemo(() => {
+    if (exporting) return [];
+    if (drag) {
+      const dropped = connectPinsOnWires(connectPinsOnWires(doc, { comps: drag.ids }), {
+        wires: new Set(drag.ids),
+      });
+      return unconnectedPins(dropped);
+    }
+    if (partTarget && wirePart) {
+      return unconnectedPins(connectPinsOnWires(doc, { wires: new Set([wirePart.wire]) }));
+    }
+    return unconnectedPins(doc);
+  }, [doc, exporting, drag, partTarget, wirePart]);
   // Names and values of the components: those placed automatically avoid what is around them.
   const captions = useMemo(() => layoutCaptions(doc), [doc]);
   /** Unconnected pin names of each component: the only pins that keep their square. */
@@ -395,6 +421,7 @@ export function SchematicCanvas() {
       zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
       zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
       fit: fitView,
+      show: (area) => setViewport((v) => showViewport(v, area, size.width, size.height)),
       exportImage: (options) => new Promise((done) => setExporting({ options, done })),
     });
   }, [size, zoomAt, fitView]);
@@ -596,12 +623,12 @@ export function SchematicCanvas() {
       if (!target && g.x === start.x && g.y === start.y) return;
       if (target && g.x === target.x && g.y === target.y) return;
       target = g;
-      setPartTarget(g);
+      setPartTarget({ grab: start, target: g });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
-      if (target) dropWirePart(part, target);
+      if (target) dropWirePart(part, target, start);
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape" || !target) return;
@@ -624,7 +651,7 @@ export function SchematicCanvas() {
   };
 
   /** Ends a wire part drag: moves it, and keeps it selected where it landed. */
-  const dropWirePart = (part: WirePart, target: GridPoint) => {
+  const dropWirePart = (part: WirePart, target: GridPoint, grab: GridPoint) => {
     const s = useEditorStore.getState();
     const before = wirePartPoints(s.doc, part);
     if (!before) return;
@@ -633,10 +660,13 @@ export function SchematicCanvas() {
     const [a, b] = before;
     if (part.kind === "segment" && a && b) {
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      on = a.y === b.y ? { x: mid.x, y: target.y } : { x: target.x, y: mid.y };
+      on =
+        a.y === b.y
+          ? { x: mid.x + target.x - grab.x, y: target.y }
+          : { x: target.x, y: mid.y + target.y - grab.y };
     }
-    const landing = wirePartAt(moveWirePart(s.doc, part, target), part.wire, on);
-    s.moveWirePart(target, landing?.kind === part.kind ? landing : null);
+    const landing = wirePartAt(moveWirePart(s.doc, part, target, grab), part.wire, on);
+    s.moveWirePart(target, landing?.kind === part.kind ? landing : null, grab);
   };
 
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
@@ -786,6 +816,8 @@ export function SchematicCanvas() {
             <Grid viewport={viewport} width={size.width} height={size.height} />
           </Layer>
           <Layer ref={contentRef}>
+            {/* Hidden while something is dragged: the marks are those of the document simulated. */}
+            {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
             <Wires
               doc={doc}
               selection={shownSelection}
@@ -945,6 +977,8 @@ export function SchematicCanvas() {
           select([comp]);
           focusInspector({ param });
         }}
+        marks={doc === storeDoc ? marks : []}
+        onPickMark={(m) => select([...m.components, ...m.wires, ...m.junctions])}
       />
       <AnimationControls />
       <div
@@ -987,6 +1021,7 @@ export function SchematicCanvas() {
           onClose={closeMenu}
         />
       )}
+      <CloseDialog />
     </div>
   );
 }
