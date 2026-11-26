@@ -1,0 +1,25 @@
+{
+  "type": "opamp_real",
+  "label": "Ampli-op réel",
+  "prefix": "X",
+  "pins": [
+    { "name": "+", "x": -2, "y": 1 },
+    { "name": "-", "x": -2, "y": -1 },
+    { "name": "out", "x": 2, "y": 0 },
+    { "name": "V+", "x": 0, "y": -2 },
+    { "name": "V-", "x": 0, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Modèle",
+      "default": "OA_GENERIC",
+      "kind": "choice",
+      "options": [{ "value": "OA_GENERIC", "label": "Générique (type 741 : gain 10⁵, 1 MHz)" }]
+    }
+  ],
+  "spice": "{name} {pin:+} {pin:-} {pin:out} {pin:V+} {pin:V-} {model}",
+  "models": {
+    "OA_GENERIC": ".subckt OA_GENERIC inp inn out vp vn\nRin inp inn 2Meg\nGm 0 int inp inn 1m\nRint int 0 100Meg\nCint int 0 159p\nVcp vp cp DC 2\nVcn cn vn DC 2\nDp int cp DCLAMP\nDn cn int DCLAMP\nEout o1 0 int 0 1\nRout o1 out 75\n.model DCLAMP D(Is=1e-14)\n.ends OA_GENERIC"
+  }
+}
