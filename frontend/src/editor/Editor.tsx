@@ -101,14 +101,34 @@ interface Press {
 }
 
 /** Actions of the menu opened by a right click on a component; they apply to the selection. */
-/** Width of the box of a value written on the schematic, in pixels. */
+/** Width of the box of a value written on the schematic, and its font size, in pixels. */
 const VALUE_WIDTH = 90;
+const VALUE_FONT_SIZE = 11;
 
 /** A value of the operating point written on the schematic, on its side of its anchor (#102). */
 function ValueText({ label: l, color }: { label: OperatingPointLabel; color: string }) {
   const x = l.position.x * GRID;
   const y = l.position.y * GRID;
   const width = VALUE_WIDTH;
+  if (l.angle !== undefined) {
+    // Slanted along a diagonal arrow, centred on its anchor.
+    return (
+      <Text
+        text={l.text}
+        x={x}
+        y={y}
+        width={width}
+        offsetX={width / 2}
+        offsetY={VALUE_FONT_SIZE / 2}
+        rotation={l.angle}
+        align="center"
+        fontSize={VALUE_FONT_SIZE}
+        fontStyle="bold"
+        fill={color}
+        listening={false}
+      />
+    );
+  }
   const at = {
     above: { x: x - width / 2, y: y - 16, align: "center" },
     below: { x: x - width / 2, y: y + 4, align: "center" },
@@ -120,7 +140,7 @@ function ValueText({ label: l, color }: { label: OperatingPointLabel; color: str
       text={l.text}
       {...at}
       width={width}
-      fontSize={11}
+      fontSize={VALUE_FONT_SIZE}
       fontStyle="bold"
       fill={color}
       listening={false}

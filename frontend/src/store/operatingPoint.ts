@@ -76,6 +76,8 @@ function freeSide(a: GridPoint, b: GridPoint): GridPoint {
 const VOLTAGE_OFFSET = 1;
 /** The same for the V_CE / V_DS of a transistor, just outside its envelope. */
 const TRANSISTOR_VOLTAGE_OFFSET = 0.6;
+/** Distance between a diagonal arrow and the middle of its slanted value, in grid units. */
+const SLANTED_TEXT_GAP = 0.5;
 /** Distance between an arrow and its value, in grid units. */
 const TEXT_GAP = 0.15;
 
@@ -172,6 +174,27 @@ function voltageArrow(
   const [from, to] = u >= 0 ? [nearPlus, nearMinus] : [nearMinus, nearPlus];
   const text = formatSI(Math.abs(u), "V");
   const key = `u:${c.id}:${pins.plus}-${pins.minus}`;
+  // A diagonal arrow (V_BE, V_GS): a level text would cross it, so it is slanted along the arrow,
+  // centred beside its middle.
+  if (a.x !== b.x && a.y !== b.y) {
+    let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle <= -90) angle += 180;
+    return {
+      key,
+      kind: "voltage",
+      from,
+      to,
+      label: {
+        key,
+        kind: "voltage",
+        text: pins.named ? `${voltageName(pins.plus, pins.minus, u)} = ${text}` : text,
+        position: add(lerp(nearPlus, nearMinus, 0.5), scale(side, SLANTED_TEXT_GAP)),
+        side: sideOf(side),
+        angle,
+      },
+    };
+  }
   return {
     key,
     kind: "voltage",

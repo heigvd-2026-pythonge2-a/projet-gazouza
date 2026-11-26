@@ -246,6 +246,11 @@ export interface OperatingPointLabel {
   position: GridPoint;
   /** Side of the anchor the text goes to. */
   side: "above" | "right" | "left" | "below";
+  /**
+   * Slant of the text, in degrees clockwise (between -90 and 90, so it reads left to right): the
+   * text of a diagonal arrow follows it, centred on `position` (#290).
+   */
+  angle?: number;
 }
 
 /**
