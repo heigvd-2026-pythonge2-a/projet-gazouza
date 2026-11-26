@@ -53,6 +53,8 @@ _LOCALHOST_URL_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1
 DEV_URL_ENV_VAR = "PSICE_DEV_URL"
 WINDOW_TITLE = "Psice"
 UNSAVED_CHANGES_JS = "Boolean(window.psiceHasUnsavedChanges?.())"
+CLOSE_REQUEST_CHECK_JS = "typeof window.psiceRequestClose === 'function'"
+CLOSE_REQUEST_JS = "window.psiceRequestClose()"
 UNSAVED_CHANGES_PROMPT = (
     "Le schéma contient des modifications non enregistrées. Fermer quand même ?"
 )
@@ -120,6 +122,8 @@ _LOGO_GLYPH_PATHS: tuple[tuple[str, str, str], ...] = (
 
 _closing_lock = threading.Lock()
 _closing_windows: set[int] = set()
+_pending_async_close_windows: set[int] = set()
+_bypass_close_guard_windows: set[int] = set()
 
 
 def find_free_port(host: str = LOCALHOST_HOST) -> int:
@@ -866,38 +870,44 @@ def _get_winforms_do_events(window: Any) -> Callable[[], None] | None:
     return winforms.Application.DoEvents
 
 
-def _has_unsaved_changes(window: Any, *, timeout: float | None = None) -> bool:
-    """Query window.psiceHasUnsavedChanges?.(), failing closed on error or timeout.
-
-    Returns False when ``window.events._pywebviewready.is_set()`` explicitly reports
-    False (the page has not finished loading yet). Once the page is ready, JS
-    evaluation exceptions or timeouts return True so the user is asked to confirm
-    before closing.
-    """
-    resolved_timeout = JS_EVAL_TIMEOUT_S if timeout is None else timeout
+def _is_window_js_ready(window: Any) -> bool:
+    """Return False only when pywebview explicitly reports the page is not ready yet."""
     events = getattr(window, "events", None)
     ready_event = getattr(events, "_pywebviewready", None)
     is_set = getattr(ready_event, "is_set", None)
-    if callable(is_set) and is_set() is False:
-        return False
+    return not (callable(is_set) and is_set() is False)
 
+
+def _evaluate_js_sync(
+    window: Any,
+    script: str,
+    *,
+    callback: Callable[[Any], None] | None = None,
+    timeout: float | None = None,
+    fail_value: Any,
+    thread_name: str,
+    error_log: str,
+    timeout_log: str,
+) -> Any:
+    """Evaluate JS on a worker thread while pumping WinForms DoEvents to avoid UI deadlocks."""
+    resolved_timeout = JS_EVAL_TIMEOUT_S if timeout is None else timeout
     done = threading.Event()
-    result_box: list[bool] = [True]
+    result_box: list[Any] = [fail_value]
 
     def _evaluate() -> None:
         try:
-            value = window.evaluate_js(UNSAVED_CHANGES_JS)
-            result_box[0] = bool(value)
+            if callback is None:
+                value = window.evaluate_js(script)
+            else:
+                value = window.evaluate_js(script, callback=callback)
+            result_box[0] = value
         except Exception:
-            logger.warning(
-                "Failed to query unsaved changes; prompting user before closing.",
-                exc_info=True,
-            )
-            result_box[0] = True
+            logger.warning(error_log, exc_info=True)
+            result_box[0] = fail_value
         finally:
             done.set()
 
-    worker = threading.Thread(target=_evaluate, name="psice-unsaved-check", daemon=True)
+    worker = threading.Thread(target=_evaluate, name=thread_name, daemon=True)
     worker.start()
 
     do_events = _get_winforms_do_events(window)
@@ -910,22 +920,119 @@ def _has_unsaved_changes(window: Any, *, timeout: float | None = None) -> bool:
             done.wait(0.01)
 
     if not done.is_set():
-        logger.warning("Timed out querying unsaved changes; prompting user before closing.")
-        return True
+        logger.warning(timeout_log)
+        return fail_value
     return result_box[0]
+
+
+def _has_unsaved_changes(window: Any, *, timeout: float | None = None) -> bool:
+    """Query window.psiceHasUnsavedChanges?.(), failing closed on error or timeout.
+
+    Returns False when ``window.events._pywebviewready.is_set()`` explicitly reports
+    False (the page has not finished loading yet). Once the page is ready, JS
+    evaluation exceptions or timeouts return True so the user is asked to confirm
+    before closing.
+    """
+    if not _is_window_js_ready(window):
+        return False
+
+    result = _evaluate_js_sync(
+        window,
+        UNSAVED_CHANGES_JS,
+        timeout=timeout,
+        fail_value=True,
+        thread_name="psice-unsaved-check",
+        error_log="Failed to query unsaved changes; prompting user before closing.",
+        timeout_log="Timed out querying unsaved changes; prompting user before closing.",
+    )
+    return bool(result)
+
+
+def _has_close_request_handler(window: Any, *, timeout: float | None = None) -> bool:
+    """Return True only when the page exposes a callable window.psiceRequestClose."""
+    result = _evaluate_js_sync(
+        window,
+        CLOSE_REQUEST_CHECK_JS,
+        timeout=timeout,
+        fail_value=False,
+        thread_name="psice-close-check",
+        error_log="Failed to check window.psiceRequestClose; falling back to native dialog.",
+        timeout_log="Timed out checking window.psiceRequestClose; falling back to native dialog.",
+    )
+    return result is True
+
+
+def _force_close_window(window: Any) -> None:
+    """Destroy the pywebview window while bypassing the unsaved-changes close guard once."""
+    window_key = id(window)
+    with _closing_lock:
+        _bypass_close_guard_windows.add(window_key)
+    try:
+        window.destroy()
+    except Exception:
+        with _closing_lock:
+            _bypass_close_guard_windows.discard(window_key)
+        logger.exception("Failed to destroy window after close confirmation.")
+
+
+def _request_page_close(window: Any, *, timeout: float | None = None) -> bool:
+    """Ask the frontend three-button dialog whether the window may close.
+
+    Returns True when ``window.psiceRequestClose()`` accepted the close request and
+    returned a Promise whose async callback will destroy the window if confirmed.
+    Returns False when the frontend handler is unavailable or failed, so the caller
+    can fall back to the native two-button confirmation dialog.
+    """
+    if not _has_close_request_handler(window, timeout=timeout):
+        return False
+
+    window_key = id(window)
+    with _closing_lock:
+        if window_key in _pending_async_close_windows:
+            return True
+        _pending_async_close_windows.add(window_key)
+
+    def _on_close_decision(decision: Any) -> None:
+        with _closing_lock:
+            _pending_async_close_windows.discard(window_key)
+        if decision is True:
+            _force_close_window(window)
+
+    started = _evaluate_js_sync(
+        window,
+        CLOSE_REQUEST_JS,
+        callback=_on_close_decision,
+        timeout=timeout,
+        fail_value=False,
+        thread_name="psice-close-request",
+        error_log="Failed to open page close dialog; falling back to native dialog.",
+        timeout_log="Timed out opening page close dialog; falling back to native dialog.",
+    )
+    if started in (True, "true"):
+        return True
+
+    with _closing_lock:
+        _pending_async_close_windows.discard(window_key)
+    return False
 
 
 def on_window_closing(window: Any) -> bool:
     """Confirm before closing the window when unsaved changes exist or cannot be verified."""
     window_key = id(window)
     with _closing_lock:
-        if window_key in _closing_windows:
+        if window_key in _bypass_close_guard_windows:
+            _bypass_close_guard_windows.discard(window_key)
+            return True
+        if window_key in _closing_windows or window_key in _pending_async_close_windows:
             return False
         _closing_windows.add(window_key)
 
     try:
         if not _has_unsaved_changes(window):
             return True
+
+        if _request_page_close(window):
+            return False
 
         try:
             confirmed = window.create_confirmation_dialog(
