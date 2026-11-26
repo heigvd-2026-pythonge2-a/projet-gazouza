@@ -161,6 +161,23 @@ describe("voltageArrows (#290)", () => {
     expect(terminalVoltageRows(doc, fixtureResult("rc_tran"), nets)).toEqual([]);
   });
 
+  it("slants the text of a diagonal arrow along it, beside it", () => {
+    const { doc, nets } = transistor();
+    const result = opResult({ c: 5, b: 0.7, e: 0 });
+    const [vce, vbe] = voltageArrows(doc, result, nets, new Set([doc.components[0]!.id]));
+    // V_CE is vertical: a level text, not slanted.
+    expect(vce?.label.angle).toBeUndefined();
+    const { from, to, label } = vbe!;
+    const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
+    // Same slant as the arrow (up to a half turn), between -90 and 90 degrees to read it.
+    expect(label.angle).toBeGreaterThan(-90);
+    expect(label.angle).toBeLessThanOrEqual(90);
+    expect((((angle - label.angle!) % 180) + 180) % 180).toBeCloseTo(0);
+    // Its middle is half a step away from the arrow's line, not on it.
+    const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    expect(Math.hypot(label.position.x - mid.x, label.position.y - mid.y)).toBeCloseTo(0.5);
+  });
+
   it("shows nothing when a potential is unknown", () => {
     const { doc, nets } = transistor();
     expect(voltageArrows(doc, opResult({ c: 5 }), nets)).toEqual([]);
