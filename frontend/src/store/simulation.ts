@@ -4,6 +4,8 @@
 import type { Schematic, SimulationRequest, SimulationResult } from "../api/client";
 import { normalizeContacts, partPath, type EditorDoc, type GridPoint } from "./document";
 import { getDef } from "./library";
+import { describeNet } from "./netNames";
+import type { NodeItem } from "./nodes";
 
 /**
  * The editor document in the contract format (`Schematic`, docs/format-schema.md), with what
@@ -221,12 +223,12 @@ const PREFIXES: [number, string][] = [
   [1e-12, "p"],
 ];
 
-/** 0.005, "A" -> "5 mA"; 3 significant digits, SI prefixes. */
+/** 0.0045, "A" -> "4,5 mA"; 3 significant digits, SI prefixes, French decimal comma. */
 export function formatSI(value: number, unit: string): string {
   if (value === 0 || !Number.isFinite(value)) return `0 ${unit}`;
   const abs = Math.abs(value);
   const [factor, prefix] = PREFIXES.find(([f]) => abs >= f * 0.9995) ?? [1e-12, "p"];
-  const shown = Number((value / factor).toPrecision(3));
+  const shown = String(Number((value / factor).toPrecision(3))).replace(".", ",");
   return `${shown} ${prefix}${unit}`;
 }
 
@@ -297,4 +299,68 @@ export function operatingPointLabels(
     }
   }
   return labels;
+}
+
+// --- Operating point table of the results panel (#292) ------------------------------------------
+
+/** One line of the operating point table. */
+export interface OperatingPointRow {
+  key: string;
+  /** What the value is about ("Base de Q1", "V1 fournit"…). */
+  label: string;
+  /** The value, formatted ("4,27 mA"). */
+  value: string;
+  /** What to highlight on the schematic while the line is hovered. */
+  highlight: NodeItem | { component: string } | null;
+}
+
+/** A group of lines of the table, with its title. */
+export interface OperatingPointGroup {
+  title: string;
+  rows: OperatingPointRow[];
+}
+
+/**
+ * The values of an operating point (.op) result, as shown in the results panel: node potentials
+ * named after the schematic (`describeNet`, never "n1"), sorted by name, then currents. A voltage
+ * source's current is given as what it supplies (SPICE counts it negative then) or receives; the
+ * other currents without sign, their direction being shown on the schematic. Empty groups are
+ * left out.
+ */
+export function operatingPointTable(
+  doc: EditorDoc,
+  result: SimulationResult,
+  nets: Record<string, string[]>,
+): OperatingPointGroup[] {
+  if (result.analysis !== "op") return [];
+  const potentials: OperatingPointRow[] = [];
+  const currents: OperatingPointRow[] = [];
+  for (const trace of result.traces ?? []) {
+    const value = trace.values[0];
+    if (value === undefined) continue;
+    if (trace.kind === "voltage") {
+      const net = trace.net ?? trace.name;
+      const { name, item } = describeNet(doc, net, nets[net] ?? []);
+      potentials.push({
+        key: trace.name,
+        label: name,
+        value: formatSI(value, "V"),
+        highlight: item,
+      });
+      continue;
+    }
+    const c = doc.components.find((x) => x.id === trace.component_id);
+    const name = c?.name ?? trace.component_id ?? trace.name;
+    const highlight = c ? { component: c.id } : null;
+    const label =
+      c?.type === "voltage_source"
+        ? `${name} ${value <= 0 ? "fournit" : "reçoit"}`
+        : `Courant dans ${name}`;
+    currents.push({ key: trace.name, label, value: formatSI(Math.abs(value), "A"), highlight });
+  }
+  potentials.sort((a, b) => a.label.localeCompare(b.label, "fr", { numeric: true }));
+  return [
+    { title: "Potentiels des nœuds (par rapport à la masse)", rows: potentials },
+    { title: "Courants", rows: currents },
+  ].filter((g) => g.rows.length > 0);
 }

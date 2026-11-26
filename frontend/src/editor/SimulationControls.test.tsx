@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SimulationResult } from "../api/client";
 import { analysisSources, toAnalysis } from "../store";
-import { fixtureDoc } from "../store/testFixtures";
+import { fixtureDoc, fixtureResult } from "../store/testFixtures";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
 import { SimulationControls, SimulationReport } from "./SimulationControls";
@@ -117,5 +117,22 @@ describe("SimulationReport (#253)", () => {
     expect(show).toHaveBeenCalledOnce();
     expect(editorState().selection).toEqual(["w2", "w6"]);
     unregister();
+  });
+
+  it("names the nodes after the schematic and highlights a hovered line (#292)", async () => {
+    const user = userEvent.setup();
+    editorState().openDocument(fixtureDoc("divider_op"));
+    act(() => editorState().setSimulation(fixtureResult("divider_op"), netlist.nets));
+    render(<SimulationReport />);
+
+    expect(screen.queryByText(/n\d/)).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /Potentiels des nœuds/ })).toBeInTheDocument();
+    const out = screen.getByRole("row", { name: "out 5 V" });
+    await user.hover(out);
+    expect(editorState().reportHighlight).toEqual({ wire: "w2" });
+    await user.hover(screen.getByRole("row", { name: "V1 fournit 5 mA" }));
+    expect(editorState().reportHighlight).toEqual({ component: "c1" });
+    await user.unhover(screen.getByRole("row", { name: "V1 fournit 5 mA" }));
+    expect(editorState().reportHighlight).toBeNull();
   });
 });

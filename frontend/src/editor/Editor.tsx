@@ -50,7 +50,7 @@ import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { useFileDrop } from "./fileDrop";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
-import { NodeHighlight } from "./NodeHighlight";
+import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
@@ -273,6 +273,7 @@ export function SchematicCanvas() {
 
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
+  const reportHighlight = useEditorStore((s) => s.reportHighlight);
   const wirePart = useEditorStore((s) => s.wirePart);
   const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
@@ -378,8 +379,15 @@ export function SchematicCanvas() {
     if (wirePart) wireIds.add(wirePart.wire);
     for (const wire of wireIds) add(index({ wire }), true);
     if (hovered) add(index(hovered), false);
+    if (reportHighlight && !("component" in reportHighlight)) add(index(reportHighlight), true);
     return out;
-  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered]);
+  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered, reportHighlight]);
+
+  /** The component of a hovered line of the results panel (#292), glowing on the schematic. */
+  const highlightedComponent =
+    !exporting && doc === storeDoc && reportHighlight && "component" in reportHighlight
+      ? storeDoc.components.find((c) => c.id === reportHighlight.component)
+      : undefined;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: { id: string }): ReadonlySet<string> =>
@@ -861,6 +869,7 @@ export function SchematicCanvas() {
           <Layer ref={contentRef}>
             {/* Hidden while something is dragged: the marks are those of the document simulated. */}
             {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
+            {highlightedComponent && <ComponentHighlight component={highlightedComponent} />}
             {highlightedNodes.map(({ node, strong }, i) => (
               <NodeHighlight key={i} doc={storeDoc} node={node} strong={strong} />
             ))}

@@ -8,6 +8,7 @@ import {
   dcRangeFor,
   formatSI,
   operatingPointLabels,
+  operatingPointTable,
   parseSpiceNumber,
   toAnalysis,
   toSchematic,
@@ -121,8 +122,8 @@ describe("operating point on the schematic (#102)", () => {
   it("formats values with SI prefixes", () => {
     expect(formatSI(0.005, "A")).toBe("5 mA");
     expect(formatSI(10, "V")).toBe("10 V");
-    expect(formatSI(-1.23456e-6, "A")).toBe("-1.23 µA");
-    expect(formatSI(4700, "V")).toBe("4.7 kV");
+    expect(formatSI(-1.23456e-6, "A")).toBe("-1,23 µA");
+    expect(formatSI(4700, "V")).toBe("4,7 kV");
     expect(formatSI(0, "V")).toBe("0 V");
   });
 
@@ -145,5 +146,23 @@ describe("operating point on the schematic (#102)", () => {
   it("labels nothing for another analysis", () => {
     const doc = fixtureDoc("rc_tran");
     expect(operatingPointLabels(doc, fixtureResult("rc_tran"), {})).toEqual([]);
+  });
+});
+
+describe("operating point table (#292)", () => {
+  it("names the nodes after the schematic and gives the supplied current", () => {
+    const doc = fixtureDoc("divider_op");
+    const groups = operatingPointTable(doc, fixtureResult("divider_op"), netlist.nets);
+    expect(groups.map((g) => [g.title, g.rows.map((r) => `${r.label} : ${r.value}`)])).toEqual([
+      ["Potentiels des nœuds (par rapport à la masse)", ["in : 10 V", "out : 5 V"]],
+      ["Courants", ["V1 fournit : 5 mA", "Courant dans R1 : 5 mA", "Courant dans R2 : 5 mA"]],
+    ]);
+    const rows = groups.flatMap((g) => g.rows);
+    expect(rows.find((r) => r.label === "in")?.highlight).toEqual({ wire: "w1" });
+    expect(rows.find((r) => r.label === "V1 fournit")?.highlight).toEqual({ component: "c1" });
+  });
+
+  it("shows nothing for another analysis", () => {
+    expect(operatingPointTable(fixtureDoc("rc_tran"), fixtureResult("rc_tran"), {})).toEqual([]);
   });
 });
