@@ -1,6 +1,7 @@
 // Arrows of an operating point (.op) drawn on the schematic (#290): the direction of the current
-// through each two-pin component, and the voltage across components, pointing at the more positive
-// terminal (French convention: opposite to the current in a receiver, the same way in a source).
+// through each two-pin component, and the voltage across components, from the more positive
+// terminal to the other one, the way the voltage drops (the convention taught in Switzerland and
+// Germany: the same way as the current in a receiver, the other way in a source).
 // V_CE / V_DS of the transistors are computed here from the node voltages (ground = 0 V).
 
 import type { SimulationResult } from "../api/client";
@@ -147,7 +148,7 @@ export const voltageName = (plus: string, minus: string, u: number): string =>
 
 /**
  * Voltage arrow between pins `plus` and `minus` of `c`: along them, shortened, moved aside by
- * `offset` (away from `away`, a point the text must not cover), pointing at the more positive pin.
+ * `offset` (away from `away`, a point the text must not cover), from the more positive pin to the other one.
  * With `named`, the value is prefixed by the name of the voltage ("V_CE = 4,3 V", see
  * `voltageName`). Null if a potential is unknown.
  */
@@ -167,7 +168,8 @@ function voltageArrow(
   const shift = scale(side, offset);
   const nearPlus = add(lerp(a, b, 0.2), shift);
   const nearMinus = add(lerp(a, b, 0.8), shift);
-  const [from, to] = u >= 0 ? [nearMinus, nearPlus] : [nearPlus, nearMinus];
+  // Along the voltage drop: from the more positive pin to the other one.
+  const [from, to] = u >= 0 ? [nearPlus, nearMinus] : [nearMinus, nearPlus];
   const text = formatSI(Math.abs(u), "V");
   const key = `u:${c.id}:${pins.plus}-${pins.minus}`;
   return {
