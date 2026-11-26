@@ -2,9 +2,14 @@
 // it shows of the answer on the schematic. Texts in French.
 
 import type { Schematic, SimulationRequest, SimulationResult } from "../api/client";
-import { normalizeContacts, partPath, type EditorDoc, type GridPoint } from "./document";
-import { getDef } from "./library";
-import { describeNet } from "./netNames";
+import {
+  normalizeContacts,
+  partPath,
+  pinPosition,
+  type EditorDoc,
+  type GridPoint,
+} from "./document";
+import { describeNet, netItem } from "./netNames";
 import type { NodeItem } from "./nodes";
 
 /**
@@ -244,9 +249,10 @@ export interface OperatingPointLabel {
 }
 
 /**
- * Labels of an operating point (.op) result: each node voltage on the longest segment of one of
- * its wires (`nets`, from the netlist, gives them), each two-pin component's current beside it,
- * on the side away from its caption. The ground (0 V) is not labelled.
+ * Potential labels of an operating point (.op) result: each node voltage on the longest segment of
+ * one of its wires (`nets`, from the netlist, gives them), or next to one of its pins for a node
+ * without a wire on screen (two pins touching). The ground (0 V) is not labelled. The currents
+ * are drawn as arrows (`currentArrows`, #290).
  */
 export function operatingPointLabels(
   doc: EditorDoc,
@@ -257,46 +263,47 @@ export function operatingPointLabels(
   const labels: OperatingPointLabel[] = [];
   for (const trace of result.traces ?? []) {
     const value = trace.values[0];
-    if (value === undefined) continue;
-    if (trace.kind === "voltage" && trace.net && trace.net !== "0") {
-      const wire = (nets[trace.net] ?? [])
-        .map((id) => doc.wires.find((w) => w.id === id))
-        .find((w) => w !== undefined);
-      if (!wire) continue;
-      const path = partPath(doc, wire);
-      let best: [GridPoint, GridPoint] | null = null;
-      for (let i = 0; i + 1 < path.length; i++) {
-        const a = path[i] as GridPoint;
-        const b = path[i + 1] as GridPoint;
-        const length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-        if (!best || length > Math.abs(best[1].x - best[0].x) + Math.abs(best[1].y - best[0].y)) {
-          best = [a, b];
-        }
-      }
-      if (!best) continue;
-      const [a, b] = best;
-      labels.push({
-        key: `v:${trace.net}`,
-        kind: "voltage",
-        text: formatSI(value, "V"),
-        position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-        side: a.y === b.y ? "above" : "right",
-      });
-    } else if (trace.kind === "current" && trace.component_id) {
-      const c = doc.components.find((x) => x.id === trace.component_id);
-      if (!c || getDef(c.type).pins.length !== 2) continue;
-      // The caption is right of a vertical symbol and above a horizontal one.
-      const vertical = c.rotation === 0 || c.rotation === 180;
-      labels.push({
-        key: `i:${c.id}`,
-        kind: "current",
-        text: formatSI(Math.abs(value), "A"),
-        position: vertical
-          ? { x: c.position.x - 1.2, y: c.position.y }
-          : { x: c.position.x, y: c.position.y + 1.2 },
-        side: vertical ? "left" : "below",
-      });
+    if (value === undefined || trace.kind !== "voltage" || !trace.net || trace.net === "0") {
+      continue;
     }
+    const key = `v:${trace.net}`;
+    const text = formatSI(value, "V");
+    const wire = (nets[trace.net] ?? [])
+      .map((id) => doc.wires.find((w) => w.id === id))
+      .find((w) => w !== undefined);
+    if (!wire) {
+      const item = netItem(doc, nets[trace.net] ?? []);
+      const c = item && "comp" in item ? doc.components.find((x) => x.id === item.comp) : null;
+      if (c && item && "comp" in item) {
+        labels.push({
+          key,
+          kind: "voltage",
+          text,
+          position: pinPosition(c, item.pin),
+          side: "right",
+        });
+      }
+      continue;
+    }
+    const path = partPath(doc, wire);
+    let best: [GridPoint, GridPoint] | null = null;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i] as GridPoint;
+      const b = path[i + 1] as GridPoint;
+      const length = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+      if (!best || length > Math.abs(best[1].x - best[0].x) + Math.abs(best[1].y - best[0].y)) {
+        best = [a, b];
+      }
+    }
+    if (!best) continue;
+    const [a, b] = best;
+    labels.push({
+      key,
+      kind: "voltage",
+      text,
+      position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      side: a.y === b.y ? "above" : "right",
+    });
   }
   return labels;
 }

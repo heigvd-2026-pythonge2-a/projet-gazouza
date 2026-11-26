@@ -134,9 +134,6 @@ describe("operating point on the schematic (#102)", () => {
     expect(byKey).toEqual({
       "v:in": "10 V",
       "v:out": "5 V",
-      "i:c1": "5 mA",
-      "i:c2": "5 mA",
-      "i:c3": "5 mA",
     });
     // A voltage is placed on one of the node's wires.
     const vin = labels.find((l) => l.key === "v:in")!;
