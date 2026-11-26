@@ -1335,8 +1335,99 @@ export function netNameProblem(net: string): string | null {
 export const rotateCw = (r: Rotation): Rotation => ((r + 90) % 360) as Rotation;
 
 export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
-  const rotated = updateComponents(doc, ids, (c) => ({ ...c, rotation: rotateCw(c.rotation) }));
+  const rotated = updateComponents(doc, ids, (c) => {
+    // A node label skips the directions where its flag would lie on what it is connected to
+    // (see `orientLabels`): pressing R goes round the free ones.
+    let rotation = rotateCw(c.rotation);
+    if (c.type === "label") {
+      const taken = labelBlockedDirections(doc, c);
+      for (let i = 0; i < 3 && taken.has(dirKey(flagDirection({ ...c, rotation }))); i++) {
+        rotation = rotateCw(rotation);
+      }
+    }
+    return { ...c, rotation };
+  });
   return realignWires(doc, rotated);
+}
+
+// --- Node label flags (#295) ---------------------------------------------------------------------
+
+const ROTATIONS: readonly Rotation[] = [0, 90, 180, 270];
+const dirKey = (d: GridPoint) => `${Math.sign(d.x)},${Math.sign(d.y)}`;
+
+/** Direction the flag of a node label points to from its pin, as a unit step on the grid. */
+function flagDirection(c: Pick<PlacedComponent, "position" | "rotation" | "mirror">): GridPoint {
+  const tip = toWorld({ x: 1, y: 0 }, c);
+  return { x: tip.x - c.position.x, y: tip.y - c.position.y };
+}
+
+/**
+ * Directions (keys of unit steps) a label's flag must not point to: those its wires leave its
+ * pin by, and those of the components whose pin touches it (towards their middle).
+ */
+function labelBlockedDirections(doc: EditorDoc, label: PlacedComponent): Set<string> {
+  const pin = label.position;
+  const taken = new Set<string>();
+  const onLabel = (end: WireEnd) => "comp" in end && end.comp === label.id;
+  for (const w of doc.wires) {
+    const path = simplifyPath(wirePath(doc, w));
+    if (path.length < 2) continue;
+    if (onLabel(w.from)) {
+      taken.add(
+        dirKey({ x: (path[1] as GridPoint).x - pin.x, y: (path[1] as GridPoint).y - pin.y }),
+      );
+    }
+    if (onLabel(w.to)) {
+      const prev = path[path.length - 2] as GridPoint;
+      taken.add(dirKey({ x: prev.x - pin.x, y: prev.y - pin.y }));
+    }
+  }
+  for (const other of doc.components) {
+    if (other.id === label.id || other.type === "label") continue;
+    const touches = getDef(other.type).pins.some((p) => samePoint(toWorld(p, other), pin));
+    if (!touches) continue;
+    const box = componentBox(other);
+    const middle = { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2 };
+    const d = { x: middle.x - pin.x, y: middle.y - pin.y };
+    // Along the main axis only: a pin is at the end of its component.
+    taken.add(dirKey(Math.abs(d.x) >= Math.abs(d.y) ? { x: d.x, y: 0 } : { x: 0, y: d.y }));
+  }
+  taken.delete("0,0");
+  return taken;
+}
+
+/**
+ * Turns the node labels whose flag lies on a wire (or a component) they are connected to, so the
+ * flag points the other way and its text never covers the wire (#295). The flag goes opposite to
+ * the first blocked direction if it is free, else to the first free direction clockwise. A label
+ * turns around its pin, so nothing it is connected to moves. Labels already clear, and labels
+ * connected to nothing, are left as they are (their rotation may have been chosen by hand).
+ * Returns `doc` itself when no label turns.
+ */
+export function orientLabels(doc: EditorDoc): EditorDoc {
+  let changed = false;
+  const components = doc.components.map((c) => {
+    if (c.type !== "label") return c;
+    const taken = labelBlockedDirections(doc, c);
+    if (!taken.has(dirKey(flagDirection(c)))) return c;
+    const [blocked] = taken;
+    const opposite = blocked
+      ? blocked
+          .split(",")
+          .map((v) => String(-Number(v) || 0))
+          .join(",")
+      : "";
+    const free = (r: Rotation) => !taken.has(dirKey(flagDirection({ ...c, rotation: r })));
+    const start = ROTATIONS.indexOf(c.rotation);
+    const clockwise = [1, 2, 3].map((i) => ROTATIONS[(start + i) % 4] as Rotation);
+    const rotation =
+      ROTATIONS.find((r) => free(r) && dirKey(flagDirection({ ...c, rotation: r })) === opposite) ??
+      clockwise.find(free);
+    if (rotation === undefined) return c;
+    changed = true;
+    return { ...c, rotation };
+  });
+  return changed ? { ...doc, components } : doc;
 }
 
 export function mirrorComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
