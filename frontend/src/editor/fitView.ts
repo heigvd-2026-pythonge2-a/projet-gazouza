@@ -26,3 +26,26 @@ export function fitViewport(bounds: GridRect | null, width: number, height: numb
   const cy = ((bounds.min.y + bounds.max.y) / 2) * GRID;
   return { x: Math.round(width / 2 - cx * scale), y: Math.round(height / 2 - cy * scale), scale };
 }
+
+/**
+ * Viewport that shows `area` (grid units) from the viewport `v`: unchanged if it is already in
+ * view, with `FIT_MARGIN` around it; else centered on it, zoomed out only if it does not fit.
+ */
+export function showViewport(v: Viewport, area: GridRect, width: number, height: number): Viewport {
+  const left = area.min.x * GRID * v.scale + v.x;
+  const top = area.min.y * GRID * v.scale + v.y;
+  const right = area.max.x * GRID * v.scale + v.x;
+  const bottom = area.max.y * GRID * v.scale + v.y;
+  if (
+    left >= FIT_MARGIN &&
+    top >= FIT_MARGIN &&
+    right <= width - FIT_MARGIN &&
+    bottom <= height - FIT_MARGIN
+  ) {
+    return v;
+  }
+  const scale = Math.min(v.scale, fitViewport(area, width, height).scale);
+  const cx = ((area.min.x + area.max.x) / 2) * GRID;
+  const cy = ((area.min.y + area.max.y) / 2) * GRID;
+  return { x: Math.round(width / 2 - cx * scale), y: Math.round(height / 2 - cy * scale), scale };
+}

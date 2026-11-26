@@ -1,6 +1,6 @@
 import { Shape } from "react-konva";
 
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 export interface Viewport {
   x: number;
@@ -16,6 +16,7 @@ interface GridProps {
 
 /** Grid dots for the visible area only, drawn by a single shape. */
 export function Grid({ viewport, width, height }: GridProps) {
+  const colors = useCanvasColors();
   return (
     <Shape
       listening={false}
@@ -32,7 +33,7 @@ export function Grid({ viewport, width, height }: GridProps) {
         const bottom = (height - y) / scale;
         const size = 1.5 / scale;
 
-        ctx.fillStyle = COLORS.gridDot;
+        ctx.fillStyle = colors.gridDot;
         for (let gx = left; gx <= right; gx += step) {
           for (let gy = top; gy <= bottom; gy += step) {
             ctx.fillRect(gx - size / 2, gy - size / 2, size, size);

@@ -14,6 +14,7 @@ env/
 
 # Outils de test et de build Python
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 dist/
@@ -21,12 +22,15 @@ build/
 *.egg-info/
 
 # ==========================================
-# Node.js & Frontend (React / Vite)
+# Node.js & Frontend (React / Vite / Astro)
 # ==========================================
 node_modules/
 frontend/node_modules/
 frontend/dist/
+# Online demo of the app, built into the website by `pnpm build:demo` (frontend/)
+website/public/demo/
 .vite/
+.astro/
 
 # ==========================================
 # Fichiers de sortie Ngspice / Simulations

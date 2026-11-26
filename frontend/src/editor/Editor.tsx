@@ -1,40 +1,56 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Layer, Rect, Stage } from "react-konva";
+import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 
 import {
   animatable,
+  clipAnchor,
+  connectPinsOnWires,
+  diagnosticMarks,
   docBounds,
   freshSimulation,
-  itemsInRect,
+  getDef,
+  layoutCaptions,
+  mainParam,
   moveItems,
   moveWirePart,
+  operatingPointLabels,
+  resolveCaptionDrop,
   pinPosition,
   rectFrom,
   samePoint,
   unconnectedPins,
+  PALETTES,
   useEditorStore,
+  useThemeStore,
   wirePartAt,
   wirePartPoints,
   type GridPoint,
+  type EditorText,
   type GridRect,
   type PlacedComponent,
   type WirePart,
+  NEW_TEXT,
 } from "../store";
 import { AnimationControls } from "./AnimationControls";
+import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { DiagnosticHalos } from "./DiagnosticHalos";
+import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
-import { fitViewport } from "./fitView";
-import { newFile, openFile, saveFile } from "./fileActions";
+import { fitViewport, showViewport } from "./fitView";
+import { FreeText } from "./FreeText";
+import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
-import { COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
+import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
-import { registerViewCommands } from "./viewCommands";
+import { ValuePopover } from "./ValuePopover";
+import { registerViewCommands, type ImageOptions } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
 const ZOOM_STEP = 1.1;
@@ -42,10 +58,14 @@ const ZOOM_STEP = 1.1;
 const BUTTON_ZOOM_STEP = 1.25;
 /** Radius of the ring drawn around a pin connected to nothing, in grid units. */
 const UNCONNECTED_RADIUS = 0.4;
+const NO_PINS: ReadonlySet<string> = new Set();
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
 const BAND_THRESHOLD = 3;
+/** Exported image: pixels per drawing pixel at zoom 1, and white margin around the circuit. */
+const EXPORT_PIXEL_RATIO = 2;
+const EXPORT_MARGIN = 20;
 
 /** Grid step of each arrow key, to move the selection. */
 const ARROWS: Record<string, GridPoint> = {
@@ -65,7 +85,7 @@ interface Press {
   vy: number;
   /** The view is being moved (always for the middle button, after the threshold for the right). */
   panning: boolean;
-  /** Component under the right press, if any. */
+  /** Component or text under the right press, if any. */
   componentId: string | null;
 }
 
@@ -75,6 +95,12 @@ function componentMenu(selectionSize: number): MenuItem[] {
   return [
     { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
+    {
+      label: "Replacer les textes automatiquement",
+      shortcut: "O",
+      keys: ["o", "O"],
+      onSelect: () => s().resetCaptions(),
+    },
     {
       label: "Dupliquer",
       shortcut: "Ctrl+D",
@@ -132,6 +158,7 @@ function useKeyboardShortcuts() {
           s.duplicate(); // also keeps the browser from adding a bookmark
         else if (key === "n") newFile();
         else if (key === "o") openFile();
+        else if (key === "s" && e.shiftKey) saveFileAs();
         else if (key === "s") saveFile();
         else return;
         e.preventDefault();
@@ -142,7 +169,7 @@ function useKeyboardShortcuts() {
       if (arrow) {
         if (s.tool.kind !== "select" || s.selection.length === 0) return;
         // Holding the key down repeats it: one undo step for the whole move.
-        s.moveSelection(arrow, true);
+        s.moveSelection(arrow, { merge: true });
         e.preventDefault();
         return;
       }
@@ -163,9 +190,17 @@ function useKeyboardShortcuts() {
         case "M":
           s.mirror();
           break;
+        case "o":
+        case "O":
+          s.resetCaptions();
+          break;
         case "w":
         case "W":
           s.startWiring();
+          break;
+        case "t":
+        case "T":
+          s.startText();
           break;
         case "Delete":
         case "Backspace":
@@ -188,36 +223,78 @@ function useKeyboardShortcuts() {
 export function SchematicCanvas() {
   const [containerRef, size] = useElementSize<HTMLDivElement>();
   const stageRef = useRef<Konva.Stage>(null);
+  /** Layer of the schematic itself (wires, components), the one exported as an image. */
+  const contentRef = useRef<Konva.Layer>(null);
+  /**
+   * While set, the schematic is drawn for the image export (no grid, no selection, no marks),
+   * and this receives the image once that drawing is done.
+   */
+  const [exporting, setExporting] = useState<{
+    options: ImageOptions;
+    done: (image: Blob | null) => void;
+  } | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+  const theme = useThemeStore((s) => s.theme);
+  // An exported image goes in a report, on white: it is always drawn in the light colours.
+  const canvasColors = PALETTES[exporting ? "light" : theme];
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
-  /** Selection rectangle being drawn (grid units). */
-  const [band, setBand] = useState<GridRect | null>(null);
+  /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
+  const [band, setBand] = useState<{ rect: GridRect; touching: boolean } | null>(null);
   /** Context menu, at this position in the canvas. */
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
-  /** Items being dragged and how far (grid units): shown moved before the store changes. */
-  const [drag, setDrag] = useState<{ ids: ReadonlySet<string>; delta: GridPoint } | null>(null);
-  /** Where the selected wire part is being dragged (grid point), before the store changes. */
-  const [partTarget, setPartTarget] = useState<GridPoint | null>(null);
+  /**
+   * Items being dragged and how far (grid units): shown moved before the store changes. With
+   * Ctrl (`detach`), the wires stay where they are.
+   */
+  const [drag, setDrag] = useState<{
+    ids: ReadonlySet<string>;
+    delta: GridPoint;
+    detach: boolean;
+  } | null>(null);
+  /**
+   * Where the selected wire part is being dragged (grid point) and where it was grabbed, before
+   * the store changes.
+   */
+  const [partTarget, setPartTarget] = useState<{ grab: GridPoint; target: GridPoint } | null>(null);
+  /** Component whose main value is being edited in the menu over it (double-click). */
+  const [editing, setEditing] = useState<string | null>(null);
   /** Removes the window listeners of the press in progress, if any. */
   const endPress = useRef<(() => void) | null>(null);
 
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
+  const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
+  const placeText = useEditorStore((s) => s.placeText);
+  const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
+  const moveCaption = useEditorStore((s) => s.moveCaption);
   const draft = useEditorStore((s) => s.draft);
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
   const dropComponent = useEditorStore((s) => s.dropComponent);
   const simulation = useEditorStore(freshSimulation);
   const animation = useEditorStore((s) => s.animation);
+  const showValues = useEditorStore((s) => s.showValues);
+  const nets = useEditorStore((s) => s.simulation?.nets);
+  // Values of an operating point next to the nodes and components (#102).
+  const valueLabels = useMemo(
+    () =>
+      showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
+    [showValues, simulation, nets, storeDoc],
+  );
+  // What the errors and warnings of the simulation point at (#253).
+  const marks = useMemo(
+    () => (simulation ? diagnosticMarks(storeDoc, simulation, nets ?? {}) : []),
+    [simulation, nets, storeDoc],
+  );
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
@@ -241,16 +318,44 @@ export function SchematicCanvas() {
 
   // While dragging, show the dragged items (and the wires they pull) at their new place.
   const doc = drag
-    ? moveItems(storeDoc, drag.ids, drag.delta)
+    ? moveItems(storeDoc, drag.ids, drag.delta, { detach: drag.detach })
     : partTarget && wirePart
-      ? moveWirePart(storeDoc, wirePart, partTarget)
+      ? moveWirePart(storeDoc, wirePart, partTarget.target, partTarget.grab)
       : storeDoc;
-  const freePins = useMemo(() => unconnectedPins(doc), [doc]);
+  // While dragging, the free pins are those left once dropped: a pin landing on a wire is cut in
+  // as the drop would do, and what touches is connected (see `unconnectedPins`).
+  const freePins = useMemo(() => {
+    if (exporting) return [];
+    if (drag) {
+      const dropped = connectPinsOnWires(connectPinsOnWires(doc, { comps: drag.ids }), {
+        wires: new Set(drag.ids),
+      });
+      return unconnectedPins(dropped);
+    }
+    if (partTarget && wirePart) {
+      return unconnectedPins(connectPinsOnWires(doc, { wires: new Set([wirePart.wire]) }));
+    }
+    return unconnectedPins(doc);
+  }, [doc, exporting, drag, partTarget, wirePart]);
+  // Names and values of the components: those placed automatically avoid what is around them.
+  const captions = useMemo(() => layoutCaptions(doc), [doc]);
+  /** Unconnected pin names of each component: the only pins that keep their square. */
+  const freePinsByComp = useMemo(() => {
+    const byComp = new Map<string, Set<string>>();
+    for (const p of freePins) {
+      const pins = byComp.get(p.comp) ?? new Set<string>();
+      pins.add(p.pin);
+      byComp.set(p.comp, pins);
+    }
+    return byComp;
+  }, [freePins]);
+  /** What is drawn as selected (nothing in an exported image). */
+  const shownSelection = exporting ? [] : selection;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
-  const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
+  const dragIds = (c: { id: string }): ReadonlySet<string> =>
     new Set(selection.includes(c.id) ? selection : [c.id]);
-  const deltaFrom = (c: PlacedComponent, position: GridPoint): GridPoint => ({
+  const deltaFrom = (c: { position: GridPoint }, position: GridPoint): GridPoint => ({
     x: position.x - c.position.x,
     y: position.y - c.position.y,
   });
@@ -316,8 +421,52 @@ export function SchematicCanvas() {
       zoomIn: () => zoomAt(BUTTON_ZOOM_STEP, centre),
       zoomOut: () => zoomAt(1 / BUTTON_ZOOM_STEP, centre),
       fit: fitView,
+      show: (area) => setViewport((v) => showViewport(v, area, size.width, size.height)),
+      exportImage: (options) => new Promise((done) => setExporting({ options, done })),
     });
   }, [size, zoomAt, fitView]);
+
+  /** The circuit drawn on a white or transparent background, as a PNG (null: nothing to draw). */
+  const renderImage = ({ transparent }: ImageOptions): Promise<Blob | null> => {
+    const stage = stageRef.current;
+    const layer = contentRef.current;
+    const box = layer?.getClientRect();
+    if (!stage || !layer || !box || box.width === 0 || box.height === 0) {
+      return Promise.resolve(null);
+    }
+    const scale = stage.scaleX();
+    const margin = EXPORT_MARGIN * scale;
+    const drawn = layer.toCanvas({
+      x: box.x - margin,
+      y: box.y - margin,
+      width: box.width + 2 * margin,
+      height: box.height + 2 * margin,
+      pixelRatio: EXPORT_PIXEL_RATIO / scale,
+    });
+    const image = document.createElement("canvas");
+    image.width = drawn.width;
+    image.height = drawn.height;
+    const ctx = image.getContext("2d");
+    if (!ctx) return Promise.resolve(null);
+    if (!transparent) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, image.width, image.height);
+    }
+    ctx.drawImage(drawn, 0, 0);
+    return new Promise((done) => image.toBlob(done, "image/png"));
+  };
+
+  // Image export: once drawn without the editing marks, render the circuit (with its captions)
+  // on a white (or transparent) background, whatever the zoom and the part shown on screen.
+  useEffect(() => {
+    if (!exporting) return;
+    // On the next frame: the layers then show the schematic drawn for the export.
+    const frame = requestAnimationFrame(() => {
+      setExporting(null);
+      void renderImage(exporting.options).then(exporting.done);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [exporting]);
 
   const onWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -328,13 +477,16 @@ export function SchematicCanvas() {
 
   /**
    * Right click without moving: leaves the wire being drawn or the current tool (like Escape);
-   * with the select tool, opens the menu of the component clicked.
+   * with the select tool, opens the menu of the component (or text) clicked.
    */
   const rightClick = (press: Press, e: MouseEvent) => {
     const s = useEditorStore.getState();
     if (s.draft) s.cancelDraft();
     else if (s.tool.kind !== "select") s.cancel();
-    else if (press.componentId && s.doc.components.some((c) => c.id === press.componentId)) {
+    else if (
+      press.componentId &&
+      [...s.doc.components, ...s.doc.texts].some((c) => c.id === press.componentId)
+    ) {
       if (!s.selection.includes(press.componentId)) s.select([press.componentId]);
       const box = containerRef.current?.getBoundingClientRect();
       if (box) setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
@@ -397,14 +549,15 @@ export function SchematicCanvas() {
 
   /**
    * Left press in the void with the select tool: dragging draws a selection rectangle, which
-   * selects what is entirely inside it (Shift adds to the selection). A click without moving
-   * clears the selection. Escape while drawing drops the rectangle.
+   * selects what is entirely inside it, sections of wires included. With Shift, it toggles what
+   * touches it instead (see `selectInRect`). A click without moving clears the selection (not
+   * with Shift). Escape while drawing drops the rectangle.
    */
   const startBand = (e: MouseEvent) => {
     endPress.current?.();
     const start = pointerAt(e);
     if (!start) return;
-    const additive = e.shiftKey;
+    const touching = e.shiftKey;
     const from = { x: e.clientX, y: e.clientY };
     let rect: GridRect | null = null;
 
@@ -413,18 +566,17 @@ export function SchematicCanvas() {
       const p = pointerAt(ev);
       if (!p) return;
       rect = rectFrom(start, p);
-      setBand(rect);
+      setBand({ rect, touching });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
       const s = useEditorStore.getState();
       if (!rect) {
-        if (!additive) s.select([]);
+        if (!touching) s.select([]);
         return;
       }
-      const inside = itemsInRect(s.doc, rect);
-      s.select(additive ? [...new Set([...s.selection, ...inside])] : inside);
+      s.selectInRect(rect, touching ? "touching" : "inside");
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape") return;
@@ -471,12 +623,12 @@ export function SchematicCanvas() {
       if (!target && g.x === start.x && g.y === start.y) return;
       if (target && g.x === target.x && g.y === target.y) return;
       target = g;
-      setPartTarget(g);
+      setPartTarget({ grab: start, target: g });
     };
     const onUp = (ev: MouseEvent) => {
       if (ev.button !== 0) return;
       stop();
-      if (target) dropWirePart(part, target);
+      if (target) dropWirePart(part, target, start);
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key !== "Escape" || !target) return;
@@ -499,7 +651,7 @@ export function SchematicCanvas() {
   };
 
   /** Ends a wire part drag: moves it, and keeps it selected where it landed. */
-  const dropWirePart = (part: WirePart, target: GridPoint) => {
+  const dropWirePart = (part: WirePart, target: GridPoint, grab: GridPoint) => {
     const s = useEditorStore.getState();
     const before = wirePartPoints(s.doc, part);
     if (!before) return;
@@ -508,10 +660,13 @@ export function SchematicCanvas() {
     const [a, b] = before;
     if (part.kind === "segment" && a && b) {
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      on = a.y === b.y ? { x: mid.x, y: target.y } : { x: target.x, y: mid.y };
+      on =
+        a.y === b.y
+          ? { x: mid.x + target.x - grab.x, y: target.y }
+          : { x: target.x, y: mid.y + target.y - grab.y };
     }
-    const landing = wirePartAt(moveWirePart(s.doc, part, target), part.wire, on);
-    s.moveWirePart(target, landing?.kind === part.kind ? landing : null);
+    const landing = wirePartAt(moveWirePart(s.doc, part, target, grab), part.wire, on);
+    s.moveWirePart(target, landing?.kind === part.kind ? landing : null, grab);
   };
 
   const onMouseDown = (e: KonvaEventObject<MouseEvent>) => {
@@ -532,6 +687,15 @@ export function SchematicCanvas() {
     } else if (tool.kind === "place") {
       const p = pointerGrid();
       if (p) placeAt(p);
+    } else if (tool.kind === "paste") {
+      const p = pointerGrid();
+      if (p) pasteAt(p);
+    } else if (tool.kind === "text") {
+      const p = pointerGrid();
+      if (!p) return;
+      placeText(p);
+      // The new text is selected: type its content in the properties panel.
+      focusInspector();
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -544,8 +708,27 @@ export function SchematicCanvas() {
   /** `c` as it is in the store (the one drawn may be shifted by the drag in progress). */
   const storeComponent = (c: PlacedComponent): PlacedComponent =>
     storeDoc.components.find((x) => x.id === c.id) ?? c;
+  const storeText = (t: EditorText): EditorText => storeDoc.texts.find((x) => x.id === t.id) ?? t;
+
+  /**
+   * While dragging `item`: shows the items that follow it moved by `delta` (with Ctrl, `detach`,
+   * the wires stay where they are).
+   */
+  const dragTo = (item: { id: string }, delta: GridPoint, detach: boolean) =>
+    setDrag((d) =>
+      d && d.delta.x === delta.x && d.delta.y === delta.y && d.detach === detach
+        ? d
+        : { ids: d?.ids ?? dragIds(item), delta, detach },
+    );
+  /** End of a drag of `item` by `delta`: moves it with the rest of the selection. */
+  const dropAt = (item: { id: string }, delta: GridPoint, detach: boolean) => {
+    setDrag(null);
+    if (!selection.includes(item.id)) select([item.id]);
+    moveSelection(delta, { detach });
+  };
 
   const closeMenu = useCallback(() => setMenu(null), []);
+  const closeEditing = useCallback(() => setEditing(null), []);
 
   const selectItem = (id: string, e: KonvaEventObject<MouseEvent>) => {
     if (tool.kind !== "select") return;
@@ -581,6 +764,19 @@ export function SchematicCanvas() {
         }
       : null;
 
+  // Pasted or duplicated items, centred on the pointer until a click drops them.
+  const pasteGhost = useMemo(() => {
+    if (tool.kind !== "paste" || !pointer) return null;
+    const clip = tool.clip;
+    const anchor = clipAnchor(clip);
+    const ids = new Set([
+      ...clip.components.map((c) => c.id),
+      ...clip.wires.map((w) => w.id),
+      ...clip.junctions.map((j) => j.id),
+    ]);
+    return moveItems(clip, ids, { x: pointer.x - anchor.x, y: pointer.y - anchor.y });
+  }, [tool, pointer]);
+
   return (
     <div
       ref={containerRef}
@@ -590,7 +786,13 @@ export function SchematicCanvas() {
         position: "relative",
         overflow: "hidden",
         background: COLORS.background,
-        cursor: panning ? "grabbing" : tool.kind === "select" ? "default" : "crosshair",
+        cursor: panning
+          ? "grabbing"
+          : tool.kind === "select"
+            ? "default"
+            : tool.kind === "text"
+              ? "text"
+              : "crosshair",
       }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={onDragOver}
@@ -609,93 +811,175 @@ export function SchematicCanvas() {
         onMouseMove={onMouseMove}
         onMouseLeave={() => setPointer(null)}
       >
-        <Layer listening={false}>
-          <Grid viewport={viewport} width={size.width} height={size.height} />
-        </Layer>
-        <Layer>
-          <Wires
-            doc={doc}
-            selection={selection}
-            part={tool.kind === "select" ? wirePart : null}
-            onSelect={tool.kind === "select" ? selectItem : undefined}
-            onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
-            onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
-          />
-          {doc.components.map((c) => (
-            <ComponentSymbol
-              key={c.id}
-              component={c}
-              selected={selection.includes(c.id)}
-              draggable={tool.kind === "select"}
-              onSelect={(e) => selectItem(c.id, e)}
-              onContextPress={() => {
-                rightPressed.current = c.id;
-              }}
-              onDrag={(position) => {
-                const delta = deltaFrom(storeComponent(c), position);
-                setDrag((d) =>
-                  d && d.delta.x === delta.x && d.delta.y === delta.y
-                    ? d
-                    : { ids: d?.ids ?? dragIds(c), delta },
+        <CanvasColorsContext value={canvasColors}>
+          <Layer listening={false} visible={!exporting}>
+            <Grid viewport={viewport} width={size.width} height={size.height} />
+          </Layer>
+          <Layer ref={contentRef}>
+            {/* Hidden while something is dragged: the marks are those of the document simulated. */}
+            {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
+            <Wires
+              doc={doc}
+              selection={shownSelection}
+              part={tool.kind === "select" && !exporting ? wirePart : null}
+              segments={tool.kind === "select" && !exporting ? segments : []}
+              onSelect={tool.kind === "select" ? selectItem : undefined}
+              onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
+              onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
+            />
+            {doc.components.map((c) => (
+              <ComponentSymbol
+                key={c.id}
+                component={c}
+                selected={shownSelection.includes(c.id)}
+                markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
+                captions={captions.get(c.id)}
+                onCaptionDrag={(kind, centre) => resolveCaptionDrop(doc, c.id, kind, centre)}
+                onCaptionMove={(kind, centre) => {
+                  if (!selection.includes(c.id)) select([c.id]);
+                  moveCaption(c.id, kind, centre);
+                }}
+                draggable={tool.kind === "select"}
+                onSelect={(e) => selectItem(c.id, e)}
+                onContextPress={() => {
+                  rightPressed.current = c.id;
+                }}
+                onDrag={(position, detach) =>
+                  dragTo(c, deltaFrom(storeComponent(c), position), detach)
+                }
+                onMove={(position, detach) =>
+                  dropAt(c, deltaFrom(storeComponent(c), position), detach)
+                }
+                onDoubleClick={
+                  tool.kind === "select"
+                    ? () => {
+                        select([c.id]);
+                        // A component with no value to type (ground) goes to the panel instead.
+                        if (mainParam(getDef(c.type), c.params)) setEditing(c.id);
+                        else focusInspector();
+                      }
+                    : undefined
+                }
+                onPinMouseDown={
+                  tool.kind === "select"
+                    ? (pin) => {
+                        startWireFrom(pinPosition(c, pin));
+                        trackPointer();
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {doc.texts.map((t) => (
+              <FreeText
+                key={t.id}
+                text={t}
+                selected={shownSelection.includes(t.id)}
+                draggable={tool.kind === "select"}
+                onSelect={(e) => selectItem(t.id, e)}
+                onContextPress={() => {
+                  rightPressed.current = t.id;
+                }}
+                onDrag={(position, detach) => dragTo(t, deltaFrom(storeText(t), position), detach)}
+                onMove={(position, detach) => dropAt(t, deltaFrom(storeText(t), position), detach)}
+                onDoubleClick={
+                  tool.kind === "select"
+                    ? () => {
+                        select([t.id]);
+                        focusInspector();
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {!drag &&
+              valueLabels.map((l) => {
+                const width = 80;
+                const x = l.position.x * GRID;
+                const y = l.position.y * GRID;
+                const at = {
+                  above: { x: x - width / 2, y: y - 16, align: "center" },
+                  below: { x: x - width / 2, y: y + 4, align: "center" },
+                  right: { x: x + 6, y: y - 6, align: "left" },
+                  left: { x: x - width - 2, y: y - 6, align: "right" },
+                }[l.side];
+                return (
+                  <Text
+                    key={l.key}
+                    text={l.text}
+                    {...at}
+                    width={width}
+                    fontSize={11}
+                    fontStyle="bold"
+                    fill={
+                      l.kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel
+                    }
+                    listening={false}
+                  />
                 );
-              }}
-              onMove={(position) => {
-                setDrag(null);
-                if (!selection.includes(c.id)) select([c.id]);
-                moveSelection(deltaFrom(storeComponent(c), position));
-              }}
-              onDoubleClick={
-                tool.kind === "select"
-                  ? () => {
-                      select([c.id]);
-                      focusInspector({ value: true });
-                    }
-                  : undefined
-              }
-              onPinMouseDown={
-                tool.kind === "select"
-                  ? (pin) => {
-                      startWireFrom(pinPosition(c, pin));
-                      trackPointer();
-                    }
-                  : undefined
-              }
-            />
-          ))}
-          {freePins.map((p) => (
-            <Circle
-              key={`${p.comp}/${p.pin}`}
-              x={p.position.x * GRID}
-              y={p.position.y * GRID}
-              radius={UNCONNECTED_RADIUS * GRID}
-              fill="rgba(220, 38, 38, 0.15)"
-              stroke={COLORS.pin}
-              strokeWidth={1.5}
-              listening={false}
-            />
-          ))}
-          {ghost && <ComponentSymbol component={ghost} ghost />}
-          {band && (
-            <Rect
-              x={band.min.x * GRID}
-              y={band.min.y * GRID}
-              width={(band.max.x - band.min.x) * GRID}
-              height={(band.max.y - band.min.y) * GRID}
-              fill="rgba(37, 99, 235, 0.08)"
-              stroke={COLORS.selected}
-              strokeWidth={1 / viewport.scale}
-              dash={[4 / viewport.scale, 4 / viewport.scale]}
-              listening={false}
-            />
+              })}
+            {freePins.map((p) => (
+              <Circle
+                key={`${p.comp}/${p.pin}`}
+                x={p.position.x * GRID}
+                y={p.position.y * GRID}
+                radius={UNCONNECTED_RADIUS * GRID}
+                fill={canvasColors.freePinFill}
+                stroke={canvasColors.pin}
+                strokeWidth={1.5}
+                listening={false}
+              />
+            ))}
+            {ghost && !exporting && <ComponentSymbol component={ghost} ghost />}
+            {pasteGhost && !exporting && (
+              <>
+                <Group opacity={0.5} listening={false}>
+                  <Wires doc={pasteGhost} selection={[]} />
+                </Group>
+                {pasteGhost.components.map((c) => (
+                  <ComponentSymbol key={c.id} component={c} ghost />
+                ))}
+                {pasteGhost.texts.map((t) => (
+                  <FreeText key={t.id} text={t} ghost />
+                ))}
+              </>
+            )}
+            {tool.kind === "text" && pointer && !exporting && (
+              <FreeText text={{ id: "ghost", position: pointer, content: NEW_TEXT }} ghost />
+            )}
+            {band && !exporting && (
+              // Solid: what is entirely inside. Dashed and green: what touches it (Shift).
+              <Rect
+                x={band.rect.min.x * GRID}
+                y={band.rect.min.y * GRID}
+                width={(band.rect.max.x - band.rect.min.x) * GRID}
+                height={(band.rect.max.y - band.rect.min.y) * GRID}
+                fill={band.touching ? canvasColors.bandTouchFill : canvasColors.bandFill}
+                stroke={band.touching ? canvasColors.bandTouch : canvasColors.selected}
+                strokeWidth={1 / viewport.scale}
+                dash={band.touching ? [4 / viewport.scale, 4 / viewport.scale] : undefined}
+                listening={false}
+              />
+            )}
+            {tool.kind === "wire" && !exporting && (
+              <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
+            )}
+          </Layer>
+          {animation.on && simulation && animatable(simulation) && (
+            <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
           )}
-          {tool.kind === "wire" && (
-            <WireDraft doc={doc} points={draft?.points ?? null} pointer={pointer} />
-          )}
-        </Layer>
-        {animation.on && simulation && animatable(simulation) && (
-          <CurrentLayer doc={storeDoc} result={simulation} settings={animation} />
-        )}
+        </CanvasColorsContext>
       </Stage>
+      <ErrorBubbles
+        doc={doc}
+        viewport={viewport}
+        onPick={(comp, param) => {
+          select([comp]);
+          focusInspector({ param });
+        }}
+        marks={doc === storeDoc ? marks : []}
+        onPickMark={(m) => select([...m.components, ...m.wires, ...m.junctions])}
+      />
       <AnimationControls />
       <div
         style={{
@@ -719,7 +1003,7 @@ export function SchematicCanvas() {
             padding: "1px 8px",
             border: `1px solid ${UI.border}`,
             borderRadius: 4,
-            background: "#ffffff",
+            background: UI.surface,
             color: COLORS.text,
             cursor: "pointer",
           }}
@@ -728,6 +1012,7 @@ export function SchematicCanvas() {
         </button>
         <span>{Math.round(viewport.scale * 100)} %</span>
       </div>
+      {editing && <ValuePopover componentId={editing} viewport={viewport} onClose={closeEditing} />}
       {menu && (
         <ContextMenu
           x={menu.x}
@@ -736,6 +1021,7 @@ export function SchematicCanvas() {
           onClose={closeMenu}
         />
       )}
+      <CloseDialog />
     </div>
   );
 }

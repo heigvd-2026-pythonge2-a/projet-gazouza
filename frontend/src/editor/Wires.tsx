@@ -4,7 +4,7 @@ import { Circle, Group, Line, Rect } from "react-konva";
 
 import {
   anchorAt,
-  endPosition,
+  connectionDots,
   routeThrough,
   routeTo,
   wirePartPoints,
@@ -13,7 +13,7 @@ import {
   type GridPoint,
   type WirePart,
 } from "../store";
-import { COLORS, GRID } from "./theme";
+import { GRID, useCanvasColors } from "./theme";
 
 const WIRE_WIDTH = 2;
 /** Clickable width of a wire, in pixels. */
@@ -24,30 +24,13 @@ const HANDLE = 8;
 
 const flat = (points: readonly GridPoint[]) => points.flatMap((p) => [p.x * GRID, p.y * GRID]);
 
-/** Points where a dot is drawn: junctions, and pins that two or more wires attach to. */
-function dotPositions(doc: EditorDoc): { id: string; position: GridPoint }[] {
-  const pins = new Map<string, { count: number; position: GridPoint }>();
-  for (const w of doc.wires) {
-    for (const end of [w.from, w.to]) {
-      if (!("comp" in end)) continue;
-      const key = `pin-${end.comp}-${end.pin}`;
-      const entry = pins.get(key) ?? { count: 0, position: endPosition(doc, end) };
-      pins.set(key, { ...entry, count: entry.count + 1 });
-    }
-  }
-  return [
-    ...doc.junctions.map((j) => ({ id: j.id, position: j.position })),
-    ...[...pins]
-      .filter(([, pin]) => pin.count >= 2)
-      .map(([id, pin]) => ({ id, position: pin.position })),
-  ];
-}
-
 interface WiresProps {
   doc: EditorDoc;
   selection: readonly string[];
   /** Bend or segment selected on its own, highlighted. */
   part?: WirePart | null;
+  /** Wire sections selected with the selection rectangle, highlighted. */
+  segments?: readonly WirePart[];
   /** Left press on a wire or junction, with the select tool. */
   onSelect?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   /** Left press on a wire (instead of `onSelect`), to pick one of its bends or segments. */
@@ -56,16 +39,18 @@ interface WiresProps {
   onWireDoubleClick?: (id: string) => void;
 }
 
-/** Wires of the document, and the dots of their junctions. */
+/** Wires of the document, and the connection dots (see `connectionDots`). */
 export function Wires({
   doc,
   selection,
   part = null,
+  segments = [],
   onSelect,
   onWirePress,
   onWireDoubleClick,
 }: WiresProps) {
-  const color = (id: string) => (selection.includes(id) ? COLORS.selected : COLORS.wire);
+  const colors = useCanvasColors();
+  const color = (id: string) => (selection.includes(id) ? colors.selected : colors.wire);
   const press = (id: string) => (e: KonvaEventObject<MouseEvent>) => {
     if (e.evt.button === 0) onSelect?.(id, e);
   };
@@ -93,16 +78,29 @@ export function Wires({
           }}
         />
       ))}
+      {segments.map((seg) => {
+        const points = wirePartPoints(doc, seg);
+        return points ? (
+          <Line
+            key={`${seg.wire}/${seg.index}`}
+            points={flat(points)}
+            stroke={colors.selected}
+            strokeWidth={WIRE_WIDTH + 1}
+            lineCap="round"
+            listening={false}
+          />
+        ) : null;
+      })}
       {partPoints?.length === 2 && (
         <Line
           points={flat(partPoints)}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={WIRE_WIDTH + 1}
           lineCap="round"
           listening={false}
         />
       )}
-      {dotPositions(doc).map((d) => (
+      {connectionDots(doc).map((d) => (
         <Circle
           key={d.id}
           x={d.position.x * GRID}
@@ -110,7 +108,7 @@ export function Wires({
           radius={DOT_RADIUS}
           fill={color(d.id)}
           hitStrokeWidth={WIRE_HIT}
-          listening={onSelect !== undefined && !d.id.startsWith("pin-")}
+          listening={onSelect !== undefined && d.junction !== undefined}
           onMouseDown={press(d.id)}
         />
       ))}
@@ -120,8 +118,8 @@ export function Wires({
           y={partPoints[0].y * GRID - HANDLE / 2}
           width={HANDLE}
           height={HANDLE}
-          fill="#ffffff"
-          stroke={COLORS.selected}
+          fill={colors.background}
+          stroke={colors.selected}
           strokeWidth={1.5}
           listening={false}
         />
@@ -139,6 +137,7 @@ interface WireDraftProps {
 
 /** Wire being drawn (dashed), and a ring on what its end would attach to under the pointer. */
 export function WireDraft({ doc, points, pointer }: WireDraftProps) {
+  const colors = useCanvasColors();
   // Routing goes around the components: only redo it when the clicks or the document change,
   // and for the last segment when the pointer moves to another grid point.
   const path = useMemo(() => (points ? routeThrough(doc, points) : []), [doc, points]);
@@ -157,7 +156,7 @@ export function WireDraft({ doc, points, pointer }: WireDraftProps) {
       {preview && (
         <Line
           points={flat(preview)}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={WIRE_WIDTH}
           dash={[6, 4]}
           lineCap="round"
@@ -169,7 +168,7 @@ export function WireDraft({ doc, points, pointer }: WireDraftProps) {
           x={pointer.x * GRID}
           y={pointer.y * GRID}
           radius={DOT_RADIUS + 3}
-          stroke={COLORS.selected}
+          stroke={colors.selected}
           strokeWidth={1.5}
         />
       )}

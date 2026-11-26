@@ -140,6 +140,10 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
     for param in ctype.used_params(comp.params):
         value = comp.params.get(param.name, "").strip()
         if not value:
+            if ctype.spice is None and param.kind == "choice":
+                # Drawing only (the direction of a label): never in the netlist, and files
+                # saved before the parameter existed lack it. Absent means its default.
+                continue
             report.error("MISSING_PARAM", f"{who} : « {param.label} » n'est pas renseigné.", target)
         elif param.kind == "choice":
             if value not in {o.value for o in param.options}:

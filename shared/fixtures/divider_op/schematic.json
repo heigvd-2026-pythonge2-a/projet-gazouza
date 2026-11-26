@@ -25,7 +25,7 @@
         "x": 4,
         "y": -2
       },
-      "rotation": 90,
+      "rotation": 270,
       "mirror": false,
       "params": {
         "resistance": "1k"
@@ -71,10 +71,10 @@
       "id": "c6",
       "type": "label",
       "position": {
-        "x": 0,
-        "y": -3
+        "x": -1,
+        "y": -2
       },
-      "rotation": 0,
+      "rotation": 180,
       "mirror": false,
       "params": {
         "net": "in"
@@ -84,8 +84,8 @@
       "id": "c7",
       "type": "label",
       "position": {
-        "x": 8,
-        "y": -3
+        "x": 9,
+        "y": -2
       },
       "rotation": 0,
       "mirror": false,
@@ -106,12 +106,7 @@
         "comp": "c2",
         "pin": "1"
       },
-      "points": [
-        {
-          "x": 0,
-          "y": -2
-        }
-      ]
+      "points": []
     },
     {
       "id": "w2",
@@ -123,12 +118,7 @@
         "comp": "c3",
         "pin": "1"
       },
-      "points": [
-        {
-          "x": 8,
-          "y": -2
-        }
-      ]
+      "points": []
     },
     {
       "id": "w3",
@@ -173,6 +163,24 @@
         "comp": "c7",
         "pin": "1"
       }
+    }
+  ],
+  "texts": [
+    {
+      "id": "t1",
+      "position": {
+        "x": -2,
+        "y": -7
+      },
+      "content": "Diviseur de tension"
+    },
+    {
+      "id": "t2",
+      "position": {
+        "x": 10,
+        "y": -1
+      },
+      "content": "Sortie attendue : 5 V"
     }
   ]
 }
