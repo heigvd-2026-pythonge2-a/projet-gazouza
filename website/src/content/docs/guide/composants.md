@@ -53,6 +53,10 @@ La **direction** (panneau Propriétés) change seulement la forme du drapeau, pa
 | Sortie | Pointe à l'opposé de la broche : le signal sort du circuit |
 | Bidirectionnelle | Pointe des deux côtés |
 
+Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) branché sur l'étiquette,
+pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
+débranche. `R` fait le tour des côtés libres seulement.
+
 ## Formes d'onde des sources
 
 Une source de tension ou de courant a une **forme d'onde**. L'inspecteur n'affiche que les
