@@ -84,6 +84,18 @@ describe("nodeToSvg", () => {
     );
   });
 
+  it("keeps the lines Konva wrapped a long text into", () => {
+    const text = {
+      ...node("Text", { text: "very_long_net_name", width: 80 }),
+      textArr: [{ text: "very_long_net_" }, { text: "name" }],
+    };
+    const svg = parse(`<svg xmlns="http://www.w3.org/2000/svg">${nodeToSvg(text)}</svg>`);
+    expect([...svg.querySelectorAll("tspan")].map((l) => l.textContent)).toEqual([
+      "very_long_net_",
+      "name",
+    ]);
+  });
+
   it("marks bold texts and half-transparent groups", () => {
     expect(nodeToSvg(node("Text", { text: "5 V", fontStyle: "bold" }))).toContain(
       'font-weight="bold"',

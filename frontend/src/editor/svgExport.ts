@@ -10,6 +10,8 @@ export interface SvgSourceNode {
   /** Local transform of the node (position, rotation, scale), as a 2D matrix [a b c d e f]. */
   getTransform(): { getMatrix(): number[] };
   getChildren?: () => SvgSourceNode[];
+  /** Lines of a text as Konva laid them out, wrapped to its width (`Konva.Text`). */
+  textArr?: readonly { text: string }[];
 }
 
 /** Area of the schematic the SVG shows, in canvas units. */
@@ -90,7 +92,11 @@ function transformAttr(node: SvgSourceNode): string {
 }
 
 /** The lines of a Konva text, each with its baseline and anchor. */
-function textElement(attrs: Record<string, unknown>, transform: string): string | null {
+function textElement(
+  attrs: Record<string, unknown>,
+  transform: string,
+  laidOut?: readonly { text: string }[],
+): string | null {
   const text = str(attrs.text) ?? "";
   if (text === "") return null;
   const fill = paint(str(attrs.fill) ?? "black");
@@ -112,7 +118,9 @@ function textElement(attrs: Record<string, unknown>, transform: string): string 
     style.includes("bold") ? 'font-weight="bold"' : "",
     style.includes("italic") ? 'font-style="italic"' : "",
   ].filter(Boolean);
-  const lines = text.split("\n").map((line, i) => {
+  // The lines as drawn on the canvas (a long name wraps there), else as typed.
+  const rows = laidOut && laidOut.length > 0 ? laidOut.map((l) => l.text) : text.split("\n");
+  const lines = rows.map((line, i) => {
     const y = padding + lineHeight * (i + 0.5) + size * BASELINE_FROM_MIDDLE;
     return `<tspan x="${num(x)}" y="${num(y)}">${escape(line)}</tspan>`;
   });
@@ -166,7 +174,7 @@ export function nodeToSvg(node: SvgSourceNode): string {
       return `<circle${transform}${opacityAttr} r="${num(nr(attrs.radius, 0))}" ${look}/>`;
     }
     case "Text": {
-      const element = textElement(attrs, transform);
+      const element = textElement(attrs, transform, node.textArr);
       if (!element) return "";
       return opacity < 1 ? `<g${opacityAttr}>${element}</g>` : element;
     }
