@@ -38,6 +38,7 @@ import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { DiagnosticHalos } from "./DiagnosticHalos";
+import { EmptyCanvasHint } from "./EmptyCanvasHint";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport, showViewport } from "./fitView";
@@ -970,6 +971,7 @@ export function SchematicCanvas() {
           )}
         </CanvasColorsContext>
       </Stage>
+      <EmptyCanvasHint />
       <ErrorBubbles
         doc={doc}
         viewport={viewport}
