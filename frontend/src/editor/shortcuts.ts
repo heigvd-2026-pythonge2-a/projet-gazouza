@@ -67,6 +67,9 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: "Composants",
     items: [
       { keys: "1 à 9", action: "Choisir l'un des neuf premiers outils de la palette" },
+      { keys: "Ctrl+F", action: "Rechercher un composant dans la palette" },
+      { keys: "Entrée (recherche)", action: "Choisir le premier composant trouvé" },
+      { keys: "Échap (recherche)", action: "Effacer la recherche" },
       { keys: "Clic (outil composant)", action: "Poser le composant" },
       { keys: "Échap ou clic droit", action: "Arrêter de poser" },
     ],
