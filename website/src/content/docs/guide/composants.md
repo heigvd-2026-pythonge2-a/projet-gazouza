@@ -18,6 +18,14 @@ de code. Les symboles suivent la norme **CEI 60617**.
 | Source de courant | `I` | `+`, `-` | Forme d'onde (voir ci-dessous) |
 | Masse | — | `1` | — |
 | Étiquette de nœud | — | `1` | Nom du nœud (`out`), direction |
+| Diode | `D` | `A` (anode), `K` (cathode) | Modèle (Signal) |
+| Diode Zener | `D` | `A`, `K` | Tension Zener (`5,1 V`) |
+| LED | `D` | `A`, `K` | Couleur (Rouge) |
+| Ampli-op idéal | `X` | `+`, `-`, `out` | Modèle (Idéal) |
+| Ampli-op réel | `X` | `+`, `-`, `out`, `V+`, `V-` | Modèle (Générique) |
+| Transistor NPN | `Q` | `C`, `B`, `E` | Modèle (Usage général) |
+| Transistor PNP | `Q` | `C`, `B`, `E` | Modèle (Usage général) |
+| MOSFET canal N | `M` | `D`, `G`, `S` | Modèle (Usage général) |
 
 Le **préfixe** est la première lettre du nom du composant (`R1`, `Rcharge`). Tu peux renommer
 un composant, mais son nom doit garder ce préfixe et rester unique.
@@ -68,17 +76,42 @@ Comme en SPICE, un courant positif circule **dans la source** de la broche `+` v
 `-`.
 :::
 
-## Prévus
+## Semi-conducteurs et amplis-op
 
-Le cahier des charges prévoit d'ajouter les composants suivants (jalon S6-8). Leurs broches
-sont déjà fixées dans le format de schéma.
+Ces composants n'ont pas de valeur à saisir : tu choisis leur **modèle** dans le panneau
+Propriétés. Chaque modèle est un jeu de paramètres SPICE (`.model` ou `.subckt`) stocké dans la
+bibliothèque et ajouté automatiquement à la netlist. Ce sont des modèles génériques, aux valeurs
+typiques des fiches techniques des composants cités : pas les modèles exacts des fabricants.
 
-| Famille | Composants | Broches |
+### Diodes
+
+| Composant | Modèles | Utilisation |
 |---|---|---|
-| Diodes | Signal, redressement, Zener, LED | `A` (anode), `K` (cathode) |
-| Amplis-op | Idéal | `+`, `-`, `out` |
-| Amplis-op | Réel | `+`, `-`, `out`, `V+`, `V-` |
-| Transistors bipolaires | NPN, PNP | `C`, `B`, `E` |
-| MOSFET | Canal N | `D`, `G`, `S` |
+| Diode | Signal (type 1N4148), Redressement (type 1N4007) | Chute d'environ 0,6 à 0,7 V en direct |
+| Diode Zener | 3,3 V, 5,1 V, 12 V | Montée en inverse, elle maintient sa tension Zener |
+| LED | Rouge, Verte | Chute d'environ 1,8 V (rouge) ou 2,2 V (verte) en direct |
 
-Leurs modèles SPICE (`.model`, `.subckt`) sont stockés directement dans la bibliothèque.
+Le courant passe de l'anode `A` vers la cathode `K`. Sur le symbole, la cathode est le côté de
+la barre.
+
+### Amplis-op
+
+| Composant | Modèle | Comportement |
+|---|---|---|
+| Ampli-op idéal | Idéal (gain 10⁶, sans limite) | Pas d'alimentation, la sortie peut prendre n'importe quelle tension |
+| Ampli-op réel | Générique (type 741 : gain 10⁵, 1 MHz) | Alimenté par `V+` et `V-`, la sortie sature avant les alimentations |
+
+:::caution[Alimenter l'ampli-op réel]
+Les broches `V+` et `V-` de l'ampli-op réel doivent être reliées à des sources de tension (par
+exemple +15 V et -15 V). Si tu en oublies une, la simulation refuse de démarrer avec l'erreur
+[`PIN_NOT_CONNECTED`](/projet-gazouza/guide/erreurs/). Sa sortie sature environ 1,5 V avant les
+alimentations : entre -13,5 V et +13,5 V avec ±15 V.
+:::
+
+### Transistors
+
+| Composant | Modèle | Broches |
+|---|---|---|
+| Transistor NPN | Usage général (type 2N3904) | `C` (collecteur), `B` (base), `E` (émetteur) |
+| Transistor PNP | Usage général (type 2N3906) | `C`, `B`, `E` |
+| MOSFET canal N | Usage général (type 2N7000, seuil 2 V) | `D` (drain), `G` (grille), `S` (source) |
