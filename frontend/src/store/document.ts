@@ -70,6 +70,13 @@ export interface EditorDoc {
 
 export const emptyDoc = (): EditorDoc => ({ components: [], wires: [], junctions: [], texts: [] });
 
+/** True when the schematic holds nothing at all: no component, wire, junction or text. */
+export const isEmptyDoc = (doc: EditorDoc): boolean =>
+  doc.components.length === 0 &&
+  doc.wires.length === 0 &&
+  doc.junctions.length === 0 &&
+  doc.texts.length === 0;
+
 // --- Geometry -------------------------------------------------------------------------------
 
 /** Size of the free texts, in grid units: font size, line height and (estimated) letter width. */

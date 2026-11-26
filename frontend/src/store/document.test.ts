@@ -10,6 +10,7 @@ import {
   deleteItems,
   freeMove,
   emptyDoc,
+  isEmptyDoc,
   endPosition,
   moveItems,
   nextIndexed,
@@ -386,5 +387,26 @@ describe("connection dots (#245)", () => {
     // A junction of two wires (older files) gets no dot.
     const two = { ...doc, wires: doc.wires.slice(0, 2) };
     expect(connectionDots(two)).toEqual([]);
+  });
+});
+
+describe("isEmptyDoc", () => {
+  it("counts the wires and junctions too", () => {
+    expect(isEmptyDoc(emptyDoc())).toBe(true);
+    expect(
+      isEmptyDoc({
+        ...emptyDoc(),
+        wires: [{ id: "w1", from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, points: [] }],
+      }),
+    ).toBe(false);
+    expect(isEmptyDoc({ ...emptyDoc(), junctions: [{ id: "j1", position: { x: 0, y: 0 } }] })).toBe(
+      false,
+    );
+    expect(
+      isEmptyDoc({
+        ...emptyDoc(),
+        texts: [{ id: "t1", position: { x: 0, y: 0 }, content: "Note" }],
+      }),
+    ).toBe(false);
   });
 });
