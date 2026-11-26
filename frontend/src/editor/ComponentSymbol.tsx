@@ -7,6 +7,7 @@ import {
   captionSize,
   getDef,
   layoutCaptions,
+  ledColor,
   symbolBounds,
   symbolOf,
   type Caption,
@@ -30,8 +31,18 @@ function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
   if (container) container.style.cursor = cursor;
 }
 
-function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }) {
-  const common = { stroke: color, strokeWidth: STROKE, listening: false } as const;
+function SymbolShapeNode({
+  shape,
+  color,
+  lightColor = color,
+}: {
+  shape: SymbolShape;
+  color: string;
+  /** Colour of the lines of `tone: "light"` (the light of an LED). */
+  lightColor?: string;
+}) {
+  const stroke = shape.kind === "line" && shape.tone === "light" ? lightColor : color;
+  const common = { stroke, strokeWidth: STROKE, listening: false } as const;
   switch (shape.kind) {
     case "line":
       return <Line {...common} points={shape.points.map((v) => v * GRID)} lineCap="round" />;
@@ -242,7 +253,12 @@ export function ComponentSymbol({
           dash={[4, 4]}
         />
         {symbolOf(def, c.params).map((shape, i) => (
-          <SymbolShapeNode key={i} shape={shape} color={color} />
+          <SymbolShapeNode
+            key={i}
+            shape={shape}
+            color={color}
+            lightColor={c.type === "led" && !selected ? ledColor(c.params) : color}
+          />
         ))}
         {def.pins
           .filter((pin) => !markedPins || markedPins.has(pin.name))

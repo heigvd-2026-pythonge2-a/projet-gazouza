@@ -94,6 +94,13 @@ typiques des fiches techniques des composants cités : pas les modèles exacts d
 Le courant passe de l'anode `A` vers la cathode `K`. Sur le symbole, la cathode est le côté de
 la barre.
 
+Les flèches de lumière d'une LED prennent la couleur choisie. Après une simulation, la LED
+**s'allume** sur le schéma : son triangle se remplit de sa couleur, avec un halo autour, d'autant
+plus fort que le courant est grand. L'échelle suit la façon dont l'œil perçoit la lumière : la LED
+paraît éteinte sous 0,1 mA environ, déjà bien visible à 2 mA, et à pleine luminosité vers 20 mA.
+Elle reste éteinte en inverse. Après un `.tran`, l'animation du courant fait varier la luminosité
+au fil du temps : un montage clignotant clignote sur le schéma.
+
 ### Amplis-op
 
 | Composant | Modèle | Comportement |

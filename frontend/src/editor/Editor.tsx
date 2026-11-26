@@ -52,6 +52,7 @@ import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { useFileDrop } from "./fileDrop";
 import { CurrentLayer } from "./CurrentLayer";
+import { LedGlow } from "./LedGlow";
 import { focusInspector } from "./inspectorFocus";
 import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
@@ -915,6 +916,18 @@ export function SchematicCanvas() {
           <Layer ref={contentRef}>
             {/* Hidden while something is dragged: the marks are those of the document simulated. */}
             {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
+            {/* Hidden while something is dragged, like the marks: they are those of the document. */}
+            {doc === storeDoc &&
+              simulation &&
+              (simulation.errors ?? []).length === 0 &&
+              (simulation.analysis === "op" ||
+                (simulation.analysis === "tran" && animation.on)) && (
+                <LedGlow
+                  doc={storeDoc}
+                  result={simulation}
+                  animated={simulation.analysis === "tran"}
+                />
+              )}
             {highlightedComponent && <ComponentHighlight component={highlightedComponent} />}
             {highlightedNodes.map(({ node, strong }, i) => (
               <NodeHighlight key={i} doc={storeDoc} node={node} strong={strong} />
