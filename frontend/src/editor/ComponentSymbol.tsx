@@ -146,6 +146,8 @@ interface ComponentSymbolProps {
   onMove?: (position: { x: number; y: number }, detach: boolean) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
+  /** The pointer enters a clickable pin (its name) or leaves it (null). */
+  onPinHover?: (pin: string | null) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
   /**
@@ -175,6 +177,7 @@ export function ComponentSymbol({
   onDrag,
   onMove,
   onPinMouseDown,
+  onPinHover,
   onDoubleClick,
   markedPins,
   captions,
@@ -259,8 +262,14 @@ export function ComponentSymbol({
               width={PIN_HIT * GRID}
               height={PIN_HIT * GRID}
               fill="rgba(0,0,0,0)"
-              onMouseEnter={(e) => setCursor(e, "crosshair")}
-              onMouseLeave={(e) => setCursor(e, "")}
+              onMouseEnter={(e) => {
+                setCursor(e, "crosshair");
+                onPinHover?.(pin.name);
+              }}
+              onMouseLeave={(e) => {
+                setCursor(e, "");
+                onPinHover?.(null);
+              }}
               onMouseDown={(e) => {
                 if (e.evt.button !== 0) return;
                 // Keep the press from reaching the group, which would select and drag it.
