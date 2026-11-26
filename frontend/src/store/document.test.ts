@@ -402,5 +402,11 @@ describe("isEmptyDoc", () => {
     expect(isEmptyDoc({ ...emptyDoc(), junctions: [{ id: "j1", position: { x: 0, y: 0 } }] })).toBe(
       false,
     );
+    expect(
+      isEmptyDoc({
+        ...emptyDoc(),
+        texts: [{ id: "t1", position: { x: 0, y: 0 }, content: "Note" }],
+      }),
+    ).toBe(false);
   });
 });
