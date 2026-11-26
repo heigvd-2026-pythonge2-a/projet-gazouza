@@ -37,6 +37,7 @@ describe("setLibrary", () => {
       ["passive", ["resistor", "capacitor", "inductor"]],
       ["source", ["voltage_source", "current_source"]],
       ["connection", ["ground", "label"]],
+      ["semiconductor", ["diode", "zener", "led"]],
     ]);
   });
 
