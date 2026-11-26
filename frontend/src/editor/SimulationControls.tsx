@@ -87,7 +87,7 @@ function SourceSelect(props: {
       {props.caption}
       <select
         aria-label={props.label}
-        title={props.sources.length > 0 ? props.title : "Pose d'abord une source sur le schéma"}
+        title={props.sources.length > 0 ? props.title : "Posez d'abord une source sur le schéma"}
         value={chosen?.id ?? ""}
         disabled={simulating || props.sources.length === 0}
         onChange={(e) => {
