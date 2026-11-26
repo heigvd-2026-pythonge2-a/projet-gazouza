@@ -96,9 +96,8 @@ describe("voltageArrows (#290)", () => {
     const [u] = voltageArrows(doc, result, netlist.nets, new Set(["c2"]));
     expect(u?.label.text).toBe("5 V");
     const i = currentArrows(doc, result).find((a) => a.key === "i:c2")!;
-    // Receiver convention: the voltage arrow points the other way.
-    const d = direction(i);
-    expect(direction(u!)).toEqual({ x: -d.x || 0, y: -d.y || 0 });
+    // Receiver: along the voltage drop, the voltage arrow goes the same way as the current.
+    expect(direction(u!)).toEqual(direction(i));
   });
 
   /** A transistor (Q1) at the origin, base on the left, nodes c, b and e on its pins. */
@@ -121,14 +120,14 @@ describe("voltageArrows (#290)", () => {
     return { doc, nets: { c: ["wc"], b: ["wb"], e: ["we"] } };
   }
 
-  it("always shows V_CE of a transistor, pointing at the collector, away from the base", () => {
+  it("always shows V_CE of a transistor, from the collector to the emitter, away from the base", () => {
     const { doc, nets } = transistor();
     const result = opResult({ c: 5, b: 0.7, e: 0 });
     const arrows = voltageArrows(doc, result, nets);
     expect(arrows).toHaveLength(1);
     const [vce] = arrows;
     expect(vce?.label.text).toBe("V_CE = 5 V");
-    expect(direction(vce!)).toEqual({ x: 0, y: -1 });
+    expect(direction(vce!)).toEqual({ x: 0, y: 1 });
     // C and E are on x = 1, the base on the left: the arrow is on the right.
     expect(vce!.from.x).toBeGreaterThan(1);
     expect(vce?.label.side).toBe("right");
@@ -142,11 +141,11 @@ describe("voltageArrows (#290)", () => {
     const result = opResult({ c: 0, b: 4.3, e: 5 });
     const arrows = voltageArrows(doc, result, nets, new Set([doc.components[0]!.id]));
     expect(arrows.map((a) => a.label.text)).toEqual(["V_EC = 5 V", "V_EB = 700 mV"]);
-    // The arrow points at the emitter, the more positive pin (at the top of a PNP).
+    // The arrow goes from the emitter, the more positive pin (at the top of a PNP), to the collector.
     const q = doc.components[0]!;
     const e = pinPosition(q, "E");
     const c = pinPosition(q, "C");
-    expect(direction(arrows[0]!)).toEqual({ x: Math.sign(e.x - c.x), y: Math.sign(e.y - c.y) });
+    expect(direction(arrows[0]!)).toEqual({ x: Math.sign(c.x - e.x), y: Math.sign(c.y - e.y) });
     expect(voltageName("C", "E", -1)).toBe("V_EC");
     expect(voltageName("C", "E", 0)).toBe("V_CE");
   });

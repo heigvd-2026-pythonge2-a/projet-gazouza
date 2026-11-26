@@ -38,12 +38,13 @@ Après une analyse `.op`, Psice écrit les résultats directement sur le schéma
 |---|---|
 | **Potentiel** d'un nœud (violet) | Tension du nœud par rapport à la masse, écrite sur un de ses fils, ou à côté d'une broche pour un nœud sans fil. |
 | **Flèche de courant** (orange) | Pointe de flèche sur une patte du composant, dans le **sens réel** du courant ; la valeur est donnée sans signe. |
-| **V_CE** d'un transistor bipolaire, **V_DS** d'un MOSFET (violet) | Flèche le long du transistor, pointe vers la borne la plus positive, avec la valeur. |
+| **V_CE** d'un transistor bipolaire, **V_DS** d'un MOSFET (violet) | Flèche le long du transistor, du collecteur vers l'émetteur (du drain vers la source), avec la valeur. |
 
 Survole un composant (ou sélectionne-le) pour voir en plus la **tension à ses bornes** : une
-flèche le long du composant, pointée vers la borne la plus positive (convention française). Sur
-une résistance, elle va en sens contraire du courant (convention récepteur) ; sur une source qui
-fournit de l'énergie, dans le même sens (convention générateur). Pour un transistor, le survol
+flèche le long du composant, de la borne la plus positive vers l'autre : elle suit la **chute de
+tension**, comme en cours en Suisse. Sur une résistance, elle va dans le même sens que le courant
+(convention récepteur) ; sur une source qui fournit de l'énergie, en sens contraire (convention
+générateur). Pour un transistor, le survol
 ajoute **V_BE** (ou **V_GS**).
 
 Le nom de la tension met toujours la borne la plus positive en premier, pour que la valeur soit
