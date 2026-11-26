@@ -4,7 +4,19 @@
   "prefix": null,
   "pins": [{ "name": "1", "x": 0, "y": 0 }],
   "params": [
-    { "name": "net", "label": "Nom du nœud", "default": "out", "kind": "text" }
+    { "name": "net", "label": "Nom du nœud", "default": "out", "kind": "text" },
+    {
+      "name": "direction",
+      "label": "Direction",
+      "default": "none",
+      "kind": "choice",
+      "options": [
+        { "value": "none", "label": "Aucune" },
+        { "value": "input", "label": "Entrée" },
+        { "value": "output", "label": "Sortie" },
+        { "value": "bidir", "label": "Bidirectionnelle" }
+      ]
+    }
   ],
   "spice": null
 }
