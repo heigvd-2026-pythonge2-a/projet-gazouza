@@ -11,7 +11,7 @@ Pydantic only checks the *shape* of the data here. Checks that need the whole ci
 pointing to a missing component, a duplicate id or name...) are done by the netlist module and
 reported as diagnostics, not as HTTP errors.
 
-Unknown keys in a schematic, component, junction or wire are ignored on purpose
+Unknown keys in a schematic, component, junction, wire or text are ignored on purpose
 (`extra="ignore"`): a file saved by a newer editor (extra display metadata) still opens.
 Wire ends and diagnostic targets are the exception: they forbid extra keys, because that is how
 their shapes stay mutually exclusive.
@@ -29,6 +29,19 @@ class Point(BaseModel):
 
     x: int
     y: int
+
+
+class TextOffset(BaseModel):
+    """Where a text of a component is drawn, relative to the component, in grid units.
+
+    The offset points to the centre of the text, in the component's own frame (before the
+    mirror and the rotation): a text placed by hand turns with its component and stays on the
+    same side of it, while the text itself is always drawn upright. The editor snaps it to half
+    a grid step.
+    """
+
+    x: float
+    y: float
 
 
 # --- Wire ends ------------------------------------------------------------------------------
@@ -90,6 +103,15 @@ class Component(BaseModel):
         description="Parameter values as typed by the user, SPICE suffixes allowed "
         "(e.g. {'resistance': '1k'}). For a label: {'net': 'out'}.",
     )
+    name_offset: TextOffset | None = Field(
+        default=None,
+        description="Position of the name (or of a label's net name), set by hand. "
+        "Absent: placed automatically.",
+    )
+    value_offset: TextOffset | None = Field(
+        default=None,
+        description="Position of the value, set by hand. Absent: placed automatically.",
+    )
 
 
 class Junction(BaseModel):
@@ -99,6 +121,16 @@ class Junction(BaseModel):
 
     id: str = Field(description="Stable unique id (e.g. 'j1').")
     position: Point
+
+
+class Text(BaseModel):
+    """Free text on the schematic (title, note...). Decorative only: the netlist ignores it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(description="Stable unique id (e.g. 't1').")
+    position: Point = Field(description="Top-left corner of the text.")
+    content: str = Field(max_length=2000, description="Text as typed, line breaks included.")
 
 
 class Wire(BaseModel):
@@ -128,3 +160,4 @@ class Schematic(BaseModel):
     components: list[Component] = Field(default_factory=list)
     junctions: list[Junction] = Field(default_factory=list)
     wires: list[Wire] = Field(default_factory=list)
+    texts: list[Text] = Field(default_factory=list, description="Ignored by the netlist.")

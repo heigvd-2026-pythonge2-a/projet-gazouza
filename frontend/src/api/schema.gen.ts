@@ -168,6 +168,10 @@ export interface components {
       params?: {
         [key: string]: string;
       };
+      /** @description Position of the name (or of a label's net name), set by hand. Absent: placed automatically. */
+      name_offset?: components["schemas"]["TextOffset"] | null;
+      /** @description Position of the value, set by hand. Absent: placed automatically. */
+      value_offset?: components["schemas"]["TextOffset"] | null;
     };
     /** ComponentTarget */
     ComponentTarget: {
@@ -478,6 +482,11 @@ export interface components {
       junctions?: components["schemas"]["Junction"][];
       /** Wires */
       wires?: components["schemas"]["Wire"][];
+      /**
+       * Texts
+       * @description Ignored by the netlist.
+       */
+      texts?: components["schemas"]["Text"][];
     };
     /** SimulationRequest */
     SimulationRequest: {
@@ -503,6 +512,39 @@ export interface components {
       errors?: components["schemas"]["Diagnostic"][];
       /** Warnings */
       warnings?: components["schemas"]["Diagnostic"][];
+    };
+    /**
+     * Text
+     * @description Free text on the schematic (title, note...). Decorative only: the netlist ignores it.
+     */
+    Text: {
+      /**
+       * Id
+       * @description Stable unique id (e.g. 't1').
+       */
+      id: string;
+      /** @description Top-left corner of the text. */
+      position: components["schemas"]["Point"];
+      /**
+       * Content
+       * @description Text as typed, line breaks included.
+       */
+      content: string;
+    };
+    /**
+     * TextOffset
+     * @description Where a text of a component is drawn, relative to the component, in grid units.
+     *
+     *     The offset points to the centre of the text, in the component's own frame (before the
+     *     mirror and the rotation): a text placed by hand turns with its component and stays on the
+     *     same side of it, while the text itself is always drawn upright. The editor snaps it to half
+     *     a grid step.
+     */
+    TextOffset: {
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
     };
     /**
      * Trace

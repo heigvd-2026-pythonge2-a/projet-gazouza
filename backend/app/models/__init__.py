@@ -21,6 +21,8 @@ from app.models.schematic import (
     PinEnd,
     Point,
     Schematic,
+    Text,
+    TextOffset,
     Wire,
     WireEnd,
 )
@@ -64,6 +66,8 @@ __all__ = [
     "SimulationRequest",
     "SimulationResult",
     "Target",
+    "Text",
+    "TextOffset",
     "Trace",
     "TranAnalysis",
     "Wire",
