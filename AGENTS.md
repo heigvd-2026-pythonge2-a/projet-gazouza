@@ -91,6 +91,15 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   utilise `--milestone "<titre exact>"` (liste : `gh api repos/{owner}/{repo}/milestones`).
   En cas de doute entre deux jalons, demande à l'humain. Chaque tâche prévue d'un jalon a son
   issue dans la milestone dès le début du jalon, sinon le pourcentage d'avancement est faux.
+- **Assignation** : toute issue est assignée dès sa création à la ou aux personnes qui feront
+  le travail. Par défaut, c'est le propriétaire du module concerné (tableau « Qui possède
+  quoi ») ; si l'issue touche plusieurs modules, assigne chaque propriétaire concerné, et une
+  question va à qui doit y répondre. Logins GitHub (aussi dans
+  [`.github/CODEOWNERS`](.github/CODEOWNERS)) : Noé Guenin `Guenin04`, Noémi Voélin
+  `VOELINNOEMI`, Damien Bignens `Bignensdamien`, Antoine Bezençon `AntoineBezencon`. Avec
+  `gh` : `gh issue create --assignee <login>`, ou `gh issue edit <N> --add-assignee <login>`
+  (`--remove-assignee` si quelqu'un d'autre reprend la tâche). En cas de doute (`area: shared`,
+  tâche d'équipe), demande à l'humain.
 - **Releases** : le workflow [`release.yml`](.github/workflows/release.yml) construit
   l'application Windows sur un runner Windows (`build.ps1 -Verify`, qui lance aussi le
   `--self-check` du zip). Il ne tourne ni sur les PR ni sur `main`, seulement :
@@ -135,7 +144,7 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,
     `4-task.yml`, `5-question.yml`). Ce sont des formulaires : avec `gh issue create`,
     reprends leurs champs comme titres `###` dans le corps et pose toi-même les labels
-    indiqués dans le modèle, plus le label `area:` ;
+    indiqués dans le modèle, plus le label `area:`, la milestone et l'assignation ;
   - PR : `.github/pull_request_template.md`. Avec `gh pr create --body-file`, pars d'une
     copie de ce fichier, coche la checklist honnêtement (ne coche pas ce qui n'a pas été
     vérifié) et lie l'issue avec `Closes #N`.
