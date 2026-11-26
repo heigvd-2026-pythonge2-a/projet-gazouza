@@ -1,4 +1,5 @@
-// File > New / Open / Save, shared by the toolbar buttons and Ctrl+N / Ctrl+O / Ctrl+S.
+// File > New / Open / Save / Save as / Export, shared by the toolbar buttons and the shortcuts
+// (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S).
 //
 // Where the File System Access API exists (Chrome, Edge and WebView2, the engine of the pywebview
 // window on Windows), Open and Save use the system file dialogs and Save writes back to the file
@@ -13,18 +14,34 @@ import {
   serializeDoc,
   useEditorStore,
 } from "../store";
+import { exampleContent } from "./examples";
+import { exportImage as renderImage, type ImageOptions } from "./viewCommands";
 
-/** File types offered by the system file dialogs. */
-const PICKER_TYPES = [{ description: "Schéma Psice", accept: { "application/json": [".json"] } }];
+/** A file type offered by the system file dialogs. */
+export interface PickerType {
+  description: string;
+  accept: Record<string, string[]>;
+}
+
+/** File types of the schematic files. */
+const PICKER_TYPES: PickerType[] = [
+  { description: "Schéma Psice", accept: { "application/json": [".json"] } },
+];
+
+/** File type of an exported image. */
+const PNG_TYPES: PickerType[] = [{ description: "Image PNG", accept: { "image/png": [".png"] } }];
+
+/** Name proposed for an exported image. */
+export const IMAGE_FILE_NAME = "schema.png";
 
 /** The parts of the File System Access API used here (not in TypeScript's DOM types yet). */
 interface FilePickers {
   showOpenFilePicker(options: {
-    types: typeof PICKER_TYPES;
+    types: PickerType[];
     multiple?: boolean;
   }): Promise<FileSystemFileHandle[]>;
   showSaveFilePicker(options: {
-    types: typeof PICKER_TYPES;
+    types: PickerType[];
     suggestedName?: string;
   }): Promise<FileSystemFileHandle>;
 }
@@ -40,8 +57,8 @@ const pickers = (): FilePickers | null =>
  */
 let currentFile: { name: string; handle: FileSystemFileHandle | null } | null = null;
 
-/** True while a save is being written (a second Ctrl+S then does nothing). */
-let saving = false;
+/** The save being written, if any (a second Ctrl+S then waits for it instead of saving again). */
+let saving: Promise<boolean> | null = null;
 
 /** The user closed a file dialog without choosing a file. */
 const isCancel = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
@@ -58,6 +75,19 @@ function canDiscardChanges(): boolean {
 export function newFile() {
   if (!canDiscardChanges()) return;
   useEditorStore.getState().newDocument();
+  currentFile = null;
+}
+
+/**
+ * Opens an example circuit of the Examples menu (#226) with its analysis set in the toolbar. It is
+ * not tied to a file: saving it asks where, so the example itself is never overwritten.
+ */
+export function openExample(name: string) {
+  const example = exampleContent(name);
+  if (!example || !canDiscardChanges()) return;
+  const store = useEditorStore.getState();
+  store.openDocument(example.doc);
+  store.setAnalysis(example.analysis);
   currentFile = null;
 }
 
@@ -101,15 +131,17 @@ export function openFile() {
 }
 
 /** Writes `content` into the file of `handle`, replacing what it held. */
-async function write(handle: FileSystemFileHandle, content: string) {
+async function write(handle: FileSystemFileHandle, content: string | Blob) {
   const writable = await handle.createWritable();
   await writable.write(content);
   await writable.close();
 }
 
 /** Downloads `content` as a file named `name` (when the file dialogs are not available). */
-function download(name: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+function download(name: string, content: string | Blob) {
+  const blob =
+    content instanceof Blob ? content : new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = name;
@@ -148,12 +180,16 @@ export function saveRescueCopy() {
 }
 
 /**
- * Saves the schematic. The first time, asks where (system dialog); then writes to the same file.
- * Does nothing if the document is already saved in a file.
+ * Saves the schematic, even without changes (its file may have been deleted meanwhile, #94). The
+ * first time, or with `askWhere` (Save as), asks where (system dialog); then writes to the same
+ * file. If that file cannot be written any more, asks for another one.
+ *
+ * Resolves to true once the schematic is written, false if the user closed the file dialog or the
+ * file could not be written (the user is told). A call during a save waits for that save.
  */
-export function saveFile() {
+export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}): Promise<boolean> {
   const s = useEditorStore.getState();
-  if (saving || (currentFile && !isUnsaved(s))) return;
+  if (saving) return saving;
   const doc = s.doc;
   const content = serializeDoc(doc);
   const api = pickers();
@@ -162,24 +198,93 @@ export function saveFile() {
     download(name, content);
     currentFile = { name, handle: null };
     s.markSaved(doc);
-    return;
+    return Promise.resolve(true);
   }
-  saving = true;
-  void (async () => {
+  const pick = () =>
+    api.showSaveFilePicker({
+      types: PICKER_TYPES,
+      suggestedName: currentFile?.name ?? DEFAULT_FILE_NAME,
+    });
+  saving = (async () => {
     try {
-      const handle =
-        currentFile?.handle ??
-        (await api.showSaveFilePicker({
-          types: PICKER_TYPES,
-          suggestedName: currentFile?.name ?? DEFAULT_FILE_NAME,
-        }));
-      await write(handle, content);
+      let handle = askWhere ? null : (currentFile?.handle ?? null);
+      if (handle) {
+        try {
+          await write(handle, content);
+        } catch {
+          // Deleted, moved or read-only: save elsewhere instead.
+          handle = null;
+        }
+      }
+      if (!handle) {
+        handle = await pick();
+        await write(handle, content);
+      }
       currentFile = { name: handle.name, handle };
       useEditorStore.getState().markSaved(doc);
+      return true;
     } catch (error: unknown) {
       if (!isCancel(error)) window.alert("Impossible d'enregistrer le schéma dans ce fichier.");
+      return false;
     } finally {
-      saving = false;
+      saving = null;
     }
   })();
+  return saving;
+}
+
+/** Saves the schematic in a file chosen by the user (Ctrl+Shift+S). */
+export const saveFileAs = () => saveFile({ askWhere: true });
+
+/** Saves `content` in a new file, chosen with the system dialog or downloaded. */
+export async function saveNewFile(name: string, content: Blob, types: PickerType[]) {
+  const api = pickers();
+  if (!api) {
+    download(name, content);
+    return;
+  }
+  try {
+    const handle = await api.showSaveFilePicker({ types, suggestedName: name });
+    await write(handle, content);
+  } catch (error: unknown) {
+    if (!isCancel(error)) window.alert("Impossible d'enregistrer ce fichier.");
+  }
+}
+
+/** localStorage key of the last "transparent background" choice of the image export. */
+export const TRANSPARENT_EXPORT_KEY = "psice.export.transparent";
+
+/** Last "transparent background" choice of the image export (white by default). */
+export function exportTransparent(): boolean {
+  try {
+    return window.localStorage.getItem(TRANSPARENT_EXPORT_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Remembers the "transparent background" choice for the next exports. */
+export function setExportTransparent(transparent: boolean) {
+  try {
+    window.localStorage.setItem(TRANSPARENT_EXPORT_KEY, String(transparent));
+  } catch {
+    // Storage blocked: the choice is simply not kept.
+  }
+}
+
+/**
+ * Exports the schematic as a PNG image, to put in a report (#112): the whole circuit, without the
+ * grid nor the selection, on a white background, or a transparent one if asked (#195).
+ */
+export async function exportImage(options: ImageOptions = { transparent: false }) {
+  if (useEditorStore.getState().doc.components.length === 0) {
+    window.alert("Le schéma est vide : il n'y a rien à exporter.");
+    return;
+  }
+  const image = await renderImage(options);
+  if (!image) {
+    window.alert("Impossible de créer l'image du schéma.");
+    return;
+  }
+  await saveNewFile(IMAGE_FILE_NAME, image, PNG_TYPES);
 }

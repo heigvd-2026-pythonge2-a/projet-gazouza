@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
-import { paletteLayout } from "./paletteLayout";
+import { shortcutKey } from "./paletteLayout";
 import { SHORTCUT_GROUPS } from "./shortcuts";
 import { StatusBar } from "./StatusBar";
 
@@ -31,6 +31,29 @@ describe("StatusBar", () => {
     });
     expect(screen.getByText("2 éléments sélectionnés")).toBeInTheDocument();
     expect(screen.getByText("3 broches non connectées")).toBeInTheDocument();
+  });
+
+  it("says why a wire was not added, until the next change (#257)", () => {
+    render(<StatusBar />);
+    act(() => {
+      dropComponent("resistor", { x: 0, y: 0 });
+      dropComponent("resistor", { x: 4, y: 0 });
+      editorState().startWiring();
+      for (const [x, y] of [
+        [0, 2],
+        [4, 2],
+        [1, 2],
+        [1, 4],
+        [3, 4],
+        [3, 2],
+      ] as const) {
+        editorState().wireClick({ x, y });
+      }
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(/déjà reliés par des fils/);
+    act(() => editorState().setTool({ kind: "select" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText(/Clic : sélectionner/)).toBeInTheDocument();
   });
 
   it("opens and closes the shortcuts with the button, the ? key and Escape", async () => {
@@ -63,11 +86,13 @@ describe("StatusBar", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("lists the digit keys of every palette tool", () => {
-    const tools = paletteLayout().flatMap((g) => g.entries).length;
+  it("lists the digit keys of the palette tools", () => {
     const digits = SHORTCUT_GROUPS.flatMap((g) => g.items).find((i) =>
-      i.action.startsWith("Choisir l'outil de la palette"),
+      i.action.includes("outils de la palette"),
     );
-    expect(digits?.keys).toBe(`1 à ${Math.min(tools, 9)}`);
+    // The help names the whole key range: the palette has more tools than keys once the
+    // semiconductors are loaded, and fewer with the basic library.
+    expect(digits?.keys).toBe(`${shortcutKey(0)} à ${shortcutKey(8)}`);
+    expect(shortcutKey(9)).toBeUndefined();
   });
 });

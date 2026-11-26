@@ -1,8 +1,12 @@
+<p align="center">
+  <img src="docs/images/psice-logo.png" alt="Logo Psice : un P dont la patte se termine par une borne de circuit" width="480">
+</p>
+
 # Psice 
 
 [![CI](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)
 [![Couverture](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/coverage.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/actions/workflows/ci.yml)
-[![Issues ouvertes](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/issues.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues)
+[![Issues ouvertes](https://img.shields.io/github/issues-search/heigvd-2026-pythonge2-a/projet-gazouza?query=is%3Aissue%20is%3Aopen&label=issues%20ouvertes&color=0366d6)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues)
 ![Licence MIT](https://img.shields.io/badge/licence-MIT-blue)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white)
 ![React + TypeScript](https://img.shields.io/badge/React-TypeScript-3178c6?logo=typescript&logoColor=white)
@@ -10,18 +14,16 @@
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
 
 **Jalons :**
-[![S1-2](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-1.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/1)
-[![S3-5](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-2.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/2)
-[![S6-8](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-3.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/3)
-[![S9-10](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-4.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/4)
-[![S11-12](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/raw/badges/milestone-5.svg)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/5)
+[![S1-2](https://img.shields.io/github/milestones/progress-percent/heigvd-2026-pythonge2-a/projet-gazouza/1?label=S1-2)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/1)
+[![S3-5](https://img.shields.io/github/milestones/progress-percent/heigvd-2026-pythonge2-a/projet-gazouza/2?label=S3-5)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/2)
+[![S6-8](https://img.shields.io/github/milestones/progress-percent/heigvd-2026-pythonge2-a/projet-gazouza/3?label=S6-8)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/3)
+[![S9-10](https://img.shields.io/github/milestones/progress-percent/heigvd-2026-pythonge2-a/projet-gazouza/4?label=S9-10)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/4)
+[![S11-12](https://img.shields.io/github/milestones/progress-percent/heigvd-2026-pythonge2-a/projet-gazouza/5?label=S11-12)](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestone/5)
 
 Simulateur de circuits électroniques inspiré de LTspice, avec une interface moderne
 et ngspice comme moteur de simulation.
 
 Projet de groupe de 2ᵉ année — HEIG-VD.
-
-> ⚠️ Projet en cours de démarrage : ce README décrit les objectifs et l'architecture prévue.
 
 ---
 
@@ -115,6 +117,7 @@ projet-gazouza/
 ├── shared/
 │   ├── openapi.json         contrat d'API exporté (généré)
 │   └── fixtures/            circuits de référence partagés front/back
+├── website/                 site web et documentation (Astro Starlight)
 ├── AGENTS.md                instructions pour les assistants IA (+ CLAUDE.md)
 ├── build.ps1                build complet → application Windows
 └── README.md
@@ -129,7 +132,7 @@ projet-gazouza/
 - Windows 10 ou 11
 - Python 3.12+ & **uv** (`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
 - Node.js 22.12+ & **pnpm** (`corepack enable` : la version est fixée dans `frontend/package.json`)
-- ngspice placé dans `backend/vendor/ngspice/` *(procédure à compléter)*
+- ngspice (binaires Windows inclus dans `backend/vendor/ngspice/`)
 
 ### Lancer en mode développement
 
@@ -141,6 +144,11 @@ uv run uvicorn app.main:app --reload
 
 # Terminal 2 — frontend
 cd frontend
+pnpm install
+pnpm dev
+
+# Optionnel : site web / documentation (Astro Starlight)
+cd website
 pnpm install
 pnpm dev
 ```
@@ -213,6 +221,11 @@ Le script :
 Résultat : `dist/Psice/Psice.exe`, à distribuer sous forme de dossier zippé.
 Aucune installation n'est nécessaire sur la machine cible.
 
+Le workflow [`release.yml`](.github/workflows/release.yml) fait le même build sur GitHub : lancé à
+la main pour tester, ou sur un tag `vX.Y.Z` pour publier `Psice.zip` dans une
+[release](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/releases) (règles dans
+[AGENTS.md](AGENTS.md#conventions)).
+
 > Au premier lancement, Windows SmartScreen peut afficher un avertissement car l'exécutable
 > n'est pas signé : cliquer sur « Informations complémentaires » puis « Exécuter quand même ».
 
@@ -229,10 +242,11 @@ Aucune installation n'est nécessaire sur la machine cible.
 
 | Rôle | Responsabilité | Personne |
 |---|---|---|
-| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | Noé Guenin  |
+| Éditeur de schéma | Canvas, placement, fils, sélection, zoom, annuler/rétablir | Noé Guenin |
 | Courbes et sondes | Visualiseur, sonde interactive, curseurs, mesures | Noémi Voélin |
 | Bibliothèque et netlist | Composants, modèles SPICE, génération de netlist, import `.asc`, API | Damien Bignens |
 | Simulation | Intégration ngspice, analyses, packaging | **Antoine Bezençon** |
+| Site web et dépôt | Site de documentation (`website/`), CI, réglages GitHub (labels, milestones, règles) | Noé Guenin |
 
 ### Jalons
 
@@ -256,7 +270,9 @@ ferme depuis la PR plutôt que d'en créer une nouvelle.
 ### Issues et labels
 
 Les tâches sont suivies dans GitHub Issues. Chaque issue (et chaque PR) porte en principe un
-label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`.
+label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`. Elle est
+aussi assignée dès sa création à qui fera le travail, par défaut le propriétaire du module
+concerné (voir [AGENTS.md](AGENTS.md)).
 
 | Famille | Labels | Usage |
 |---|---|---|

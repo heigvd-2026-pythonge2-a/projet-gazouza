@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import { COLORS, UI } from "../store";
+
 type Props = {
   /** Panel name in the message, e.g. "le schéma". */
   panel: string;
@@ -14,10 +16,10 @@ type State = { error: Error | null };
 
 const BUTTON = {
   padding: "4px 10px",
-  border: "1px solid #d1d5db",
+  border: `1px solid ${UI.inputBorder}`,
   borderRadius: 5,
-  background: "#ffffff",
-  color: "#374151",
+  background: UI.surface,
+  color: COLORS.text,
   font: "inherit",
   fontSize: 12,
   cursor: "pointer",
@@ -56,8 +58,8 @@ export class PanelErrorBoundary extends Component<Props, State> {
     );
     const box = {
       boxSizing: "border-box",
-      background: "#fef2f2",
-      color: "#7f1d1d",
+      background: UI.errorBackground,
+      color: UI.errorStrong,
       fontSize: 12,
     } as const;
     if (compact) {
@@ -79,7 +81,7 @@ export class PanelErrorBoundary extends Component<Props, State> {
         style={{ ...box, width: "100%", height: "100%", padding: 12, overflow: "auto" }}
       >
         <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Une erreur est survenue dans {panel}.</p>
-        <p style={{ margin: "0 0 10px", color: "#991b1b" }}>{error.message}</p>
+        <p style={{ margin: "0 0 10px", color: UI.error }}>{error.message}</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{buttons}</div>
       </div>
     );

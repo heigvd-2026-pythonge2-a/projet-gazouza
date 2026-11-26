@@ -10,6 +10,7 @@ import {
   timeSpan,
   type FlowEdge,
 } from "./currents";
+import { addComponent, emptyDoc, type PlacedComponent } from "./document";
 import { fixtureDoc, fixtureNames, fixtureResult } from "./testFixtures";
 
 const edge = (id: string, from: string, to: string): FlowEdge => ({
@@ -63,12 +64,94 @@ describe("solveFlows", () => {
     expect(flows.get("w")).toBeCloseTo(2);
   });
 
-  it("leaves out a loop made only of wires, and shows nothing on a zero-length wire", () => {
-    const edges = [edge("w1", "a", "b"), edge("w2", "b", "a"), edge("w0", "c", "c")];
-    const flows = solveFlows(edges, new Map());
-    expect(flows.has("w1")).toBe(false);
-    expect(flows.has("w2")).toBe(false);
+  it("shows nothing on a zero-length wire", () => {
+    const flows = solveFlows([edge("w0", "c", "c")], new Map());
     expect(flows.get("w0")).toBe(0);
+  });
+
+  it("sends the current the shortest way round a loop made only of wires (#258)", () => {
+    // R: a -> b (2 A). From b back to a, two ways: a short wire b -> c, and a long detour b -> c.
+    const p = (x: number, y: number) => ({ x, y });
+    const edges: FlowEdge[] = [
+      { ...edge("R", "a", "b"), kind: "component" },
+      { ...edge("short", "b", "c"), path: [p(0, 0), p(2, 0)] },
+      { ...edge("detour", "c", "b"), path: [p(2, 0), p(2, 3), p(0, 3), p(0, 0)] },
+      { ...edge("back", "c", "a"), path: [p(2, 0), p(5, 0)] },
+    ];
+    const flows = solveFlows(edges, new Map([["R", 2]]));
+    expect(flows.get("detour")).toBe(0);
+    expect(flows.get("short")).toBe(2);
+    expect(flows.get("back")).toBe(2);
+    for (const node of ["a", "b", "c"]) expect(netInflow(edges, flows, node)).toBe(0);
+  });
+
+  it("solves every wire, even with several loops of wires and links", () => {
+    // Two grounds (links to net:0) also joined by a wire, and a square of four wires.
+    const edges: FlowEdge[] = [
+      { ...edge("V", "g1", "top"), kind: "component" },
+      { ...edge("R", "top", "g2"), kind: "component" },
+      { ...edge("G1", "g1", "net:0"), kind: "link" },
+      { ...edge("G2", "g2", "net:0"), kind: "link" },
+      edge("wg", "g1", "g2"),
+      edge("s1", "top", "x"),
+      edge("s2", "x", "y"),
+      edge("s3", "y", "z"),
+      edge("s4", "z", "top"),
+    ];
+    const flows = solveFlows(
+      edges,
+      new Map([
+        ["V", 1],
+        ["R", 1],
+      ]),
+    );
+    expect(edges.every((e) => flows.has(e.id))).toBe(true);
+    for (const node of ["g1", "g2", "top", "x", "y", "z", "net:0"]) {
+      expect(netInflow(edges, flows, node)).toBeCloseTo(0);
+    }
+  });
+
+  it("animates both ends of a resistor joined to the ground by two ways of wires", () => {
+    // V1 (0,0) and R1 (4,0) in a loop; R1's pin 2 goes to V1's pin - straight along y = 2, and
+    // once more through a detour down to y = 5.
+    let doc = addComponent(emptyDoc(), {
+      type: "voltage_source",
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    doc = addComponent(doc, {
+      type: "resistor",
+      position: { x: 4, y: 0 },
+      rotation: 0,
+      mirror: false,
+    }).doc;
+    const [v1, r1] = doc.components as [PlacedComponent, PlacedComponent];
+    doc = {
+      ...doc,
+      wires: [
+        { id: "w1", from: { comp: v1.id, pin: "+" }, to: { comp: r1.id, pin: "1" }, points: [] },
+        { id: "w2", from: { comp: r1.id, pin: "2" }, to: { comp: v1.id, pin: "-" }, points: [] },
+        {
+          id: "w3",
+          from: { comp: r1.id, pin: "2" },
+          to: { comp: v1.id, pin: "-" },
+          points: [
+            { x: 4, y: 5 },
+            { x: 0, y: 5 },
+          ],
+        },
+      ],
+    };
+    const flows = solveFlows(
+      flowNetwork(doc),
+      new Map([
+        [v1.id, -0.005],
+        [r1.id, 0.005],
+      ]),
+    );
+    expect(flows.get("w2")).toBeCloseTo(0.005);
+    expect(flows.get("w3")).toBe(0);
   });
 
   it.each(fixtureNames())("respects Kirchhoff's current law on the %s fixture", (name) => {

@@ -11,11 +11,17 @@ développer sa partie contre ces fichiers sans attendre les autres :
 | `netlist.cir` | texte SPICE | Netlist (Damien) | ngspice (Antoine) |
 | `netlist.json` | `NetlistResult` | Netlist (Damien) | Moteur (Antoine), sondes (Noémi) |
 | `result.json` | `SimulationResult` | Moteur (Antoine) | Courbes et sondes (Noémi) |
+| `circuit.asc` | schéma LTspice | Import (Damien) | Import `.asc` (Damien) |
+
+`circuit.asc` est le même circuit dessiné dans LTspice. Le test `test_asc_gives_the_reference_netlist`
+(`backend/tests/test_import_asc.py`) vérifie que son import donne exactement `analysis.json` et
+`netlist.cir`, et `test_imported_asc_simulates` qu'il se simule sans erreur.
 
 À la racine, `library.json` est la réponse exacte de `GET /api/library` (liste de
 `LibraryComponent`), produite par la bibliothèque du backend (Damien) et utilisée par les tests
 de l'éditeur (Noé) à la place du backend. Le test `test_library_fixture_is_the_route_answer`
-échoue si elle n'est plus à jour : régénérez-la depuis la route.
+échoue si elle n'est plus à jour : régénérez-la avec `uv run python scripts/export_library.py`
+(dans `backend/`).
 
 Les tests `backend/tests/test_fixtures.py` vérifient que tous ces fichiers respectent le contrat
 (et que les fils, sources et correspondances pointent vers des éléments qui existent).
@@ -25,7 +31,7 @@ Si vous changez un modèle Pydantic, la CI vous forcera à mettre les fixtures �
 
 | Dossier | Circuit | Analyse | Ce qu'il montre |
 |---|---|---|---|
-| `divider_op` | Diviseur 10 V, R1 = R2 = 1 kΩ | `.op` | Étiquettes `in` / `out`, deux masses |
+| `divider_op` | Diviseur 10 V, R1 = R2 = 1 kΩ | `.op` | Étiquettes `in` / `out`, deux masses, texte libre (ignoré par la netlist) |
 | `rc_tran` | Échelon 0 → 5 V sur un RC (1 kΩ, 1 µF, τ = 1 ms), sur 5 ms | `.tran` | Source `pulse`, `max_step` |
 | `lowpass_ac` | Passe-bas RC (1 kΩ, 159,15 nF, fc = 1 kHz) | `.ac` | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
 | `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |
@@ -36,8 +42,11 @@ Les mêmes circuits sont expliqués pas à pas dans
 
 ## À savoir
 
-- Les fichiers `result.json` de `divider_op`, `rc_tran` et `half_wave_rectifier` contiennent les vraies sorties
-  produites par `ngspice-47` ; ceux de `lowpass_ac` et `loaded_divider_dc` restent
-  **calculés analytiquement** en attendant la prise en charge de `.ac` et `.dc`.
-- Les positions des composants et les coudes des fils sont indicatifs : ils dépendront des
-  positions de broches définies dans la bibliothèque. La netlist ne s'en sert pas.
+- Les fichiers `result.json` des cinq circuits (`divider_op`, `rc_tran`, `lowpass_ac`,
+  `loaded_divider_dc` et `half_wave_rectifier`) contiennent les vraies sorties produites par
+  `ngspice-47`.
+- Les schémas sont dessinés comme dans l'éditeur (ils s'ouvrent tels quels avec `?demo=<circuit>`,
+  et dans la démo en ligne du site) : fils horizontaux ou verticaux, qui ne traversent aucun
+  symbole et ne passent pas sur une broche. Le test `frontend/src/store/fixtureDrawings.test.ts`
+  le vérifie. La netlist ne se sert pas des positions : les redessiner ne change ni
+  `netlist.cir` ni `result.json`.

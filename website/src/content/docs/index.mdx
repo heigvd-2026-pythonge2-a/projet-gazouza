@@ -1,0 +1,182 @@
+---
+title: Simuler un circuit, sans apprendre SPICE
+description: Psice est un simulateur de circuits électroniques open source pour les étudiants de 1re et 2e année. Dessiner, simuler avec ngspice, mesurer d'un clic.
+template: splash
+hero:
+  tagline: Psice est un simulateur de circuits électroniques pensé pour les débutants. Dessine ton circuit, lance la simulation et lis tensions et courants d'un simple clic, sans taper une ligne de SPICE.
+  # The logo inline, so that it follows the theme and replays the animation of
+  # docs/images/psice-logo-animation.gif on hover (styles in src/styles/custom.css).
+  image:
+    html: |
+      <svg class="psice-hero-logo" viewBox="420.01 299.80 765.99 349.20" role="img" aria-label="Logo Psice, un P dont la patte se termine par une borne de circuit" xmlns="http://www.w3.org/2000/svg">
+      <circle class="pl-ring" cx="490.01" cy="579.00" r="22" fill="none" stroke="#2563EB" stroke-width="16"/>
+      <path class="pl-p" d="M490.01 557.00V357.80H552.01A62.99 62.99 0 0 1 552.01 483.78H490.01" pathLength="1" fill="none" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle class="pl-spark" r="11" fill="#FFFFFF" stroke="#2563EB" stroke-width="5"/>
+      <circle class="pl-dot" cx="490.01" cy="483.78" r="26" fill="#2563EB"/>
+      <g class="pl-letter" style="--i: 0"><path transform="translate(638.99 575) scale(0.146484 -0.146484)" d="M87 32V247Q217 148 374 148Q584 148 584 272Q584 307 566.0 331.5Q548 356 517.5 375.0Q487 394 445.5 409.0Q404 424 353 443Q290 468 239.5 496.0Q189 524 155.5 559.5Q122 595 105.0 640.0Q88 685 88 745Q88 819 123.0 875.5Q158 932 217.0 970.5Q276 1009 351.0 1028.5Q426 1048 506 1048Q648 1048 760 1005V802Q652 876 512 876Q468 876 432.5 867.0Q397 858 372.0 842.0Q347 826 333.0 803.5Q319 781 319 754Q319 721 333.0 698.0Q347 675 374.5 657.5Q402 640 440.5 625.5Q479 611 529 594Q595 567 647.5 539.0Q700 511 737.0 475.5Q774 440 794.0 393.5Q814 347 814 283Q814 205 778.0 147.0Q742 89 682.0 51.0Q622 13 543.5 -5.5Q465 -24 378 -24Q210 -24 87 32Z"/></g>
+      <g class="pl-letter" style="--i: 1"><path transform="translate(767.99 575) scale(0.146484 -0.146484)" d="M383 0H151V1024H383Z"/></g>
+      <g class="pl-letter" style="--i: 2"><path transform="translate(845.99 575) scale(0.146484 -0.146484)" d="M884 47Q761 -24 593 -24Q365 -24 225.0 118.5Q85 261 85 488Q85 741 235.5 894.5Q386 1048 638 1048Q778 1048 885 999V783Q778 863 657 863Q510 863 416.0 763.5Q322 664 322 503Q322 344 410.5 252.0Q499 160 648 160Q773 160 884 249Z"/></g>
+      <g class="pl-letter" style="--i: 3"><path transform="translate(986.99 575) scale(0.146484 -0.146484)" d="M1018 449H320Q324 307 407.5 230.0Q491 153 637 153Q801 153 938 251V64Q798 -24 568 -24Q342 -24 213.5 115.5Q85 255 85 508Q85 747 226.5 897.5Q368 1048 578 1048Q788 1048 903.0 913.0Q1018 778 1018 538ZM794 613Q793 738 735.0 807.5Q677 877 575 877Q475 877 405.5 804.0Q336 731 320 613Z"/></g>
+      <circle class="pl-pulse" cx="807.50" cy="373.50" r="19.55" fill="none" stroke="#DC2626" stroke-width="6"/>
+      <circle class="pl-pin" cx="807.50" cy="373.50" r="19.55" fill="#FADEDE" stroke="#DC2626" stroke-width="6"/>
+      </svg>
+  actions:
+    - text: Commencer
+      link: /projet-gazouza/demarrer/premier-circuit/
+      icon: right-arrow
+    - text: Essayer en ligne
+      link: /projet-gazouza/demarrer/essayer/
+      icon: rocket
+      variant: secondary
+    - text: Voir sur GitHub
+      link: https://github.com/heigvd-2026-pythonge2-a/projet-gazouza
+      icon: github
+      variant: minimal
+---
+
+import { Aside, Card, CardGrid, LinkButton, LinkCard, Steps } from '@astrojs/starlight/components';
+import AppShowcase from '../../components/AppShowcase.astro';
+import Roadmap from '../../components/Roadmap.astro';
+import Team from '../../components/Team.astro';
+
+<AppShowcase />
+
+<Aside type="caution" title="Psice est en cours de développement">
+	L'éditeur de schéma et la simulation (point de fonctionnement et analyse temporelle) fonctionnent
+	déjà, comme sur la capture ci-dessus. Les courbes, la sonde et l'import `.asc` depuis
+	l'interface arrivent dans les prochains jalons. Voir la
+	[feuille de route](/projet-gazouza/projet/feuille-de-route/).
+</Aside>
+
+<div class="psice-section">
+<span class="psice-kicker">Pourquoi Psice</span>
+
+## LTspice est puissant. Il est aussi intimidant.
+
+<p class="psice-lead">
+	Interface datée, directives à taper, résultats difficiles à lire : avec LTspice, on passe plus
+	de temps à apprendre l'outil qu'à comprendre le circuit. Psice garde le même moteur de
+	simulation éprouvé, ngspice, et cache la complexité derrière une interface moderne.
+</p>
+</div>
+
+<CardGrid stagger>
+	<Card title="Éditeur de schéma moderne" icon="pencil">
+		Glisse les composants, tire les fils depuis les broches, tourne avec <kbd>R</kbd>, annule
+		avec <kbd>Ctrl+Z</kbd>. Symboles selon la norme CEI 60617.
+	</Card>
+	<Card title="Aucune directive à taper" icon="setting">
+		Choisis l'analyse dans une fenêtre guidée : point de fonctionnement, temporelle,
+		fréquentielle (Bode) ou balayage DC.
+	</Card>
+	<Card title="Sonde au clic" icon="magnifier">
+		Clique sur un fil pour voir sa tension, sur un composant pour voir son courant. Le courant
+		peut même s'animer sur le schéma.
+	</Card>
+	<Card title="Des erreurs qui expliquent" icon="warning">
+		Pas de masse ? Broche en l'air ? Psice le dit en français et nomme le composant concerné.
+		Les broches non reliées sont marquées en rouge pendant que tu dessines.
+	</Card>
+	<Card title="Compatible LTspice" icon="random">
+		Importe les fichiers <code>.asc</code> de LTspice (composants du périmètre) pour reprendre
+		les circuits du cours.
+	</Card>
+	<Card title="Ouvert et transparent" icon="open-book">
+		Licence MIT, écrit en Python, le langage enseigné à la HEIG-VD : le simulateur n'est plus
+		une boîte noire.
+	</Card>
+</CardGrid>
+
+<div class="psice-section">
+<span class="psice-kicker">Comment ça marche</span>
+
+## Un premier circuit en moins de 15 minutes
+
+</div>
+
+<Steps>
+
+1. **Dessine.** Pose une source, une résistance, un condensateur et une masse depuis la palette,
+   puis relie-les avec des fils.
+
+2. **Règle les valeurs.** Double-clique sur un composant et tape sa valeur comme sur papier :
+   `1k`, `10u`, `4.7Meg`.
+
+3. **Simule.** Choisis l'analyse (par exemple temporelle sur 5 ms) et lance la simulation :
+   ngspice tourne en local, sans connexion Internet.
+
+4. **Mesure.** Clique sur un fil pour afficher sa courbe, place les curseurs et lis crête,
+   moyenne ou temps de montée.
+
+</Steps>
+
+<div class="psice-section">
+<span class="psice-kicker">Documentation</span>
+
+## Par où commencer ?
+
+</div>
+
+<CardGrid>
+	<LinkCard
+		title="Premier circuit"
+		description="Le tutoriel pas à pas : un circuit RC dessiné et simulé."
+		href="/projet-gazouza/demarrer/premier-circuit/"
+	/>
+	<LinkCard
+		title="Guide d'utilisation"
+		description="Éditeur, composants, unités, analyses, messages d'erreur, raccourcis."
+		href="/projet-gazouza/guide/editeur/"
+	/>
+	<LinkCard
+		title="Pour les développeurs"
+		description="Architecture, environnement de développement, format de schéma et API."
+		href="/projet-gazouza/developpeurs/architecture/"
+	/>
+	<LinkCard
+		title="Le projet"
+		description="L'équipe, la feuille de route, le logo et les licences."
+		href="/projet-gazouza/projet/equipe/"
+	/>
+</CardGrid>
+
+<div class="psice-section">
+<span class="psice-kicker">Feuille de route</span>
+
+## Où en est le projet ?
+
+<p class="psice-lead">
+	Psice est développé en douze semaines, découpées en cinq jalons.
+</p>
+</div>
+
+<Roadmap />
+
+<div class="psice-section">
+<span class="psice-kicker">L'équipe</span>
+
+## Un projet de groupe de 2ᵉ année, HEIG-VD
+
+</div>
+
+<Team />
+
+<div class="psice-section psice-cta">
+<span class="psice-kicker">À toi de jouer</span>
+
+## Dessine ton premier circuit
+
+<p class="psice-lead">
+	Le tutoriel se fait en moins de 15 minutes. Sur un ordinateur, la démo en ligne tourne dans le
+	navigateur, sans rien installer.
+</p>
+
+<div class="psice-cta-actions">
+	<LinkButton href="/projet-gazouza/demarrer/premier-circuit/" icon="right-arrow">
+		Commencer
+	</LinkButton>
+	<LinkButton href="/projet-gazouza/demarrer/essayer/" icon="rocket" variant="secondary">
+		Essayer en ligne
+	</LinkButton>
+</div>
+</div>

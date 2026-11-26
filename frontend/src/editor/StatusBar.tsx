@@ -10,6 +10,8 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer · F : ajuster la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
+  paste: "Clic : poser la copie · R : tourner · M : miroir · Échap ou clic droit : annuler",
+  text: "Clic : poser un texte, à écrire dans les propriétés · Échap : arrêter",
 };
 
 /** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */
@@ -50,10 +52,10 @@ function ShortcutsPanel({ onClose }: { onClose: () => void }) {
         maxHeight: "70vh",
         overflowY: "auto",
         padding: "10px 14px",
-        background: "#ffffff",
+        background: UI.surface,
         border: `1px solid ${UI.border}`,
         borderRadius: 6,
-        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
+        boxShadow: `0 4px 16px ${UI.shadow}`,
         fontSize: 12,
         color: COLORS.text,
         whiteSpace: "normal",
@@ -107,15 +109,28 @@ export function StatusBar() {
   const doc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
+  const segments = useEditorStore((s) => s.segments.length);
+  const notice = useEditorStore((s) => s.notice);
 
   const unconnected = useMemo(() => unconnectedPins(doc).length, [doc]);
 
   let selected = "";
   if (wirePart) {
     selected = wirePart.kind === "bend" ? "Sélection : coude de fil" : "Sélection : tronçon de fil";
+  } else if (segments > 0) {
+    const items = selection.length + segments;
+    selected =
+      items === 1
+        ? "Sélection : tronçon de fil"
+        : `${items} éléments sélectionnés (tronçons compris)`;
   } else if (selection.length === 1) {
     const c = doc.components.find((x) => x.id === selection[0]);
-    selected = c ? `Sélection : ${c.name ?? c.params.net ?? "masse"}` : "Sélection : fil";
+    const isText = doc.texts.some((t) => t.id === selection[0]);
+    selected = c
+      ? `Sélection : ${c.name ?? c.params.net ?? "masse"}`
+      : isText
+        ? "Sélection : texte"
+        : "Sélection : fil";
   } else if (selection.length > 1) {
     selected = `${selection.length} éléments sélectionnés`;
   }
@@ -137,7 +152,16 @@ export function StatusBar() {
         overflow: "hidden",
       }}
     >
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      {notice ? (
+        <span
+          role="status"
+          style={{ overflow: "hidden", textOverflow: "ellipsis", color: UI.warning }}
+        >
+          {notice}
+        </span>
+      ) : (
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      )}
       <span style={{ marginLeft: "auto" }}>{selected}</span>
       {unconnected > 0 && (
         <span
@@ -160,7 +184,7 @@ export function StatusBar() {
           height: 18,
           border: `1px solid ${help ? COLORS.selected : UI.border}`,
           borderRadius: 4,
-          background: help ? UI.activeBackground : "#ffffff",
+          background: help ? UI.activeBackground : UI.surface,
           color: help ? COLORS.selected : UI.muted,
           cursor: "pointer",
         }}

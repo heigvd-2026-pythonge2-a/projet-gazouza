@@ -1,0 +1,99 @@
+---
+/** The four team members and their module. */
+const team = [
+	{
+		name: 'Antoine Bezençon',
+		role: 'Chef de projet · Simulation',
+		work: 'Intégration ngspice, analyses, lanceur et packaging Windows.',
+		color: '#2563eb',
+	},
+	{
+		name: 'Damien Bignens',
+		role: 'Bibliothèque et netlist',
+		work: "Composants, modèles SPICE, génération de netlist, import .asc, API.",
+		color: '#0891b2',
+	},
+	{
+		name: 'Noé Guenin',
+		role: 'Éditeur de schéma · Site et dépôt',
+		work: 'Canvas, placement, fils, sélection, zoom, annuler / rétablir. Site web, CI et réglages GitHub.',
+		color: '#7c3aed',
+	},
+	{
+		name: 'Noémi Voélin',
+		role: 'Courbes et sondes',
+		work: 'Visualiseur, sonde interactive, curseurs, mesures.',
+		color: '#dc2626',
+	},
+];
+
+const initials = (name: string) =>
+	name
+		.split(' ')
+		.map((part) => part[0])
+		.join('');
+---
+
+<ul class="team not-content">
+	{
+		team.map((m) => (
+			<li>
+				<span class="avatar" style={`--c: ${m.color}`} aria-hidden="true">
+					{initials(m.name)}
+				</span>
+				<div>
+					<strong>{m.name}</strong>
+					<span class="role">{m.role}</span>
+					<p>{m.work}</p>
+				</div>
+			</li>
+		))
+	}
+</ul>
+
+<style>
+	.team {
+		list-style: none;
+		padding: 0;
+		margin: 1.5rem 0 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+		gap: 1rem;
+	}
+	li {
+		display: flex;
+		gap: 0.9rem;
+		align-items: flex-start;
+		padding: 1rem;
+		margin: 0;
+		background: var(--psice-card-bg);
+		border: 1px solid var(--psice-card-border);
+		border-radius: 0.9rem;
+	}
+	.avatar {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 2.8rem;
+		height: 2.8rem;
+		border-radius: 50%;
+		font-weight: 700;
+		color: #fff;
+		background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 55%, #0f172a));
+	}
+	strong {
+		display: block;
+		color: var(--sl-color-white);
+	}
+	.role {
+		display: block;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-accent);
+		font-weight: 600;
+	}
+	p {
+		margin: 0.35rem 0 0;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-2);
+	}
+</style>

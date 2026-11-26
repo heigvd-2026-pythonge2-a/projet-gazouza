@@ -1,0 +1,53 @@
+---
+title: Feuille de route
+description: Les jalons de Psice, les exigences du cahier des charges et leur état d'avancement.
+---
+
+import Roadmap from '../../../components/Roadmap.astro';
+
+Le projet est découpé en **cinq jalons**, chacun suivi par une
+[milestone GitHub](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/milestones), où
+l'on suit le pourcentage d'avancement.
+
+<Roadmap />
+
+## Exigences du cahier des charges
+
+Le [cahier des charges](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/blob/main/cahier-des-charges-psice.md)
+classe les exigences en trois priorités. Le projet est accepté quand toutes les exigences
+**Indispensable** et **Important** fonctionnent dans l'application livrée.
+
+| Priorité | Exigence |
+|---|---|
+| Indispensable | Éditeur de schéma 2D : placer, tourner, relier avec des fils, grille, zoom |
+| Indispensable | Simulation ngspice : point de fonctionnement (`.op`) et temporelle (`.tran`) |
+| Indispensable | Tensions de nœuds et courants de branches ; sonde au clic |
+| Indispensable | Courbes (zoom, curseurs) ; sauvegarde et ouverture des schémas (JSON) |
+| Important | Import des fichiers `.asc` LTspice (composants du périmètre) |
+| Important | Mesures sur les courbes : crête, moyenne, temps de montée |
+| Important | Export : schéma en PNG, courbes en CSV, netlist SPICE |
+| Important | Analyse fréquentielle (`.ac`, Bode), excitation AC configurée automatiquement |
+| Important | Balayage DC (`.dc`) |
+| Important | Animation du courant sur le schéma ; annuler / rétablir |
+| Bonus | FFT d'une courbe temporelle |
+
+## Composants du périmètre
+
+| Famille | Composants |
+|---|---|
+| Passifs | R, C, L |
+| Sources | Tension et courant : AC, DC, PULSE, SIN ; masse |
+| Diodes | Signal, redressement, Zener, LED |
+| Ampli-op | Modèles idéaux et réels |
+| Transistors | BJT (NPN / PNP) et MOSFET (canal N) |
+
+**Hors périmètre** : circuits numériques et logiques, conception de PCB, simulation RF, versions
+macOS / Linux, hébergement en ligne.
+
+## Livrables
+
+- Le code source sur GitHub ;
+- les tests automatisés du moteur (pytest, au moins 80 % de couverture) ;
+- l'application Windows zippée, ngspice inclus ;
+- le rapport de projet ;
+- une démonstration orale.

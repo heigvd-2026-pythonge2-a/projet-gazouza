@@ -44,9 +44,13 @@ def parse_value(text: str) -> float:
     match = VALUE.fullmatch(text.strip())
     if match is None:
         raise InvalidValueError(f"{text!r} is not a SPICE number")
-    value = float(match["number"])
+    # The suffix becomes a power of ten in the text itself ("10u" -> "10e-6"), so the value is
+    # exact: 10 * 1e-6 would give 9.999999999999999e-06.
+    mantissa, _, exponent = match["number"].lower().partition("e")
+    power = int(exponent or 0)
     if match["suffix"]:
-        value *= SUFFIXES[match["suffix"].lower()]
+        power += round(math.log10(SUFFIXES[match["suffix"].lower()]))
+    value = float(f"{mantissa}e{power}")
     # "1e999" or "1e300T" overflow to infinity: not a usable value.
     if not math.isfinite(value):
         raise InvalidValueError(f"{text!r} is too large")

@@ -60,13 +60,89 @@ describe("saving with the system file dialogs", () => {
     );
     expect(f.parseDoc(handle.written[0]!)).toEqual(f.state().doc);
 
-    // Saved already: nothing to do.
-    f.saveFile();
     f.state().dropComponent("capacitor", { x: 4, y: 0 });
     f.saveFile();
     await vi.waitFor(() => expect(handle.written).toHaveLength(2));
     expect(showSaveFilePicker).toHaveBeenCalledOnce();
     expect(f.parseDoc(handle.written[1]!).components).toHaveLength(2);
+  });
+
+  it("saves again without changes, and asks where if the file cannot be written (#94)", async () => {
+    const f = await load();
+    const first = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(first);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.saveFile();
+    await vi.waitFor(() => expect(f.isUnsaved(f.state())).toBe(false));
+
+    // Nothing changed: written again all the same.
+    f.saveFile();
+    await vi.waitFor(() => expect(first.written).toHaveLength(2));
+
+    // The file was deleted: writing to it fails, the dialog asks for another one.
+    first.createWritable = async () => {
+      throw new DOMException("gone", "NotFoundError");
+    };
+    const second = fakeHandle("nouveau.psice.json");
+    showSaveFilePicker.mockResolvedValue(second);
+    f.saveFile();
+    await vi.waitFor(() => expect(second.written).toHaveLength(1));
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("saves as another file", async () => {
+    const f = await load();
+    const first = fakeHandle("a.psice.json");
+    const { showSaveFilePicker } = stubPickers(first);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.saveFile();
+    await vi.waitFor(() => expect(first.written).toHaveLength(1));
+    const second = fakeHandle("b.psice.json");
+    showSaveFilePicker.mockResolvedValue(second);
+    f.saveFileAs();
+    await vi.waitFor(() => expect(second.written).toHaveLength(1));
+    expect(first.written).toHaveLength(1);
+  });
+
+  it("exports the schematic as a PNG image", async () => {
+    const f = await load();
+    const views = await import("./viewCommands");
+    const image = new Blob(["png"], { type: "image/png" });
+    const exportImage = vi.fn(async () => image);
+    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, show() {}, exportImage });
+    const handle = fakeHandle(f.IMAGE_FILE_NAME);
+    const written: unknown[] = [];
+    handle.createWritable = async () => ({
+      write: async (data: unknown) => void written.push(data),
+      close: async () => {},
+    });
+    const { showSaveFilePicker } = stubPickers(handle);
+
+    await f.exportImage();
+    expect(alert).toHaveBeenCalledWith(expect.stringMatching(/vide/));
+    expect(exportImage).not.toHaveBeenCalled();
+
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    await f.exportImage();
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false });
+    expect(showSaveFilePicker).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedName: "schema.png" }),
+    );
+    expect(written).toEqual([image]);
+
+    await f.exportImage({ transparent: true });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+  });
+
+  it("remembers the transparent background choice, white by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.TRANSPARENT_EXPORT_KEY);
+    expect(f.exportTransparent()).toBe(false);
+    f.setExportTransparent(true);
+    expect(f.exportTransparent()).toBe(true);
+    f.setExportTransparent(false);
+    expect(f.exportTransparent()).toBe(false);
   });
 
   it("keeps the changes unsaved when the dialog is closed", async () => {
@@ -79,6 +155,50 @@ describe("saving with the system file dialogs", () => {
     await Promise.resolve();
     expect(f.isUnsaved(f.state())).toBe(true);
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("tells whether the schematic was saved (#238)", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    // Dialog closed: not saved.
+    showSaveFilePicker.mockRejectedValueOnce(abort());
+    expect(await f.saveFile()).toBe(false);
+    expect(f.isUnsaved(f.state())).toBe(true);
+
+    // First save asks where, the next one writes to the same file.
+    expect(await f.saveFile()).toBe(true);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    expect(await f.saveFile()).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+
+    // The file cannot be written any more, nor the one picked instead: not saved, user told.
+    handle.createWritable = async () => {
+      throw new DOMException("read-only", "NoModificationAllowedError");
+    };
+    f.state().dropComponent("capacitor", { x: 4, y: 0 });
+    expect(await f.saveFile()).toBe(false);
+    expect(alert).toHaveBeenCalledOnce();
+    expect(f.isUnsaved(f.state())).toBe(true);
+  });
+
+  it("waits for the save in progress instead of saving twice", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    let pick: (h: typeof handle) => void = () => {};
+    showSaveFilePicker.mockImplementationOnce(() => new Promise((r) => (pick = r)));
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    const first = f.saveFile();
+    const second = f.saveFile();
+    pick(handle);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(handle.written).toHaveLength(1);
   });
 
   it("saves a rescue copy in a new file, without marking the document saved", async () => {
@@ -142,8 +262,9 @@ describe("without the file dialogs (other browsers)", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     f.state().dropComponent("resistor", { x: 0, y: 0 });
 
-    f.saveFile();
+    const saved = f.saveFile();
     expect(click).toHaveBeenCalledOnce();
+    expect(await saved).toBe(true);
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe(f.DEFAULT_FILE_NAME);
     expect(f.isUnsaved(f.state())).toBe(false);

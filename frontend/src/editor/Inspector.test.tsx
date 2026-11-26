@@ -56,6 +56,32 @@ describe("Inspector", () => {
     expect(field).toHaveValue("1k");
   });
 
+  it("edits the content of a selected text over several lines", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      editorState().startText();
+      editorState().placeText({ x: 0, y: 0 });
+    });
+    render(<Inspector />);
+    expect(screen.getByRole("heading")).toHaveTextContent("Texte");
+    const field = screen.getByLabelText("Contenu");
+
+    await user.clear(field);
+    await user.type(field, "Entrée{Enter}10 V");
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
+    expect(field).toHaveFocus();
+
+    // Ctrl+Enter keeps it and leaves the field.
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(field).not.toHaveFocus();
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
+
+    // Escape takes back what was just typed.
+    await user.type(field, "!");
+    await user.keyboard("{Escape}");
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
+  });
+
   it("Escape takes back what was typed, Enter keeps it; both leave the field", async () => {
     const user = userEvent.setup();
     dropComponent("resistor");
@@ -87,6 +113,38 @@ describe("Inspector", () => {
     await user.clear(name);
     await user.type(name, "R5");
     expect(name).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("checks the values while typing: errors and warnings", async () => {
+    const user = userEvent.setup();
+    dropComponent("resistor");
+    render(<Inspector />);
+    const field = screen.getByLabelText("Résistance");
+
+    await user.clear(field);
+    await user.type(field, "1,5k");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(/écris « 1.5k »/);
+
+    await user.clear(field);
+    await user.type(field, "1M");
+    expect(field).not.toHaveAttribute("aria-invalid");
+    expect(field).toHaveAccessibleDescription(/« M » veut dire milli/);
+
+    await user.clear(field);
+    await user.type(field, "1Meg");
+    expect(field).not.toHaveAccessibleDescription();
+  });
+
+  it("lays out the many fields of a source on two columns", async () => {
+    const user = userEvent.setup();
+    dropComponent("voltage_source");
+    render(<Inspector />);
+    await user.selectOptions(screen.getByLabelText("Forme d'onde"), "Impulsion");
+    const grid = screen.getByLabelText("Période").closest("[style*='grid']");
+    expect(grid).not.toBeNull();
+    // The double-click still goes to the main value, in the grid too.
+    expect(grid!.querySelector("[data-value-field]")).not.toBeNull();
   });
 
   it("shows the parameters of the chosen waveform only", async () => {

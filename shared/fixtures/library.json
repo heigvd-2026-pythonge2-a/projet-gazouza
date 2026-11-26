@@ -310,6 +310,32 @@
         "kind": "text",
         "options": [],
         "waveforms": []
+      },
+      {
+        "name": "direction",
+        "label": "Direction",
+        "unit": "",
+        "default": "none",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "none",
+            "label": "Aucune"
+          },
+          {
+            "value": "input",
+            "label": "Entrée"
+          },
+          {
+            "value": "output",
+            "label": "Sortie"
+          },
+          {
+            "value": "bidir",
+            "label": "Bidirectionnelle"
+          }
+        ],
+        "waveforms": []
       }
     ]
   },

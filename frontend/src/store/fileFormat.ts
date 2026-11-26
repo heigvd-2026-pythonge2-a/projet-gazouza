@@ -1,13 +1,15 @@
 // Schematic files saved and opened by the editor (File > Save / Open). This is the editor's own
 // format, not the API contract: it stores the editor document as it is.
 
-import type {
-  EditorDoc,
-  EditorJunction,
-  EditorWire,
-  GridPoint,
-  PlacedComponent,
-  WireEnd,
+import {
+  TEXT_MAX_LENGTH,
+  type EditorDoc,
+  type EditorJunction,
+  type EditorText,
+  type EditorWire,
+  type GridPoint,
+  type PlacedComponent,
+  type WireEnd,
 } from "./document";
 import { getDef } from "./library";
 
@@ -38,6 +40,13 @@ function point(v: unknown, what: string): GridPoint {
     return fail(`${what} : position invalide`);
   }
   return { x: v.x as number, y: v.y as number };
+}
+
+/** Where a text of a component was moved by hand: absent (or unreadable) means automatic. */
+function offset(v: unknown): GridPoint | undefined {
+  if (!isObject(v) || typeof v.x !== "number" || typeof v.y !== "number") return undefined;
+  if (!Number.isFinite(v.x) || !Number.isFinite(v.y)) return undefined;
+  return { x: v.x, y: v.y };
 }
 
 function component(v: unknown): PlacedComponent {
@@ -71,7 +80,16 @@ function component(v: unknown): PlacedComponent {
     rotation,
     mirror: v.mirror === true,
     params,
+    ...offsets(v),
   };
+}
+
+function offsets(
+  v: Record<string, unknown>,
+): Pick<PlacedComponent, "name_offset" | "value_offset"> {
+  const name = offset(v.name_offset);
+  const value = offset(v.value_offset);
+  return { ...(name ? { name_offset: name } : {}), ...(value ? { value_offset: value } : {}) };
 }
 
 function wireEnd(v: unknown, doc: { comps: Map<string, string>; junctions: Set<string> }): WireEnd {
@@ -130,7 +148,21 @@ export function parseDoc(text: string): EditorDoc {
       points: w.points.map((p: unknown) => point(p, w.id as string)),
     };
   });
-  const all = [...ids.comps.keys(), ...ids.junctions, ...wires.map((w) => w.id)];
+  // Files saved before the free texts (#123) have none.
+  if (raw.texts !== undefined && !Array.isArray(raw.texts)) return fail("textes invalides");
+  const texts: EditorText[] = (raw.texts ?? []).map((t: unknown) => {
+    if (!isObject(t) || typeof t.id !== "string" || typeof t.content !== "string") {
+      return fail("texte invalide");
+    }
+    if (t.content.length > TEXT_MAX_LENGTH) return fail(`${t.id} : texte trop long`);
+    return { id: t.id, position: point(t.position, t.id), content: t.content };
+  });
+  const all = [
+    ...ids.comps.keys(),
+    ...ids.junctions,
+    ...wires.map((w) => w.id),
+    ...texts.map((t) => t.id),
+  ];
   if (new Set(all).size !== all.length) return fail("identifiants en double");
-  return { components, wires, junctions };
+  return { components, wires, junctions, texts };
 }

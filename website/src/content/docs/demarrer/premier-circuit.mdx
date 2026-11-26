@@ -1,0 +1,107 @@
+---
+title: Premier circuit
+description: Tutoriel pas à pas — dessiner un circuit RC, le simuler et observer la charge du condensateur.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Dans ce tutoriel, tu dessines un circuit **RC** : une source qui passe de 0 à 5 V, une résistance
+de 1 kΩ et un condensateur de 1 µF. Tu observes ensuite la charge du condensateur, avec sa
+constante de temps τ = R·C = 1 ms.
+
+```
+        in              out
+   ┌────[ R1 1k ]────┬───
+   │+                │
+ (V1) 0 → 5 V       ═╪═ C1 1u
+   │-                │
+   └────────┬────────┘
+            ⏚
+```
+
+<Aside type="caution" title="Fonctionnalités en cours">
+	Le dessin, les valeurs et l'enregistrement fonctionnent déjà. Le bouton **Simuler** et le panneau
+	des **courbes** sont en cours de développement (jalons S3-5 et S6-8) : les parties 3 et 4
+	décrivent le fonctionnement prévu.
+</Aside>
+
+<Aside type="tip" title="Pressé ?">
+	Le bouton **Exemples** de la barre d'outils (l'icône du livre ouvert) ouvre ce circuit tout
+	dessiné, avec son analyse déjà réglée : **Circuit RC sur une impulsion**. Il propose aussi un
+	diviseur de tension, un filtre passe-bas et un diviseur chargé, un par analyse.
+</Aside>
+
+## 1. Dessiner le circuit
+
+<Steps>
+
+1. **Pose la source.** Dans la palette à gauche, glisse une **Source de tension** sur le schéma
+   (ou clique dessus, puis clique sur le schéma). Appuie sur <kbd>Échap</kbd> pour arrêter de
+   poser.
+
+2. **Pose la résistance et le condensateur.** Fais de même avec une **Résistance** et un
+   **Condensateur**. Appuie sur <kbd>R</kbd> pour tourner la résistance à l'horizontale.
+
+3. **Ajoute une masse.** Glisse une **Masse** sous le circuit. Sans masse, la simulation est
+   impossible : c'est la référence 0 V.
+
+4. **Relie les composants.** Tire un fil directement depuis une broche (ou appuie sur
+   <kbd>W</kbd>), clique pour faire un coude et termine sur une autre broche. Relie :
+   - la borne `+` de la source à la résistance ;
+   - l'autre côté de la résistance au condensateur ;
+   - le bas du condensateur et la borne `-` de la source à la masse.
+
+5. **Nomme les nœuds (facultatif).** Pose une **Étiquette** sur le fil d'entrée et une autre sur
+   le fil de sortie, avec les noms `in` et `out`. Les courbes porteront ces noms : `v(in)`,
+   `v(out)`.
+
+</Steps>
+
+## 2. Régler les valeurs
+
+Double-clique sur un composant (ou fais un clic droit, puis **Propriétés…**) pour ouvrir
+l'inspecteur.
+
+| Composant | Réglage |
+|---|---|
+| Résistance R1 | Résistance : `1k` |
+| Condensateur C1 | Capacité : `1u` |
+| Source V1 | Forme d'onde : **Impulsion** ; Tension basse `0` ; Tension haute `5` ; Durée haute `10m` ; Période `20m` |
+
+Les valeurs se tapent comme sur papier, avec les suffixes SPICE : voir
+[Valeurs et unités](/projet-gazouza/guide/valeurs-et-unites/).
+
+<Aside type="tip">
+	Attention au piège classique : `1M` veut dire **1 milli**, pas 1 méga. Pour un mégohm, écris
+	`1Meg`. Psice t'avertit si tu te trompes.
+</Aside>
+
+Enregistre ton schéma avec <kbd>Ctrl+S</kbd> : il est sauvé dans un fichier `.psice.json`.
+
+## 3. Simuler
+
+<Steps>
+
+1. Choisis l'analyse **Temporelle (.tran)** et une durée de `5m` (5 ms, soit 5 τ).
+
+2. Clique sur **Simuler**. Psice vérifie le schéma, génère la netlist et lance ngspice en local.
+   Si quelque chose ne va pas (masse oubliée, broche en l'air…), un message en français
+   t'indique quoi corriger et désigne l'élément concerné : voir
+   [Messages d'erreur](/projet-gazouza/guide/erreurs/).
+
+</Steps>
+
+## 4. Lire les résultats
+
+- **Clique sur le fil `out`** : sa tension s'affiche dans le panneau des résultats. Tu vois la
+  tension monter vers 5 V en suivant une exponentielle.
+- **Place un curseur à t = 1 ms** après le front : la tension vaut environ **3,16 V**, soit
+  63 % de 5 V. C'est la définition de τ.
+- **Clique sur la résistance** : tu obtiens le courant de charge, qui part de 5 mA et décroît.
+
+## Pour aller plus loin
+
+- Remplace l'analyse par une analyse **fréquentielle (.ac)** pour tracer le diagramme de Bode de
+  ce filtre passe-bas : voir [Analyses](/projet-gazouza/guide/analyses/).
+- Découvre tous les gestes de l'éditeur dans
+  [Raccourcis clavier](/projet-gazouza/guide/raccourcis/).
