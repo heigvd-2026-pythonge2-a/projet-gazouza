@@ -288,7 +288,7 @@ export function Inspector() {
         ? `${selection.length} éléments sélectionnés.`
         : selection.length === 1
           ? "Un fil n'a pas de propriétés."
-          : "Sélectionne un composant ou un texte pour voir et modifier ses propriétés.";
+          : "Sélectionnez un composant ou un texte pour voir et modifier ses propriétés.";
     content = (
       <>
         <h3 style={UI.heading}>Propriétés</h3>

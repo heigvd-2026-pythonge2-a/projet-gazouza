@@ -10,7 +10,7 @@ beforeEach(resetEditorStore);
 describe("Inspector", () => {
   it("explains what to do when nothing is selected", () => {
     render(<Inspector />);
-    expect(screen.getByText(/Sélectionne un composant/)).toBeInTheDocument();
+    expect(screen.getByText(/Sélectionnez un composant/)).toBeInTheDocument();
   });
 
   it("counts several selected items, and says a wire has no properties", () => {
