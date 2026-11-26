@@ -136,6 +136,39 @@ export function openFile() {
   input.click();
 }
 
+/** What a dropped file is, by its name: a schematic, an LTspice schematic, or something else. */
+export function droppedFileKind(name: string): "schematic" | "ltspice" | "other" {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".json")) return "schematic";
+  if (lower.endsWith(".asc")) return "ltspice";
+  return "other";
+}
+
+/**
+ * Opens a file dropped on the window (#277), like Ctrl+O: the same question first if there are
+ * unsaved changes. With its `handle` (WebView2, Chrome), Ctrl+S then writes back to that file.
+ * An LTspice `.asc` file or any other file is refused with a message.
+ */
+export async function openDroppedFile(file: File, handle: FileSystemFileHandle | null = null) {
+  switch (droppedFileKind(file.name)) {
+    case "ltspice":
+      window.alert(
+        "L'import des schémas LTspice (.asc) n'est pas encore possible depuis l'éditeur. " +
+          "Psice ouvre ici les schémas .psice.json.",
+      );
+      return;
+    case "other":
+      window.alert(
+        `« ${file.name} » n'est pas un schéma Psice. ` +
+          "Déposez un fichier .psice.json pour l'ouvrir.",
+      );
+      return;
+    case "schematic":
+      if (!canDiscardChanges()) return;
+      await openContent(file, handle);
+  }
+}
+
 /** Writes `content` into the file of `handle`, replacing what it held. */
 async function write(handle: FileSystemFileHandle, content: string | Blob) {
   const writable = await handle.createWritable();
