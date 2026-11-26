@@ -10,6 +10,7 @@ import {
   diagnosticMarks,
   freshSimulation,
   operatingPointTable,
+  terminalVoltageRows,
   useEditorStore,
   type AnalysisKind,
   type AnalysisSettings,
@@ -341,7 +342,10 @@ export function SimulationReport() {
     [doc, result, nets],
   );
   const table = useMemo(
-    () => (result ? operatingPointTable(doc, result, nets ?? {}) : []),
+    () =>
+      result
+        ? operatingPointTable(doc, result, nets ?? {}, terminalVoltageRows(doc, result, nets ?? {}))
+        : [],
     [doc, result, nets],
   );
   const setReportHighlight = useEditorStore((s) => s.setReportHighlight);

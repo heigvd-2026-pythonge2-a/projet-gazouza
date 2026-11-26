@@ -13,3 +13,4 @@ export * from "./simulation";
 export * from "./values";
 export * from "./theme";
 export * from "./netNames";
+export * from "./operatingPoint";
