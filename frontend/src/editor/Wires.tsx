@@ -37,6 +37,8 @@ interface WiresProps {
   onWirePress?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   /** Double click on a wire. */
   onWireDoubleClick?: (id: string) => void;
+  /** The pointer enters a wire (its id) or leaves it (null). */
+  onWireHover?: (id: string | null) => void;
 }
 
 /** Wires of the document, and the connection dots (see `connectionDots`). */
@@ -48,6 +50,7 @@ export function Wires({
   onSelect,
   onWirePress,
   onWireDoubleClick,
+  onWireHover,
 }: WiresProps) {
   const colors = useCanvasColors();
   const color = (id: string) => (selection.includes(id) ? colors.selected : colors.wire);
@@ -76,6 +79,8 @@ export function Wires({
           onDblClick={(e) => {
             if (e.evt.button === 0) onWireDoubleClick?.(w.id);
           }}
+          onMouseEnter={() => onWireHover?.(w.id)}
+          onMouseLeave={() => onWireHover?.(null)}
         />
       ))}
       {segments.map((seg) => {

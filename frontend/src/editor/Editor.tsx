@@ -15,6 +15,7 @@ import {
   mainParam,
   moveItems,
   moveWirePart,
+  nodeIndex,
   operatingPointLabels,
   resolveCaptionDrop,
   pinPosition,
@@ -27,8 +28,10 @@ import {
   wirePartAt,
   wirePartPoints,
   type GridPoint,
+  type CircuitNode,
   type EditorText,
   type GridRect,
+  type NodeItem,
   type PlacedComponent,
   type WirePart,
   NEW_TEXT,
@@ -45,6 +48,7 @@ import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
+import { NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
@@ -351,6 +355,26 @@ export function SchematicCanvas() {
   }, [freePins]);
   /** What is drawn as selected (nothing in an exported image). */
   const shownSelection = exporting ? [] : selection;
+
+  /** Wire or pin under the pointer, whose whole node is highlighted (#278). */
+  const [hovered, setHovered] = useState<NodeItem | null>(null);
+  /**
+   * Nodes to highlight: those of the selected wires (strong), then the one under the pointer.
+   * Only on the schematic as it is in the store (not while dragging) and with the select tool.
+   */
+  const highlightedNodes = useMemo((): { node: CircuitNode; strong: boolean }[] => {
+    if (exporting || doc !== storeDoc || tool.kind !== "select") return [];
+    const index = nodeIndex(storeDoc);
+    const out: { node: CircuitNode; strong: boolean }[] = [];
+    const add = (node: CircuitNode | null, strong: boolean) => {
+      if (node && !out.some((n) => n.node === node)) out.push({ node, strong });
+    };
+    const wireIds = new Set(selection.filter((id) => storeDoc.wires.some((w) => w.id === id)));
+    if (wirePart) wireIds.add(wirePart.wire);
+    for (const wire of wireIds) add(index({ wire }), true);
+    if (hovered) add(index(hovered), false);
+    return out;
+  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered]);
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: { id: string }): ReadonlySet<string> =>
@@ -818,6 +842,9 @@ export function SchematicCanvas() {
           <Layer ref={contentRef}>
             {/* Hidden while something is dragged: the marks are those of the document simulated. */}
             {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
+            {highlightedNodes.map(({ node, strong }, i) => (
+              <NodeHighlight key={i} doc={storeDoc} node={node} strong={strong} />
+            ))}
             <Wires
               doc={doc}
               selection={shownSelection}
@@ -826,6 +853,7 @@ export function SchematicCanvas() {
               onSelect={tool.kind === "select" ? selectItem : undefined}
               onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
               onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
+              onWireHover={(id) => setHovered(id === null ? null : { wire: id })}
             />
             {doc.components.map((c) => (
               <ComponentSymbol
@@ -860,6 +888,7 @@ export function SchematicCanvas() {
                       }
                     : undefined
                 }
+                onPinHover={(pin) => setHovered(pin === null ? null : { comp: c.id, pin })}
                 onPinMouseDown={
                   tool.kind === "select"
                     ? (pin) => {
