@@ -147,8 +147,28 @@ jobs:
       - name: Vérification du formatage (Prettier)
         run: pnpm format:check
 
-      - name: Tests unitaires (vitest)
-        run: pnpm test
+      - name: Tests unitaires et couverture (vitest)
+        run: pnpm test:coverage
+
+      # Shown on the run's summary page. No threshold yet: the rate is reported, not enforced.
+      - name: Résumé de la couverture
+        if: always() && hashFiles('frontend/coverage/coverage-summary.json') != ''
+        shell: bash
+        run: |
+          node -e '
+            const t = require("./coverage/coverage-summary.json").total;
+            const row = (name, m) => `| ${name} | ${m.pct} % | ${m.covered} / ${m.total} |`;
+            console.log([
+              "### Couverture du frontend",
+              "",
+              "| Mesure | Taux | Couvert |",
+              "|---|---|---|",
+              row("Lignes", t.lines),
+              row("Instructions", t.statements),
+              row("Fonctions", t.functions),
+              row("Branches", t.branches),
+            ].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build de vérification
         run: pnpm build

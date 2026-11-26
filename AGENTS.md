@@ -167,6 +167,7 @@ uv run python scripts/export_openapi.py       # régénérer shared/openapi.json
 pnpm install
 pnpm dev                                      # http://localhost:5173 (proxy /api -> 8000)
 pnpm test                                     # tests unitaires (vitest)
+pnpm test:coverage                            # tests + couverture (rapport dans coverage/)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
 pnpm build:demo                               # démo en ligne du site (website/public/demo/)

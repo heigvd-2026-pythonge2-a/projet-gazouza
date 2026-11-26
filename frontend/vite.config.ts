@@ -18,5 +18,17 @@ export default defineConfig({
     environment: "jsdom",
     pool: "vmThreads",
     setupFiles: ["./src/test/setup.ts"],
+    // Used by `pnpm test:coverage` only. No threshold yet: CI reports the rate without failing.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/test/**",
+        "src/api/schema.gen.ts",
+        "src/vite-env.d.ts",
+      ],
+      reporter: ["text", "text-summary", "html", "json-summary"],
+    },
   },
 });
