@@ -270,7 +270,9 @@ ferme depuis la PR plutôt que d'en créer une nouvelle.
 ### Issues et labels
 
 Les tâches sont suivies dans GitHub Issues. Chaque issue (et chaque PR) porte en principe un
-label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`.
+label `type:` et un label `area:`, plus éventuellement un label `prio:` ou `status:`. Elle est
+aussi assignée dès sa création à qui fera le travail, par défaut le propriétaire du module
+concerné (voir [AGENTS.md](AGENTS.md)).
 
 | Famille | Labels | Usage |
 |---|---|---|
