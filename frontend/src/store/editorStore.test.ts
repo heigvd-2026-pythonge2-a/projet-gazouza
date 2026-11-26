@@ -202,7 +202,10 @@ describe("selection, clipboard and deletion", () => {
     store().selectAll();
     const all = store().selection;
     const doc = store().doc;
-    expect(all).toHaveLength(doc.components.length + doc.wires.length + doc.junctions.length);
+    expect(all).toHaveLength(
+      doc.components.length + doc.wires.length + doc.junctions.length + doc.texts.length,
+    );
+    expect(doc.texts.length).toBeGreaterThan(0);
     store().toggleSelected(all[0]!);
     expect(store().selection).toHaveLength(all.length - 1);
     store().toggleSelected(all[0]!);

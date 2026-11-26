@@ -46,6 +46,11 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
       { keys: "M", action: "Miroir" },
+      {
+        keys: "Glisser un nom ou une valeur",
+        action: "Déplacer ce texte seul (demi-case, près de son composant)",
+      },
+      { keys: "O", action: "Replacer automatiquement les textes de la sélection" },
       { keys: "Suppr", action: "Supprimer" },
       { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },
@@ -82,6 +87,14 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
         keys: "Suppr (coude / tronçon)",
         action: "Supprimer le fil entier / couper le fil à cet endroit",
       },
+    ],
+  },
+  {
+    title: "Texte libre",
+    items: [
+      { keys: "T, puis clic", action: "Poser un texte, à écrire dans les propriétés" },
+      { keys: "Double-clic sur un texte", action: "Modifier son contenu" },
+      { keys: "Ctrl+Entrée / Échap", action: "Valider / annuler la saisie du texte" },
     ],
   },
   {

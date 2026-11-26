@@ -297,6 +297,21 @@ describe("copy and paste", () => {
     // Four quarter turns and two flips: back where it started.
     expect(clip).toEqual(fixtureDoc("divider_op"));
   });
+
+  it("keeps the texts of a turned copy upright, their middle turned with the rest", () => {
+    // Box of 2 x 0.9 grid units: its middle, rounded to the grid, is (1, 0).
+    const text = { id: "t1", position: { x: 0, y: 0 }, content: "abcde" };
+    const clip = { ...emptyDoc(), texts: [text] };
+    const centre = { x: 4, y: 0 };
+    // Middle turned around (4, 0) to (4, -3): the box starts at (3, -3).
+    expect(turnClip(clip, centre, "rotate").texts).toEqual([
+      { id: "t1", position: { x: 3, y: -3 }, content: "abcde" },
+    ]);
+    // Middle flipped to (7, 0): the box starts at (6, 0) and still reads left to right.
+    expect(turnClip(clip, centre, "mirror").texts).toEqual([
+      { id: "t1", position: { x: 6, y: 0 }, content: "abcde" },
+    ]);
+  });
 });
 
 describe("connection dots (#245)", () => {

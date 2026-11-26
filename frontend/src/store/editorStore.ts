@@ -6,6 +6,7 @@ import { create } from "zustand";
 import type { SimulationResult } from "../api/client";
 import {
   addComponent,
+  addText,
   addWire,
   anchorAt,
   connectPinsOnWires,
@@ -14,6 +15,7 @@ import {
   deleteSegment,
   deleteSegments,
   docBounds,
+  docIds,
   emptyDoc,
   freeMove,
   itemsInRect,
@@ -32,6 +34,7 @@ import {
   samePoint,
   segmentsInRect,
   setParam,
+  setTextContent,
   turnClip,
   type Clip,
   type EditorDoc,
@@ -40,6 +43,7 @@ import {
   type Rotation,
   type WirePart,
 } from "./document";
+import { moveCaption, releaseCoveredCaptions, resetCaptions, type CaptionKind } from "./captions";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
 import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
@@ -55,7 +59,12 @@ export type Tool =
    * Pasted or duplicated items follow the mouse until a click drops them (#166). R and M turn
    * `clip` before it is dropped (#260).
    */
-  | { kind: "paste"; clip: Clip };
+  | { kind: "paste"; clip: Clip }
+  /** Click on the schematic to write a free text there (#123). */
+  | { kind: "text" };
+
+/** Content of a free text just placed, selected in the properties panel to be typed over. */
+export const NEW_TEXT = "Texte";
 
 /**
  * Grid point of a clip that follows the mouse while pasting: the middle of its items, rounded,
@@ -70,8 +79,9 @@ export function clipAnchor(clip: Clip): GridPoint {
   };
 }
 
+/** True if a clipboard holds something to paste (a junction alone is not worth it). */
 const hasItems = (clip: Clip | null): clip is Clip =>
-  clip !== null && clip.components.length + clip.wires.length > 0;
+  clip !== null && clip.components.length + clip.wires.length + clip.texts.length > 0;
 
 /** Wire being drawn: not part of the document until it is finished. */
 export interface WireDraft {
@@ -167,6 +177,19 @@ interface EditorState {
   setParam: (id: string, param: string, value: string) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
+  /** Starts the text tool (T). */
+  startText: () => void;
+  /**
+   * Click with the text tool: adds a text there, selects it and goes back to the select tool (its
+   * content is then typed in the properties panel).
+   */
+  placeText: (position: GridPoint) => void;
+  /** Changes the content of a free text (one undo step per field edit, like the other fields). */
+  setTextContent: (id: string, content: string) => void;
+  /** Moves the name or the value of a component: `centre` is where the text is drawn. */
+  moveCaption: (id: string, kind: CaptionKind, centre: GridPoint) => void;
+  /** Puts the texts of the selected components back to their automatic place. */
+  resetCaptions: () => void;
   /** Presses on a pin with the select tool: starts a wire there. */
   startWireFrom: (position: GridPoint) => void;
   /**
@@ -203,7 +226,7 @@ interface EditorState {
    * current tool, else clears the selection.
    */
   cancel: () => void;
-  /** Ctrl+A: selects every component, wire and junction. */
+  /** Ctrl+A: selects every component, wire, junction and text. */
   selectAll: () => void;
   /** Ctrl+C: copies the selection (and the wires between selected items) to the clipboard. */
   copy: () => void;
@@ -304,6 +327,14 @@ function change(s: EditorState, edited: EditorDoc, key: string | null = null) {
 }
 
 /**
+ * After turning or mirroring components: their texts moved by hand turn with them, unless they
+ * would then cover something (they go back to their automatic place).
+ */
+function turned(doc: EditorDoc, selection: string[]): EditorDoc {
+  return releaseCoveredCaptions(doc, new Set(selection));
+}
+
+/**
  * The document after any edit: what touches on the schematic is connected for the simulation
  * (#256), and the duplicate wires an edit may leave under others are removed (#259).
  */
@@ -314,11 +345,7 @@ export const WIRE_LOOP_NOTICE = "Fil non ajouté : ces deux points sont déjà r
 
 /** Keeps only the selected ids that still exist (after an undo or a redo). */
 function existing(doc: EditorDoc, selection: string[]): string[] {
-  const ids = new Set([
-    ...doc.components.map((c) => c.id),
-    ...doc.wires.map((w) => w.id),
-    ...doc.junctions.map((j) => j.id),
-  ]);
+  const ids = new Set(docIds(doc));
   return selection.filter((id) => ids.has(id));
 }
 
@@ -394,6 +421,27 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   startWiring: () =>
     set({ tool: { kind: "wire" }, selection: [], wirePart: null, segments: [], draft: null }),
 
+  startText: () => set({ tool: { kind: "text" }, selection: [], wirePart: null, draft: null }),
+
+  placeText: (position) =>
+    set((s) => {
+      if (s.tool.kind !== "text") return {};
+      const added = addText(s.doc, position, NEW_TEXT);
+      return {
+        ...change(s, added.doc),
+        selection: [added.id],
+        wirePart: null,
+        tool: { kind: "select" },
+      };
+    }),
+
+  setTextContent: (id, content) =>
+    set((s) => change(s, setTextContent(s.doc, id, content), `text:${id}`)),
+
+  moveCaption: (id, kind, centre) => set((s) => change(s, moveCaption(s.doc, id, kind, centre))),
+
+  resetCaptions: () => set((s) => change(s, resetCaptions(s.doc, new Set(s.selection)))),
+
   startWireFrom: (position) =>
     set({
       tool: { kind: "wire" },
@@ -450,7 +498,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         : s.tool.kind === "paste"
           ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "rotate") } }
           : s.selection.length > 0
-            ? change(s, rotateComponents(s.doc, new Set(s.selection)))
+            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection)), s.selection))
             : {},
     ),
 
@@ -461,7 +509,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         : s.tool.kind === "paste"
           ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "mirror") } }
           : s.selection.length > 0
-            ? change(s, mirrorComponents(s.doc, new Set(s.selection)))
+            ? change(s, turned(mirrorComponents(s.doc, new Set(s.selection)), s.selection))
             : {},
     ),
 
@@ -566,11 +614,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   selectAll: () =>
     set((s) => ({
-      selection: [
-        ...s.doc.components.map((c) => c.id),
-        ...s.doc.wires.map((w) => w.id),
-        ...s.doc.junctions.map((j) => j.id),
-      ],
+      selection: docIds(s.doc),
       wirePart: null,
       segments: [],
       tool: { kind: "select" },

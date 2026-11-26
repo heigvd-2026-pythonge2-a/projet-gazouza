@@ -30,7 +30,7 @@ Si vous changez un modèle Pydantic, la CI vous forcera à mettre les fixtures �
 
 | Dossier | Circuit | Analyse | Ce qu'il montre |
 |---|---|---|---|
-| `divider_op` | Diviseur 10 V, R1 = R2 = 1 kΩ | `.op` | Étiquettes `in` / `out`, deux masses |
+| `divider_op` | Diviseur 10 V, R1 = R2 = 1 kΩ | `.op` | Étiquettes `in` / `out`, deux masses, texte libre (ignoré par la netlist) |
 | `rc_tran` | Échelon 0 → 5 V sur un RC (1 kΩ, 1 µF, τ = 1 ms), sur 5 ms | `.tran` | Source `pulse`, `max_step` |
 | `lowpass_ac` | Passe-bas RC (1 kΩ, 159,15 nF, fc = 1 kHz) | `.ac` | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
 | `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |

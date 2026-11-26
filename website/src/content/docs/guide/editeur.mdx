@@ -91,11 +91,22 @@ jamais par une broche.
 	avant la simulation : c'est souvent un oubli.
 </Aside>
 
+## Écrire du texte sur le schéma
+
+Pour annoter ton circuit (un titre, « entrée », « sortie », la valeur attendue…), appuie sur
+<kbd>T</kbd> ou clique sur le bouton **Texte** de la barre d'outils, puis clique sur le schéma.
+Le texte est posé et l'inspecteur s'ouvre pour que tu tapes son contenu : <kbd>Entrée</kbd>
+passe à la ligne, <kbd>Ctrl+Entrée</kbd> valide, <kbd>Échap</kbd> annule la saisie.
+
+Un texte se sélectionne, se déplace, se copie et se supprime comme un composant. Double-clique
+dessus pour modifier son contenu. Il est enregistré avec le schéma, mais il est **purement
+décoratif** : la simulation l'ignore complètement.
+
 ## Sélectionner et modifier
 
 | Geste | Effet |
 |---|---|
-| Clic | Sélectionner un composant ou un fil |
+| Clic | Sélectionner un composant, un fil ou un texte |
 | <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
 | Glisser dans le vide | Sélection par zone : ce qui est entièrement dedans, y compris les **tronçons** d'un fil qui dépasse (à supprimer avec <kbd>Suppr</kbd>) |
 | <kbd>Maj</kbd> + glisser dans le vide | Zone verte en pointillés : ajoute ce qui **touche** la zone, retire ce qui était déjà sélectionné |
@@ -109,6 +120,25 @@ jamais par une broche.
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
+
+### Ranger le nom et la valeur d'un composant
+
+Le nom d'un composant (`R1`) et sa valeur (`1kΩ`) se placent tout seuls à côté du symbole, du
+premier côté où ils ne cachent rien (un autre composant, un fil, un texte). Quand ils gênent la
+lecture, fais glisser l'un ou l'autre : chacun se déplace **seul**, par demi-case.
+
+- Un texte ne peut pas être posé sur un composant, un fil ou un autre texte : il se met sur la
+  place libre la plus proche. Il ne peut pas non plus s'éloigner de plus de trois cases de son
+  composant, pour qu'on voie toujours à qui il appartient.
+- Il suit son composant quand on le déplace, et reste toujours droit, lisible. Quand on tourne
+  le composant, il tourne autour avec lui (il reste du même côté) ; s'il tombait alors sur
+  quelque chose, il reprend sa place automatique.
+- Si un autre objet vient ensuite le recouvrir, il s'affiche en rouge, sans rien bloquer.
+- <kbd>O</kbd>, ou **Replacer les textes automatiquement** dans le menu du clic droit, remet les
+  textes des composants sélectionnés à leur place automatique.
+
+La position des textes est enregistrée avec le schéma, et <kbd>Ctrl+Z</kbd> annule un
+déplacement.
 
 ## Modifier les paramètres
 

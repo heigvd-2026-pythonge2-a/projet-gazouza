@@ -11,10 +11,12 @@ import {
   docBounds,
   freshSimulation,
   getDef,
+  layoutCaptions,
   mainParam,
   moveItems,
   moveWirePart,
   operatingPointLabels,
+  resolveCaptionDrop,
   pinPosition,
   rectFrom,
   samePoint,
@@ -25,9 +27,11 @@ import {
   wirePartAt,
   wirePartPoints,
   type GridPoint,
+  type EditorText,
   type GridRect,
   type PlacedComponent,
   type WirePart,
+  NEW_TEXT,
 } from "../store";
 import { AnimationControls } from "./AnimationControls";
 import { CloseDialog } from "./CloseDialog";
@@ -37,6 +41,7 @@ import { DiagnosticHalos } from "./DiagnosticHalos";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport, showViewport } from "./fitView";
+import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
@@ -80,7 +85,7 @@ interface Press {
   vy: number;
   /** The view is being moved (always for the middle button, after the threshold for the right). */
   panning: boolean;
-  /** Component under the right press, if any. */
+  /** Component or text under the right press, if any. */
   componentId: string | null;
 }
 
@@ -90,6 +95,12 @@ function componentMenu(selectionSize: number): MenuItem[] {
   return [
     { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
+    {
+      label: "Replacer les textes automatiquement",
+      shortcut: "O",
+      keys: ["o", "O"],
+      onSelect: () => s().resetCaptions(),
+    },
     {
       label: "Dupliquer",
       shortcut: "Ctrl+D",
@@ -179,9 +190,17 @@ function useKeyboardShortcuts() {
         case "M":
           s.mirror();
           break;
+        case "o":
+        case "O":
+          s.resetCaptions();
+          break;
         case "w":
         case "W":
           s.startWiring();
+          break;
+        case "t":
+        case "T":
+          s.startText();
           break;
         case "Delete":
         case "Backspace":
@@ -251,10 +270,12 @@ export function SchematicCanvas() {
   const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
   const placeAt = useEditorStore((s) => s.placeAt);
+  const placeText = useEditorStore((s) => s.placeText);
   const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const moveSelection = useEditorStore((s) => s.moveSelection);
+  const moveCaption = useEditorStore((s) => s.moveCaption);
   const draft = useEditorStore((s) => s.draft);
   const wireClick = useEditorStore((s) => s.wireClick);
   const startWireFrom = useEditorStore((s) => s.startWireFrom);
@@ -316,6 +337,8 @@ export function SchematicCanvas() {
     }
     return unconnectedPins(doc);
   }, [doc, exporting, drag, partTarget, wirePart]);
+  // Names and values of the components: those placed automatically avoid what is around them.
+  const captions = useMemo(() => layoutCaptions(doc), [doc]);
   /** Unconnected pin names of each component: the only pins that keep their square. */
   const freePinsByComp = useMemo(() => {
     const byComp = new Map<string, Set<string>>();
@@ -330,9 +353,9 @@ export function SchematicCanvas() {
   const shownSelection = exporting ? [] : selection;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
-  const dragIds = (c: PlacedComponent): ReadonlySet<string> =>
+  const dragIds = (c: { id: string }): ReadonlySet<string> =>
     new Set(selection.includes(c.id) ? selection : [c.id]);
-  const deltaFrom = (c: PlacedComponent, position: GridPoint): GridPoint => ({
+  const deltaFrom = (c: { position: GridPoint }, position: GridPoint): GridPoint => ({
     x: position.x - c.position.x,
     y: position.y - c.position.y,
   });
@@ -454,13 +477,16 @@ export function SchematicCanvas() {
 
   /**
    * Right click without moving: leaves the wire being drawn or the current tool (like Escape);
-   * with the select tool, opens the menu of the component clicked.
+   * with the select tool, opens the menu of the component (or text) clicked.
    */
   const rightClick = (press: Press, e: MouseEvent) => {
     const s = useEditorStore.getState();
     if (s.draft) s.cancelDraft();
     else if (s.tool.kind !== "select") s.cancel();
-    else if (press.componentId && s.doc.components.some((c) => c.id === press.componentId)) {
+    else if (
+      press.componentId &&
+      [...s.doc.components, ...s.doc.texts].some((c) => c.id === press.componentId)
+    ) {
       if (!s.selection.includes(press.componentId)) s.select([press.componentId]);
       const box = containerRef.current?.getBoundingClientRect();
       if (box) setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
@@ -664,6 +690,12 @@ export function SchematicCanvas() {
     } else if (tool.kind === "paste") {
       const p = pointerGrid();
       if (p) pasteAt(p);
+    } else if (tool.kind === "text") {
+      const p = pointerGrid();
+      if (!p) return;
+      placeText(p);
+      // The new text is selected: type its content in the properties panel.
+      focusInspector();
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -676,6 +708,24 @@ export function SchematicCanvas() {
   /** `c` as it is in the store (the one drawn may be shifted by the drag in progress). */
   const storeComponent = (c: PlacedComponent): PlacedComponent =>
     storeDoc.components.find((x) => x.id === c.id) ?? c;
+  const storeText = (t: EditorText): EditorText => storeDoc.texts.find((x) => x.id === t.id) ?? t;
+
+  /**
+   * While dragging `item`: shows the items that follow it moved by `delta` (with Ctrl, `detach`,
+   * the wires stay where they are).
+   */
+  const dragTo = (item: { id: string }, delta: GridPoint, detach: boolean) =>
+    setDrag((d) =>
+      d && d.delta.x === delta.x && d.delta.y === delta.y && d.detach === detach
+        ? d
+        : { ids: d?.ids ?? dragIds(item), delta, detach },
+    );
+  /** End of a drag of `item` by `delta`: moves it with the rest of the selection. */
+  const dropAt = (item: { id: string }, delta: GridPoint, detach: boolean) => {
+    setDrag(null);
+    if (!selection.includes(item.id)) select([item.id]);
+    moveSelection(delta, { detach });
+  };
 
   const closeMenu = useCallback(() => setMenu(null), []);
   const closeEditing = useCallback(() => setEditing(null), []);
@@ -736,7 +786,13 @@ export function SchematicCanvas() {
         position: "relative",
         overflow: "hidden",
         background: COLORS.background,
-        cursor: panning ? "grabbing" : tool.kind === "select" ? "default" : "crosshair",
+        cursor: panning
+          ? "grabbing"
+          : tool.kind === "select"
+            ? "default"
+            : tool.kind === "text"
+              ? "text"
+              : "crosshair",
       }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={onDragOver}
@@ -777,24 +833,23 @@ export function SchematicCanvas() {
                 component={c}
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
+                captions={captions.get(c.id)}
+                onCaptionDrag={(kind, centre) => resolveCaptionDrop(doc, c.id, kind, centre)}
+                onCaptionMove={(kind, centre) => {
+                  if (!selection.includes(c.id)) select([c.id]);
+                  moveCaption(c.id, kind, centre);
+                }}
                 draggable={tool.kind === "select"}
                 onSelect={(e) => selectItem(c.id, e)}
                 onContextPress={() => {
                   rightPressed.current = c.id;
                 }}
-                onDrag={(position, detach) => {
-                  const delta = deltaFrom(storeComponent(c), position);
-                  setDrag((d) =>
-                    d && d.delta.x === delta.x && d.delta.y === delta.y && d.detach === detach
-                      ? d
-                      : { ids: d?.ids ?? dragIds(c), delta, detach },
-                  );
-                }}
-                onMove={(position, detach) => {
-                  setDrag(null);
-                  if (!selection.includes(c.id)) select([c.id]);
-                  moveSelection(deltaFrom(storeComponent(c), position), { detach });
-                }}
+                onDrag={(position, detach) =>
+                  dragTo(c, deltaFrom(storeComponent(c), position), detach)
+                }
+                onMove={(position, detach) =>
+                  dropAt(c, deltaFrom(storeComponent(c), position), detach)
+                }
                 onDoubleClick={
                   tool.kind === "select"
                     ? () => {
@@ -810,6 +865,28 @@ export function SchematicCanvas() {
                     ? (pin) => {
                         startWireFrom(pinPosition(c, pin));
                         trackPointer();
+                      }
+                    : undefined
+                }
+              />
+            ))}
+            {doc.texts.map((t) => (
+              <FreeText
+                key={t.id}
+                text={t}
+                selected={shownSelection.includes(t.id)}
+                draggable={tool.kind === "select"}
+                onSelect={(e) => selectItem(t.id, e)}
+                onContextPress={() => {
+                  rightPressed.current = t.id;
+                }}
+                onDrag={(position, detach) => dragTo(t, deltaFrom(storeText(t), position), detach)}
+                onMove={(position, detach) => dropAt(t, deltaFrom(storeText(t), position), detach)}
+                onDoubleClick={
+                  tool.kind === "select"
+                    ? () => {
+                        select([t.id]);
+                        focusInspector();
                       }
                     : undefined
                 }
@@ -862,7 +939,13 @@ export function SchematicCanvas() {
                 {pasteGhost.components.map((c) => (
                   <ComponentSymbol key={c.id} component={c} ghost />
                 ))}
+                {pasteGhost.texts.map((t) => (
+                  <FreeText key={t.id} text={t} ghost />
+                ))}
               </>
+            )}
+            {tool.kind === "text" && pointer && !exporting && (
+              <FreeText text={{ id: "ghost", position: pointer, content: NEW_TEXT }} ghost />
             )}
             {band && !exporting && (
               // Solid: what is entirely inside. Dashed and green: what touches it (Shift).

@@ -35,6 +35,8 @@ afficher cette liste à tout moment.
 | Flèches | Déplacer la sélection d'un pas |
 | <kbd>R</kbd> | Tourner |
 | <kbd>M</kbd> | Miroir |
+| Glisser un nom ou une valeur | Déplacer ce texte seul (demi-case, près de son composant) |
+| <kbd>O</kbd> | Replacer automatiquement les textes de la sélection |
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) |
 | <kbd>Ctrl+D</kbd> | Dupliquer la sélection |
@@ -61,6 +63,14 @@ afficher cette liste à tout moment.
 | <kbd>Échap</kbd> (outil fil) | Enlever le dernier coude |
 | Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser (dans tous les sens) |
 | Double-clic sur un fil | Sélectionner le fil entier |
+
+## Texte libre
+
+| Geste | Action |
+|---|---|
+| <kbd>T</kbd>, puis clic | Poser un texte, à écrire dans les propriétés |
+| Double-clic sur un texte | Modifier son contenu |
+| <kbd>Ctrl+Entrée</kbd> / <kbd>Échap</kbd> | Valider / annuler la saisie du texte |
 
 ## Vue
 
