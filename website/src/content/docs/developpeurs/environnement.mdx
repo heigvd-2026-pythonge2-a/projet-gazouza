@@ -100,10 +100,13 @@ La CI exige **80 % de couverture** du code Python.
 ```powershell
 cd frontend
 pnpm test                 # tests unitaires (vitest)
+pnpm test:coverage        # tests + taux de couverture (rapport HTML dans coverage/)
 pnpm lint ; pnpm format   # lint + formatage
 pnpm build                # vérification de types + build
 pnpm build:demo           # démo en ligne, construite dans website/public/demo/
 ```
+
+La CI affiche le taux de couverture du frontend dans le résumé du job, sans seuil exigé.
 
 </TabItem>
 <TabItem label="Site web">
