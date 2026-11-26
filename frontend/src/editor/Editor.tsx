@@ -43,6 +43,7 @@ import { Grid, type Viewport } from "./Grid";
 import { fitViewport, showViewport } from "./fitView";
 import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
+import { useFileDrop } from "./fileDrop";
 import { CurrentLayer } from "./CurrentLayer";
 import { focusInspector } from "./inspectorFocus";
 import { DRAG_TYPE } from "./Palette";
@@ -298,6 +299,8 @@ export function SchematicCanvas() {
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
+  /** A file from the Explorer is dragged over the schematic (#277). */
+  const fileOver = useFileDrop(containerRef);
 
   /** Fits the view to the whole circuit (F key, "Ajuster" button). */
   const fitView = useCallback(() => {
@@ -1020,6 +1023,26 @@ export function SchematicCanvas() {
           items={componentMenu(selection.length)}
           onClose={closeMenu}
         />
+      )}
+      {fileOver && (
+        <div
+          role="status"
+          style={{
+            position: "absolute",
+            inset: 6,
+            display: "grid",
+            placeItems: "center",
+            border: `2px dashed ${COLORS.selected}`,
+            borderRadius: 8,
+            background: UI.surfaceTranslucent,
+            color: COLORS.selected,
+            fontSize: 15,
+            fontWeight: 600,
+            pointerEvents: "none",
+          }}
+        >
+          Déposer pour ouvrir le schéma
+        </div>
       )}
       <CloseDialog />
     </div>

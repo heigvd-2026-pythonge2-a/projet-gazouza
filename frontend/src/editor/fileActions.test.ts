@@ -270,3 +270,47 @@ describe("without the file dialogs (other browsers)", () => {
     expect(f.isUnsaved(f.state())).toBe(false);
   });
 });
+
+describe("opening a dropped file (#277)", () => {
+  it("opens a schematic, and saves back to its file when the drop gave its handle", async () => {
+    const f = await load();
+    const handle = fakeHandle("pont.psice.json");
+    const file = new File([f.serializeDoc(fixtureDoc("divider_op"))], "pont.psice.json");
+    await f.openDroppedFile(file, handle as unknown as FileSystemFileHandle);
+    expect(f.state().doc.components.length).toBeGreaterThan(0);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    const { showSaveFilePicker } = stubPickers(fakeHandle("other"));
+    await f.saveFile();
+    expect(handle.written).toHaveLength(1);
+    expect(showSaveFilePicker).not.toHaveBeenCalled();
+  });
+
+  it("asks before dropping unsaved changes", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    const before = f.state().doc;
+    await f.openDroppedFile(new File(["{}"], "x.psice.json"));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("refuses an LTspice schematic and any other file, with a message", async () => {
+    const f = await load();
+    const before = f.state().doc;
+    await f.openDroppedFile(new File(["Version 4"], "filtre.ASC"));
+    expect(alert).toHaveBeenLastCalledWith(expect.stringMatching(/LTspice \(\.asc\)/));
+    await f.openDroppedFile(new File(["x"], "photo.png"));
+    expect(alert).toHaveBeenLastCalledWith(
+      expect.stringMatching(/« photo\.png » n'est pas un schéma/),
+    );
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("tells why a broken schematic cannot be opened", async () => {
+    const f = await load();
+    await f.openDroppedFile(new File(["not json"], "cassé.json"));
+    expect(alert).toHaveBeenCalledOnce();
+  });
+});
