@@ -50,7 +50,7 @@ Le cahier des charges prévoit des mesures automatiques sur une courbe :
 ## Export
 
 - Les **courbes** en CSV, pour les retravailler dans un tableur ou en Python.
-- Le **schéma** en PNG, pour un rapport.
+- Le **schéma** en PNG ou en SVG (net à toutes les tailles), pour un rapport.
 - La **netlist** SPICE, pour la comparer avec LTspice ou la simuler ailleurs.
 
 En bonus, une **FFT** pourra afficher le spectre d'une courbe temporelle.

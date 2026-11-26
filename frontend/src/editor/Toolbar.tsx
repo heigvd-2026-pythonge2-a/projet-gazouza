@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 
 import { isUnsaved, useEditorStore, useThemeStore } from "../store";
 import {
+  exportFormat,
   exportImage,
   exportTransparent,
   newFile,
@@ -9,12 +10,13 @@ import {
   openFile,
   saveFile,
   saveFileAs,
+  setExportFormat,
   setExportTransparent,
 } from "./fileActions";
 import { EXAMPLES, type Example } from "./examples";
 import { exportNetlist } from "./simulationActions";
 import { COLORS, UI } from "./theme";
-import { fitView, zoomIn, zoomOut } from "./viewCommands";
+import { fitView, zoomIn, zoomOut, type ImageFormat } from "./viewCommands";
 
 const SOON = "Bientôt disponible";
 
@@ -127,19 +129,31 @@ function ToolButton(props: {
   );
 }
 
+/** The image formats offered by the export panel, with their explanation. */
+const IMAGE_FORMATS: { value: ImageFormat; label: string; help: string }[] = [
+  { value: "png", label: "PNG", help: "Une image à coller partout." },
+  {
+    value: "svg",
+    label: "SVG",
+    help: "Reste net à toutes les tailles, se modifie dans Inkscape ou Word.",
+  },
+];
+
 /**
- * "Exporter" button: opens a small panel with the export options (transparent background, #195)
- * and the button that asks where to save the PNG. Closes on Escape or a press outside it.
+ * "Exporter" button: opens a small panel with the export options (PNG or SVG, #279; transparent
+ * background, #195) and the button that asks where to save the image. Closes on Escape or a press
+ * outside it. Both choices are kept for the next time.
  */
 function ExportButton() {
   const [open, setOpen] = useState(false);
   const [transparent, setTransparent] = useState(exportTransparent);
+  const [format, setFormat] = useState(exportFormat);
   const ref = useRef<HTMLSpanElement>(null);
-  const checkbox = useRef<HTMLInputElement>(null);
+  const chosenFormat = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    checkbox.current?.focus();
+    chosenFormat.current?.focus();
     const outside = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -155,13 +169,13 @@ function ExportButton() {
 
   const run = () => {
     setOpen(false);
-    void exportImage({ transparent });
+    void exportImage({ transparent, format });
   };
 
   return (
     <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
       <ToolButton
-        label="Exporter le schéma en image PNG…"
+        label="Exporter le schéma en image (PNG ou SVG)…"
         icon="export"
         expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -169,7 +183,7 @@ function ExportButton() {
       {open && (
         <div
           role="dialog"
-          aria-label="Exporter en image PNG"
+          aria-label="Exporter en image"
           onKeyDown={onKeyDown}
           style={{
             position: "absolute",
@@ -189,9 +203,35 @@ function ExportButton() {
             color: COLORS.symbol,
           }}
         >
+          <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
+            <legend style={{ padding: 0, marginBottom: 4, fontWeight: 600 }}>Format</legend>
+            {IMAGE_FORMATS.map((f) => (
+              <label
+                key={f.value}
+                style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}
+              >
+                <input
+                  // The focus goes to the format chosen, as arrows then move between formats.
+                  ref={format === f.value ? chosenFormat : undefined}
+                  type="radio"
+                  name="export-format"
+                  value={f.value}
+                  checked={format === f.value}
+                  onChange={() => {
+                    setFormat(f.value);
+                    setExportFormat(f.value);
+                  }}
+                  style={{ margin: "2px 0 0" }}
+                />
+                <span>
+                  {f.label}
+                  <span style={{ display: "block", fontSize: 12, color: UI.muted }}>{f.help}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
             <input
-              ref={checkbox}
               type="checkbox"
               checked={transparent}
               onChange={(e) => {
