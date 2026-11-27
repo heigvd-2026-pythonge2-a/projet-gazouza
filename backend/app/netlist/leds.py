@@ -57,7 +57,7 @@ def led_warnings(
                 Diagnostic(
                     code="LED_OVERCURRENT",
                     message=f"La LED {name} reçoit {_french(milliamps, 0)} mA : elle grillerait "
-                    "(max ~30 mA). Ajoutez une résistance en série.",
+                    "(max ~30 mA). Ajoute une résistance en série.",
                     targets=target,
                 )
             )
