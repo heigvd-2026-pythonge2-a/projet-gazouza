@@ -35,17 +35,28 @@ function SymbolShapeNode({
   shape,
   color,
   lightColor = color,
+  fillColor,
 }: {
   shape: SymbolShape;
   color: string;
   /** Colour of the lines of `tone: "light"` (the light of an LED). */
   lightColor?: string;
+  /** Inside of the `filled` lines (the flag of a label). */
+  fillColor?: string;
 }) {
   const stroke = shape.kind === "line" && shape.tone === "light" ? lightColor : color;
   const common = { stroke, strokeWidth: STROKE, listening: false } as const;
   switch (shape.kind) {
     case "line":
-      return <Line {...common} points={shape.points.map((v) => v * GRID)} lineCap="round" />;
+      return (
+        <Line
+          {...common}
+          points={shape.points.map((v) => v * GRID)}
+          lineCap="round"
+          closed={shape.filled}
+          fill={shape.filled ? fillColor : undefined}
+        />
+      );
     case "rect":
       return (
         <Rect
@@ -200,7 +211,12 @@ export function ComponentSymbol({
 }: ComponentSymbolProps) {
   const colors = useCanvasColors();
   const def = getDef(c.type);
-  const color = selected ? colors.selected : colors.symbol;
+  // A label keeps its pink fill when selected; only its outline turns to the selection colour.
+  const color = selected
+    ? colors.selected
+    : c.type === "label"
+      ? colors.labelStroke
+      : colors.symbol;
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
@@ -258,6 +274,7 @@ export function ComponentSymbol({
             shape={shape}
             color={color}
             lightColor={c.type === "led" && !selected ? ledColor(c.params) : color}
+            fillColor={colors.labelFill}
           />
         ))}
         {def.pins
