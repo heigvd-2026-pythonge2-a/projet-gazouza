@@ -36,14 +36,15 @@ Si vous changez un modèle Pydantic, la CI vous forcera à mettre les fixtures �
 | `lowpass_ac` | Passe-bas RC (1 kΩ, 159,15 nF, fc = 1 kHz) | `.ac` | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
 | `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |
 | `half_wave_rectifier` | Sinus 5 V / 50 Hz, diode de redressement `D_RECT`, charge 1 kΩ, sur 40 ms | `.tran` | Diode et son `.model` écrit dans la netlist ; sortie à 0 V sur les alternances négatives |
+| `shorted_resistor_op` | Diviseur 10 V (R1 = R2 = 1 kΩ) et R3 dont un fil relie les deux pattes | `.op` | Avertissement `SHORTED_COMPONENT` sur R3 (nœud `n2`), courant nul dans R3 ; fil avec des points de passage |
 
 Les mêmes circuits sont expliqués pas à pas dans
 [`docs/exemples-netlist.md`](../../docs/exemples-netlist.md).
 
 ## À savoir
 
-- Les fichiers `result.json` des cinq circuits (`divider_op`, `rc_tran`, `lowpass_ac`,
-  `loaded_divider_dc` et `half_wave_rectifier`) contiennent les vraies sorties produites par
+- Les fichiers `result.json` des six circuits (`divider_op`, `rc_tran`, `lowpass_ac`,
+  `loaded_divider_dc`, `half_wave_rectifier` et `shorted_resistor_op`) contiennent les vraies sorties produites par
   `ngspice-47`.
 - Les schémas sont dessinés comme dans l'éditeur (ils s'ouvrent tels quels avec `?demo=<circuit>`,
   et dans la démo en ligne du site) : fils horizontaux ou verticaux, qui ne traversent aucun
