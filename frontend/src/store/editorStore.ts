@@ -26,6 +26,7 @@ import {
   moveWirePart,
   normalizeContacts,
   orientLabels,
+  straightenWires,
   nudgeFree,
   pasteClip,
   removeHiddenWires,
@@ -343,7 +344,8 @@ function turned(doc: EditorDoc, selection: string[]): EditorDoc {
  * (#256), the duplicate wires an edit may leave under others are removed (#259), and the flags of
  * the node labels point away from their wire (#295).
  */
-const tidy = (doc: EditorDoc): EditorDoc => orientLabels(removeHiddenWires(normalizeContacts(doc)));
+const tidy = (doc: EditorDoc): EditorDoc =>
+  orientLabels(removeHiddenWires(normalizeContacts(straightenWires(doc))));
 
 /** Why a wire is not added (see `closesWireLoop`), shown in the status bar (#257). */
 export const WIRE_LOOP_NOTICE = "Fil non ajouté : ces deux points sont déjà reliés par des fils.";
