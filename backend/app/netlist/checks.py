@@ -31,6 +31,7 @@ from app.models import (
 )
 from app.netlist.connectivity import Nodes, touches
 from app.netlist.library import ComponentType
+from app.netlist.timestep import tran_step_warnings
 from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, parse_value
 from app.netlist.writer import tran_max_step
 
@@ -128,7 +129,15 @@ def check_structure(
     _check_duplicate_names(report, schematic, library)
     _check_wires(report, schematic, components, junctions, library)
     _check_analysis(report, analysis, components)
+    if isinstance(analysis, TranAnalysis) and _finite(analysis):
+        report.warnings += tran_step_warnings(schematic, analysis)
     return report
+
+
+def _finite(analysis: Analysis) -> bool:
+    """JSON accepts 1e999, Infinity or NaN: such a number cannot be written in a netlist."""
+    numbers = [v for v in analysis.model_dump().values() if isinstance(v, float)]
+    return all(math.isfinite(v) for v in numbers)
 
 
 def _check_name(report: Report, comp: Component, ctype: ComponentType) -> None:
@@ -268,9 +277,7 @@ def _check_analysis(report: Report, analysis: Analysis, components: dict[str, Co
             "DC_SOURCE_NOT_FOUND", "La source balayée n'existe pas ou n'est pas une source."
         )
 
-    # JSON accepts 1e999, Infinity or NaN: such a number cannot be written in a netlist.
-    numbers = [v for v in analysis.model_dump().values() if isinstance(v, float)]
-    if not all(math.isfinite(v) for v in numbers):
+    if not _finite(analysis):
         report.error("BAD_VALUE", "L'analyse contient une valeur infinie ou invalide.")
         return
     _check_points(report, analysis)
