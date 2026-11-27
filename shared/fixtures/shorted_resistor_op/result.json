@@ -1,0 +1,87 @@
+{
+  "analysis": "op",
+  "axis": null,
+  "traces": [
+    {
+      "name": "v(n1)",
+      "kind": "voltage",
+      "unit": "V",
+      "net": "n1",
+      "component_id": null,
+      "values": [
+        10.0
+      ],
+      "imag": null
+    },
+    {
+      "name": "v(n2)",
+      "kind": "voltage",
+      "unit": "V",
+      "net": "n2",
+      "component_id": null,
+      "values": [
+        5.0
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(V1)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c1",
+      "values": [
+        -0.005
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(R1)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c2",
+      "values": [
+        0.005
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(R2)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c3",
+      "values": [
+        0.005
+      ],
+      "imag": null
+    },
+    {
+      "name": "i(R3)",
+      "kind": "current",
+      "unit": "A",
+      "net": null,
+      "component_id": "c6",
+      "values": [
+        0.0
+      ],
+      "imag": null
+    }
+  ],
+  "errors": [],
+  "warnings": [
+    {
+      "code": "SHORTED_COMPONENT",
+      "message": "R3 est court-circuité : toutes ses broches sont reliées au même nœud (n2), il n'a aucun effet.",
+      "targets": [
+        {
+          "comp": "c6"
+        },
+        {
+          "net": "n2"
+        }
+      ]
+    }
+  ]
+}
