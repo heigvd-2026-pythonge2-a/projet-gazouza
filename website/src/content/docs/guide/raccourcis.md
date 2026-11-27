@@ -76,6 +76,16 @@ afficher cette liste à tout moment.
 | Double-clic sur un texte                  | Modifier son contenu                         |
 | <kbd>Ctrl+Entrée</kbd> / <kbd>Échap</kbd> | Valider / annuler la saisie du texte         |
 
+## Sonde
+
+| Geste                         | Action                            |
+| ----------------------------- | --------------------------------- |
+| <kbd>P</kbd>                  | Sonder (après une simulation)     |
+| Clic sur un fil (sonde)       | Tracer la tension de son nœud     |
+| Clic sur un composant (sonde) | Tracer le courant qui le traverse |
+| Nouveau clic (sonde)          | Retirer la sonde                  |
+| <kbd>Échap</kbd> (sonde)      | Arrêter de sonder                 |
+
 ## Vue
 
 | Geste                           | Action                    |
