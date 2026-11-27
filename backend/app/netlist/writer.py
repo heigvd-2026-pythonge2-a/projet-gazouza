@@ -41,6 +41,15 @@ def component_line(
     return f"{line} AC 1" if ac_input else line
 
 
+def tran_max_step(analysis: TranAnalysis) -> float | None:
+    """The maximum step of a `.tran`: from `points` (stop_time / points, #334) and `max_step`,
+    the smaller one. None when neither is given (ngspice then takes about 1000 points)."""
+    steps = [analysis.max_step] if analysis.max_step is not None else []
+    if analysis.points is not None:
+        steps.append(analysis.stop_time / analysis.points)
+    return min(steps, default=None)
+
+
 def analysis_line(analysis: Analysis, names: dict[str, str]) -> str:
     """The analysis directive. `names`: component id -> SPICE name (for the swept source)."""
     if isinstance(analysis, OpAnalysis):
@@ -49,9 +58,10 @@ def analysis_line(analysis: Analysis, names: dict[str, str]) -> str:
         # .tran tstep tstop [tstart [tmax]]: the 1st argument is the display step, the
         # maximum computation step is the 4th one (decided with Antoine).
         stop = format_value(analysis.stop_time)
-        if analysis.max_step is None:
+        max_step = tran_max_step(analysis)
+        if max_step is None:
             return f".tran {format_value(analysis.stop_time / 1000)} {stop}"
-        step = format_value(analysis.max_step)
+        step = format_value(max_step)
         return f".tran {step} {stop} 0 {step}"
     if isinstance(analysis, AcAnalysis):
         start, stop = format_value(analysis.start_frequency), format_value(analysis.stop_frequency)

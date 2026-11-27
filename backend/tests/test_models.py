@@ -17,6 +17,7 @@ from app.models import (
     Schematic,
     Text,
     TextOffset,
+    TranAnalysis,
     Wire,
     WireEnd,
     WireTarget,
@@ -212,3 +213,13 @@ def test_diagnostic_without_targets() -> None:
 def test_unknown_code_is_rejected() -> None:
     with pytest.raises(ValidationError):
         Diagnostic.model_validate({"code": "SOMETHING_ELSE", "message": "..."})
+
+
+@pytest.mark.parametrize("points", [0, -5, 1.5])
+def test_tran_points_must_be_a_positive_integer(points: float) -> None:
+    with pytest.raises(ValidationError):
+        TranAnalysis.model_validate({"stop_time": 1e-3, "points": points})
+
+
+def test_tran_points_is_optional() -> None:
+    assert TranAnalysis(stop_time=1e-3).points is None

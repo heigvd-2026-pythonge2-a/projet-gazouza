@@ -32,6 +32,7 @@ from app.models import (
 from app.netlist.connectivity import Nodes, touches
 from app.netlist.library import ComponentType
 from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, parse_value
+from app.netlist.writer import tran_max_step
 
 LABEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 AUTOMATIC_NAME = re.compile(r"n\d+", re.IGNORECASE)
@@ -272,7 +273,8 @@ def minimum_points(analysis: Analysis) -> float:
     could have worked."""
     if isinstance(analysis, TranAnalysis):
         # Without a maximum step, ngspice takes stop_time / 1000 (writer.analysis_line).
-        return analysis.stop_time / analysis.max_step if analysis.max_step else 1000
+        max_step = tran_max_step(analysis)
+        return analysis.stop_time / max_step if max_step else 1000
     if isinstance(analysis, DcAnalysis):
         return abs(analysis.stop - analysis.start) / analysis.step + 1
     if isinstance(analysis, AcAnalysis):
