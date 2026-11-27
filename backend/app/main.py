@@ -6,6 +6,7 @@ from app.api.library import router as library_router
 from app.engines import run_simulation
 from app.models import NetlistResult, SimulationRequest, SimulationResult
 from app.netlist.generate import generate_netlist as build_netlist
+from app.netlist.leds import led_warnings
 
 app = FastAPI(title="Psice API", version="0.1.0")
 app.include_router(library_router)
@@ -28,4 +29,7 @@ def simulate(request: SimulationRequest) -> SimulationResult:
     """Schematic + analysis -> results. Owners: Damien (route), Antoine (engine)."""
     # Netlist errors stop here: the engine returns them without starting ngspice.
     # ngspice errors come back as diagnostics too: always HTTP 200.
-    return run_simulation(build_netlist(request.schematic, request.analysis), request.analysis)
+    result = run_simulation(build_netlist(request.schematic, request.analysis), request.analysis)
+    # A LED that would burn out is only known once the currents are computed (#293).
+    result.warnings += led_warnings(request.schematic, result)
+    return result
