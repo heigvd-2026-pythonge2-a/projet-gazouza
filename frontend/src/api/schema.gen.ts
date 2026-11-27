@@ -647,6 +647,11 @@ export interface components {
        */
       component_id?: string | null;
       /**
+       * Pin
+       * @description Pin name of the component (e.g. 'C', 'B', 'E') for a current flowing INTO that pin, named like 'i(Q1:C)' (#289). None for two-pin components, whose current keeps its usual direction.
+       */
+      pin?: string | null;
+      /**
        * Values
        * @description Real part; one value per axis point (1 for .op).
        */

@@ -17,6 +17,7 @@ from app.models import (
     Schematic,
     Text,
     TextOffset,
+    Trace,
     TranAnalysis,
     Wire,
     WireEnd,
@@ -223,3 +224,20 @@ def test_tran_points_must_be_a_positive_integer(points: float) -> None:
 
 def test_tran_points_is_optional() -> None:
     assert TranAnalysis(stop_time=1e-3).points is None
+
+
+def test_trace_pin_current() -> None:
+    """A current of one pin of a transistor (#289); absent for two-pin components."""
+    trace = Trace.model_validate(
+        {
+            "name": "i(Q1:C)",
+            "kind": "current",
+            "unit": "A",
+            "component_id": "q1",
+            "pin": "C",
+            "values": [0.01],
+        }
+    )
+    assert (trace.component_id, trace.pin) == ("q1", "C")
+    two_pins = Trace(name="i(R1)", kind="current", unit="A", component_id="r1", values=[0.005])
+    assert two_pins.pin is None
