@@ -1201,6 +1201,19 @@
             "title": "Stop Time",
             "description": "Simulation end, in seconds."
           },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points",
+            "description": "Optional: at least this many time points (#334); the maximum step is stop_time / points. ngspice may give more points (adaptive step), never fewer. None: about 1000."
+          },
           "max_step": {
             "anyOf": [
               {
@@ -1212,7 +1225,7 @@
               }
             ],
             "title": "Max Step",
-            "description": "Optional, in seconds."
+            "description": "Optional advanced setting, in seconds. With `points` too, the smaller step of the two is used."
           }
         },
         "type": "object",
