@@ -3,13 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import dividerOpResult from "../../../shared/fixtures/divider_op/result.json";
+import dcResultJson from "../../../shared/fixtures/loaded_divider_dc/result.json";
+import acResultJson from "../../../shared/fixtures/lowpass_ac/result.json";
 import rcTranResult from "../../../shared/fixtures/rc_tran/result.json";
 import type { SimulationResult } from "../api/client";
 import { editorState, resetEditorStore } from "../test/editorStore";
 import { PlotPanel } from "./PlotPanel";
 
+interface MockOpts {
+  scales?: { x?: { time?: boolean; distr?: number; log?: number } };
+  series?: unknown[];
+  hooks?: { setScale?: Array<(u: unknown, key: string) => void> };
+}
+
 const mockInstances: Array<{
-  opts: unknown;
+  opts: MockOpts;
   data: unknown;
   over: HTMLDivElement;
   axes: Array<{ show?: boolean }>;
@@ -23,20 +31,23 @@ const mockInstances: Array<{
 
 vi.mock("uplot", () => {
   class MockUPlot {
-    opts: unknown;
+    opts: MockOpts;
     data: number[][];
     over: HTMLDivElement;
     axes: Array<{ show?: boolean }>;
     scales: Record<string, { min: number; max: number }>;
     setScale = vi.fn((key: string, limits: { min: number; max: number }) => {
       this.scales[key] = limits;
+      for (const hook of this.opts.hooks?.setScale ?? []) {
+        hook(this, key);
+      }
     });
     setSeries = vi.fn();
     setSize = vi.fn();
     redraw = vi.fn();
     destroy = vi.fn();
 
-    constructor(opts: unknown, data: number[][], host: HTMLElement) {
+    constructor(opts: MockOpts, data: number[][], host: HTMLElement) {
       this.opts = opts;
       this.data = data;
       const xVals = data[0] ?? [0, 1];
@@ -53,11 +64,23 @@ vi.mock("uplot", () => {
 
     posToVal(leftCss: number) {
       const { min, max } = this.scales.x ?? { min: 0, max: 1 };
+      const isLog = this.opts.scales?.x?.distr === 3;
+      if (isLog && min > 0 && max > 0) {
+        const lMin = Math.log10(min);
+        const lMax = Math.log10(max);
+        return 10 ** (lMin + (leftCss / 400) * (lMax - lMin));
+      }
       return min + (leftCss / 400) * (max - min);
     }
 
     valToPos(val: number) {
       const { min, max } = this.scales.x ?? { min: 0, max: 1 };
+      const isLog = this.opts.scales?.x?.distr === 3;
+      if (isLog && min > 0 && max > 0 && val > 0) {
+        const lMin = Math.log10(min);
+        const lMax = Math.log10(max);
+        return lMax === lMin ? 0 : ((Math.log10(val) - lMin) / (lMax - lMin)) * 400;
+      }
       return max === min ? 0 : ((val - min) / (max - min)) * 400;
     }
 
@@ -69,6 +92,8 @@ vi.mock("uplot", () => {
 
 const rcResult = rcTranResult as SimulationResult;
 const opResult = dividerOpResult as SimulationResult;
+const acResult = acResultJson as SimulationResult;
+const dcResult = dcResultJson as SimulationResult;
 
 beforeEach(() => {
   mockInstances.length = 0;
@@ -92,30 +117,24 @@ describe("PlotPanel", () => {
     act(() => editorState().setSimulation(rcResult));
     render(<PlotPanel />);
 
-    // All 5 traces from rc_tran appear in the interactive legend.
     const legend = screen.getByRole("group", { name: "Traces affichées" });
     for (const name of ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(C1)"]) {
       expect(within(legend).getByLabelText(name)).toBeChecked();
     }
 
-    // uPlot was initialized with non-Unix time scale and all 5 series.
     await waitFor(() => expect(mockInstances).toHaveLength(1));
     const chart = mockInstances[0]!;
-    const opts = chart.opts as { scales: { x: { time: boolean } }; series: unknown[] };
-    expect(opts.scales.x.time).toBe(false);
-    expect(opts.series).toHaveLength(6);
+    expect(chart.opts.scales?.x?.time).toBe(false);
+    expect(chart.opts.series).toHaveLength(6);
 
-    // Cursor table shows time and trace rows.
     const table = screen.getByRole("table", { name: "Mesures des curseurs" });
     expect(within(table).getByText("Temps (s)")).toBeInTheDocument();
     expect(within(table).getByText("v(out)")).toBeInTheDocument();
 
-    // Unchecking a trace removes it from the cursor table and hides it on uPlot.
     await user.click(within(legend).getByLabelText("i(R1)"));
     expect(within(table).queryByText("i(R1)")).not.toBeInTheDocument();
     expect(chart.setSeries).toHaveBeenCalled();
 
-    // Mouse wheel zooms X scale, and reset zoom restores full range.
     fireEvent.wheel(chart.over, { deltaY: -100, clientX: 200 });
     expect(chart.setScale).toHaveBeenCalledWith(
       "x",
@@ -131,19 +150,16 @@ describe("PlotPanel", () => {
       max: expect.closeTo(0.005, 6),
     });
 
-    // Cursor placement mode updates cursor 1 position via mouse click.
     await user.click(screen.getByRole("button", { name: "Placer C1" }));
     fireEvent.mouseDown(chart.over, { button: 0, clientX: 80 });
     fireEvent.mouseUp(window);
     expect(within(table).getByText(/997[.,]617 µs/)).toBeInTheDocument();
 
-    // Hiding all voltage traces toggles the V axis in place without recreating uPlot (keeps zoom).
     await user.click(within(legend).getByLabelText("v(in)"));
     await user.click(within(legend).getByLabelText("v(out)"));
     expect(mockInstances).toHaveLength(1);
     expect(chart.axes[1]?.show).toBe(false);
 
-    // Hiding cursors removes the readout table.
     await user.click(screen.getByRole("button", { name: "Masquer les curseurs" }));
     expect(screen.queryByRole("table", { name: "Mesures des curseurs" })).not.toBeInTheDocument();
   });
@@ -158,7 +174,6 @@ describe("PlotPanel", () => {
     const uplotOwnListener = vi.fn();
     chart.over.addEventListener("mousedown", uplotOwnListener);
 
-    // Place C1 at 80 px (~1 ms) first, then switch back to zoom mode and drag C1 directly.
     await user.click(screen.getByRole("button", { name: "Placer C1" }));
     fireEvent.mouseDown(chart.over, { button: 0, clientX: 80 });
     fireEvent.mouseUp(window);
@@ -167,7 +182,6 @@ describe("PlotPanel", () => {
     uplotOwnListener.mockClear();
     chart.setScale.mockClear();
 
-    // Grab near C1 (at 80 px after placement) and drag to 200 px (~2.5 ms).
     fireEvent.mouseDown(chart.over, { button: 0, clientX: 80 });
     fireEvent.mouseMove(window, { clientX: 200 });
     fireEvent.mouseUp(window);
@@ -178,28 +192,65 @@ describe("PlotPanel", () => {
     expect(within(table).getByText(/2[.,]498 ms|2[.,]5 ms/)).toBeInTheDocument();
   });
 
-  it("shows a coming-soon message for non-.tran axis analyses (.ac/.dc)", () => {
-    act(() =>
-      editorState().setSimulation({
-        analysis: "ac",
-        axis: { name: "frequency", unit: "Hz", values: [10, 100, 1000] },
-        traces: [
-          {
-            name: "v(out)",
-            kind: "voltage",
-            unit: "V",
-            net: "out",
-            values: [1, 0.7, 0.1],
-            imag: [0, -0.5, -0.3],
-          },
-        ],
+  it("renders Bode Gain and Phase charts for .ac with currents hidden by default and linked zoom", async () => {
+    const user = userEvent.setup();
+    act(() => editorState().setSimulation(acResult));
+    render(<PlotPanel />);
+
+    const legend = screen.getByRole("group", { name: "Traces affichées" });
+    expect(within(legend).getByLabelText("v(in)")).toBeChecked();
+    expect(within(legend).getByLabelText("v(out)")).toBeChecked();
+    for (const currentName of ["i(V1)", "i(R1)", "i(C1)"]) {
+      const box = within(legend).queryByLabelText(currentName);
+      if (box) expect(box).not.toBeChecked();
+    }
+
+    await waitFor(() => expect(mockInstances).toHaveLength(2));
+    const [gainChart, phaseChart] = mockInstances;
+    expect(gainChart!.opts.scales?.x?.distr).toBe(3);
+    expect(gainChart!.opts.scales?.x?.log).toBe(10);
+    expect(phaseChart!.opts.scales?.x?.distr).toBe(3);
+
+    // 10 Hz .. 100 kHz -> 1 kHz is at the exact visual midpoint (200 px of 400 px).
+    await user.click(screen.getByRole("button", { name: "Placer C1" }));
+    fireEvent.mouseDown(gainChart!.over, { button: 0, clientX: 200 });
+    fireEvent.mouseUp(window);
+
+    const table = screen.getByRole("table", { name: "Mesures des curseurs" });
+    expect(within(table).getByText("1 kHz")).toBeInTheDocument();
+    expect(within(table).getByText(/-3[.,]01 dB/)).toBeInTheDocument();
+    expect(within(table).getByText(/-44[.,]999°|-45°/)).toBeInTheDocument();
+
+    // Toggling a current trace on in the legend makes it appear in the readout table.
+    const currentBox = within(legend).queryByLabelText("i(R1)");
+    if (currentBox) {
+      await user.click(currentBox);
+      expect(within(table).getByText("i(R1)")).toBeInTheDocument();
+    }
+
+    // Zooming on the Gain chart synchronizes X scale to the Phase chart.
+    phaseChart!.setScale.mockClear();
+    fireEvent.wheel(gainChart!.over, { deltaY: -100, clientX: 200 });
+    expect(phaseChart!.setScale).toHaveBeenCalledWith(
+      "x",
+      expect.objectContaining({
+        min: expect.any(Number),
+        max: expect.any(Number),
       }),
     );
+  });
+
+  it("renders DC sweep curves with the swept source on the X axis", async () => {
+    act(() => editorState().setSimulation(dcResult));
     render(<PlotPanel />);
-    expect(
-      screen.getByText(/L'affichage des courbes d'analyse \.ac est à venir/),
-    ).toBeInTheDocument();
-    expect(mockInstances).toHaveLength(0);
+
+    await waitFor(() => expect(mockInstances).toHaveLength(1));
+    const chart = mockInstances[0]!;
+    expect(chart.opts.scales?.x?.distr).toBeUndefined();
+
+    const table = screen.getByRole("table", { name: "Mesures des curseurs" });
+    expect(within(table).getByText("V1 (V)")).toBeInTheDocument();
+    expect(within(table).getByText("v(n2)")).toBeInTheDocument();
   });
 
   it("renders operating point results as a table", () => {
