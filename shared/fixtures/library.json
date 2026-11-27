@@ -156,7 +156,7 @@
       },
       {
         "name": "offset",
-        "label": "Décalage",
+        "label": "Offset",
         "unit": "A",
         "default": "0",
         "kind": "value",
@@ -833,7 +833,7 @@
       },
       {
         "name": "offset",
-        "label": "Décalage",
+        "label": "Offset",
         "unit": "V",
         "default": "0",
         "kind": "value",
