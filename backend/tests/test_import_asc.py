@@ -112,12 +112,36 @@ def test_file_too_large() -> None:
         ("R180", (-16, -96)),
         ("R270", (96, -16)),
         ("M0", (-16, 96)),  # mirror x -> -x
-        ("M90", (-96, -16)),  # mirror first, then rotate
+        # LTspice rotates first, then mirrors (checked with `LTspice.exe -netlist`).
+        ("M90", (96, 16)),
+        ("M180", (16, -96)),
+        ("M270", (-96, -16)),
     ],
 )
 def test_place_a_pin(orientation: str, expected: tuple[int, int]) -> None:
     rotation, mirror = parse_orientation(orientation)
     assert place(16, 96, rotation, mirror) == expected
+
+
+@pytest.mark.parametrize(
+    ("orientation", "psice"),
+    [("R0", (0, False)), ("R270", (270, False)), ("M0", (0, True)), ("M90", (270, True)),
+     ("M180", (180, True)), ("M270", (90, True))],
+)  # fmt: skip
+def test_orientation_in_the_psice_convention(orientation: str, psice: tuple[int, bool]) -> None:
+    """Psice mirrors first, then turns clockwise: an LTspice Mn is a mirror then -n degrees."""
+    assert parse_orientation(orientation) == psice
+
+
+def test_mirrored_and_turned_resistor_is_connected() -> None:
+    # R1 in M90 lies horizontally, its pins at (16, 16) and (96, 16) (as LTspice netlists it).
+    result = import_asc(asc("SYMBOL res 0 0 M90", "SYMATTR InstName R1",
+                            "FLAG 16 16 a", "FLAG 96 16 b"))  # fmt: skip
+    assert sorted(sorted(ends(w)) for w in result.schematic.wires) == [
+        [("c1", "1"), ("c2", "1")],
+        [("c1", "2"), ("c3", "1")],
+    ]
+    assert result.schematic.components[0].rotation == 270
 
 
 @pytest.mark.parametrize("orientation", ["R45", "X0", ""])

@@ -4,9 +4,9 @@ LTspice describes each symbol in its own `.asy` files, which we cannot copy. So 
 positions of the supported symbols are written here, in LTspice units (16 per grid step),
 relative to the symbol origin, at orientation R0.
 
-Orientation: `Rn` = rotation by n degrees clockwise (y axis down), `Mn` = horizontal mirror
-(x -> -x) first, then the rotation. This is exactly the Psice convention (format-schema.md),
-so an LTspice orientation maps directly to `rotation` and `mirror`.
+Orientation: `Rn` = rotation by n degrees clockwise (y axis down), `Mn` = the same rotation,
+then a horizontal mirror (x -> -x). Psice mirrors first (format-schema.md): see
+`parse_orientation` for the conversion.
 """
 
 from dataclasses import dataclass
@@ -79,11 +79,19 @@ def find_symbol(name: str) -> SymbolDef | None:
 
 
 def parse_orientation(orientation: str) -> tuple[int, bool]:
-    """'R90' -> (90, False), 'M180' -> (180, True). Raises ValueError if unknown."""
+    """LTspice orientation -> Psice (rotation, mirror). Raises ValueError if unknown.
+
+    'Rn' is n degrees clockwise. 'Mn' is n degrees clockwise THEN the mirror (checked with
+    LTspice itself, `LTspice.exe -netlist`), while Psice mirrors first: the same drawing is a
+    mirror then n degrees counterclockwise. So 'M90' -> (270, True) and 'M270' -> (90, True);
+    'M0' and 'M180' are the same either way.
+    """
     kind, angle = orientation[:1].upper(), orientation[1:]
     if kind not in ("R", "M") or angle not in ("0", "90", "180", "270"):
         raise ValueError(f"unknown orientation {orientation!r}")
-    return int(angle), kind == "M"
+    if kind == "R":
+        return int(angle), False
+    return (360 - int(angle)) % 360, True
 
 
 def place(dx: int, dy: int, rotation: int, mirror: bool) -> tuple[int, int]:
