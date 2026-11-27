@@ -47,7 +47,11 @@ describe("runSimulation (#100)", () => {
     editorState().setAnalysis({ kind: "tran", stopTime: "5m", maxStep: "10u" });
     await runSimulation();
     const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
-    expect(body.analysis).toEqual({ kind: "tran", stop_time: 0.005, max_step: 1e-5 });
+    expect(body.analysis).toEqual({
+      kind: "tran",
+      stop_time: 0.005,
+      max_step: 1e-5,
+    });
     // Only an operating point needs the nodes.
     expect(fetch).toHaveBeenCalledOnce();
   });

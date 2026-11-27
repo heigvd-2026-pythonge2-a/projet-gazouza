@@ -36,7 +36,12 @@ export interface AnalysisSettings {
   kind: AnalysisKind;
   /** Transient: end of the simulation, in seconds ("10m"). */
   stopTime: string;
-  /** Transient: largest time step, in seconds; empty for automatic. */
+  /**
+   * Transient: number of time points, at least (#334); the step is stopTime / tranPoints. Empty:
+   * not sent, the backend takes `DEFAULT_TRAN_POINTS`.
+   */
+  tranPoints: string;
+  /** Transient, advanced: largest time step, in seconds; empty for automatic. */
   maxStep: string;
   /** AC: id of the input source; empty or gone: the first source of the schematic. */
   acSource: string;
@@ -73,9 +78,19 @@ export function dcRangeFor(s: DcRange, unit: "V" | "A"): Partial<DcRange> {
   return untouched ? { ...DC_DEFAULTS[unit] } : {};
 }
 
+/** Points of a transient analysis when none are typed: what ngspice took before #334. */
+export const DEFAULT_TRAN_POINTS = 1000;
+
+/**
+ * Most points a simulation may give: `MAX_RESULT_POINTS` of the backend
+ * (`backend/app/engines/parser.py`), checked here while typing (#334).
+ */
+export const MAX_TRAN_POINTS = 200_000;
+
 export const DEFAULT_ANALYSIS: AnalysisSettings = {
   kind: "op",
   stopTime: "10m",
+  tranPoints: "",
   maxStep: "",
   acSource: "",
   acStart: "10",
@@ -151,13 +166,44 @@ export function toAnalysis(s: AnalysisSettings, sources: AnalysisSource[] = []):
   if (stop === null || stop <= 0) {
     return { error: "Durée de la simulation invalide : par exemple 10m (10 millisecondes)." };
   }
-  if (s.maxStep.trim() === "") return { analysis: { kind: "tran", stop_time: stop } };
+  const points = tranPoints(s.tranPoints);
+  if (typeof points === "string") return { error: points };
+  // Points left empty are not sent: the requests of the examples stay those of the fixtures.
+  const tran = { kind: "tran", stop_time: stop, ...(points ? { points } : {}) } as const;
+  if (s.maxStep.trim() === "") return { analysis: tran };
   const step = parseSpiceNumber(s.maxStep);
   if (step === null || step <= 0) {
     return { error: "Pas maximal invalide : par exemple 10u (10 microsecondes), ou vide." };
   }
   if (step >= stop) return { error: "Le pas maximal doit être plus petit que la durée." };
-  return { analysis: { kind: "tran", stop_time: stop, max_step: step } };
+  return { analysis: { ...tran, max_step: step } };
+}
+
+/** The number of points typed for `.tran`, or why it is wrong (#334). Empty: null. */
+function tranPoints(text: string): number | null | string {
+  if (text.trim() === "") return null;
+  const points = Number(text.trim().replace(/[\s']/g, ""));
+  if (!Number.isInteger(points) || points < 2) {
+    return "Nombre de points invalide : un nombre entier, par exemple 1000.";
+  }
+  if (points > MAX_TRAN_POINTS) {
+    return `Trop de points : la limite est ${MAX_TRAN_POINTS.toLocaleString("fr-CH")}, réduis le nombre de points.`;
+  }
+  return points;
+}
+
+/**
+ * The time step of a transient analysis, shown next to its settings (#334), as the backend
+ * computes it (`tran_max_step` in `backend/app/netlist/writer.py`): the smaller of
+ * `stopTime / tranPoints` and the maximum step, the one given if only one is, else
+ * `stopTime / DEFAULT_TRAN_POINTS`. Null while a setting is invalid.
+ */
+export function tranStep(s: AnalysisSettings): number | null {
+  const result = toAnalysis({ ...s, kind: "tran" });
+  if (!("analysis" in result) || result.analysis.kind !== "tran") return null;
+  const { stop_time, points, max_step } = result.analysis;
+  const steps = [max_step, points ? stop_time / points : null].filter((x) => x != null);
+  return steps.length > 0 ? Math.min(...steps) : stop_time / DEFAULT_TRAN_POINTS;
 }
 
 function toAc(s: AnalysisSettings, sources: AnalysisSource[]): AnalysisOrError {
