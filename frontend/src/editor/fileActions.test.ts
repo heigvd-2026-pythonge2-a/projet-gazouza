@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import rcAnalysis from "../../../shared/fixtures/rc_tran/analysis.json";
+import rcSchematic from "../../../shared/fixtures/rc_tran/schematic.json";
 import { fixtureDoc, fixtureLibrary } from "../store/testFixtures";
 
 // fileActions remembers the current file in its module: each test loads it (and the store it
@@ -314,11 +316,17 @@ describe("opening a dropped file (#277)", () => {
     expect(f.state().doc).toBe(before);
   });
 
-  it("refuses an LTspice schematic and any other file, with a message", async () => {
+  it("imports an LTspice schematic (#225)", async () => {
+    const f = await load();
+    const fetch = stubImport({ schematic: rcSchematic, analysis: rcAnalysis });
+    await f.openDroppedFile(new File(["Version 4"], "filtre.ASC"));
+    expect(fetch).toHaveBeenCalledWith("/api/import/asc", expect.anything());
+    expect(f.state().doc.components).toHaveLength(rcSchematic.components.length);
+  });
+
+  it("refuses any other file, with a message", async () => {
     const f = await load();
     const before = f.state().doc;
-    await f.openDroppedFile(new File(["Version 4"], "filtre.ASC"));
-    expect(alert).toHaveBeenLastCalledWith(expect.stringMatching(/LTspice \(\.asc\)/));
     await f.openDroppedFile(new File(["x"], "photo.png"));
     expect(alert).toHaveBeenLastCalledWith(
       expect.stringMatching(/« photo\.png » n'est pas un schéma/),
@@ -330,5 +338,123 @@ describe("opening a dropped file (#277)", () => {
     const f = await load();
     await f.openDroppedFile(new File(["not json"], "cassé.json"));
     expect(alert).toHaveBeenCalledOnce();
+  });
+});
+
+/** Answers POST /api/import/asc with `result`, and keeps the requests. */
+function stubImport(result: unknown, status = 200) {
+  const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(JSON.stringify(result), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
+/** The bytes of `text` in UTF-16 LE, with the byte order mark or not. */
+function utf16le(text: string, bom: boolean): Uint8Array<ArrayBuffer> {
+  const start = bom ? 2 : 0;
+  const bytes = new Uint8Array(start + text.length * 2);
+  if (bom) bytes.set([0xff, 0xfe]);
+  for (let i = 0; i < text.length; i++) {
+    bytes[start + i * 2] = text.charCodeAt(i) & 0xff;
+    bytes[start + i * 2 + 1] = text.charCodeAt(i) >> 8;
+  }
+  return bytes;
+}
+
+describe("reading an LTspice file (#225)", () => {
+  const text = "Version 4\nSYMBOL res 16 0 R0\nSYMATTR Value 4,7kΩ é\n";
+
+  it("reads UTF-16 LE with or without its byte order mark, and UTF-8", async () => {
+    const f = await load();
+    expect(await f.decodeAsc(new Blob([utf16le(text, true)]))).toBe(text);
+    expect(await f.decodeAsc(new Blob([utf16le(text, false)]))).toBe(text);
+    expect(await f.decodeAsc(new Blob([text]))).toBe(text);
+  });
+
+  it("reads Windows-1252 text that is not UTF-8", async () => {
+    const f = await load();
+    // "µF é" in Windows-1252: not valid UTF-8.
+    expect(await f.decodeAsc(new Blob([new Uint8Array([0xb5, 0x46, 0x20, 0xe9])]))).toBe("µF é");
+  });
+});
+
+describe("importing an LTspice schematic (#225)", () => {
+  it("opens it as a new unsaved schematic, with its analysis", async () => {
+    const f = await load();
+    const fetch = stubImport({ schematic: rcSchematic, analysis: rcAnalysis, warnings: [] });
+    stubPickers(fakeHandle("unused"), fakeHandle("filtre.asc", "Version 4\n"));
+
+    f.importLtspice();
+    await vi.waitFor(() => expect(f.state().doc.components.length).toBeGreaterThan(0));
+    const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
+    expect(body).toEqual({ text: "Version 4\n", title: "filtre" });
+    expect(f.state().doc).toEqual(fixtureDoc("rc_tran"));
+    expect(f.isUnsaved(f.state())).toBe(true);
+    expect(f.state().analysis).toMatchObject({ kind: "tran", stopTime: "5m" });
+    expect(alert).not.toHaveBeenCalled();
+
+    // Saving asks where: the .asc file is never written over.
+    const target = fakeHandle("filtre.psice.json");
+    const { showSaveFilePicker } = stubPickers(target);
+    await f.saveFile();
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(target.written).toHaveLength(1);
+  });
+
+  it("lists what was left out or adapted", async () => {
+    const f = await load();
+    stubImport({
+      schematic: rcSchematic,
+      warnings: [
+        { code: "IMPORT_SKIPPED", message: "U1 (LT1001) ignoré : composant hors bibliothèque." },
+      ],
+    });
+    await f.openDroppedFile(new File(["Version 4"], "ampli.asc"));
+    expect(alert).toHaveBeenCalledWith(
+      "Schéma LTspice importé, avec ces remarques :\n" +
+        "• U1 (LT1001) ignoré : composant hors bibliothèque.",
+    );
+    expect(f.state().doc.components.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the current schematic when nothing could be imported", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.state().markSaved(f.state().doc);
+    const before = f.state().doc;
+    stubImport({
+      schematic: null,
+      errors: [{ code: "IMPORT_UNREADABLE", message: "Ce n'est pas un fichier LTspice." }],
+    });
+    await f.openDroppedFile(new File(["x"], "faux.asc"));
+    expect(alert).toHaveBeenCalledWith(
+      "Ce fichier LTspice n'a pas pu être importé :\n• Ce n'est pas un fichier LTspice.",
+    );
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("tells when the backend fails", async () => {
+    const f = await load();
+    stubImport({ detail: "Erreur interne" }, 500);
+    await f.openDroppedFile(new File(["x"], "faux.asc"));
+    expect(alert).toHaveBeenCalledWith("Impossible d'importer ce fichier LTspice : Erreur interne");
+  });
+
+  it("asks before dropping unsaved changes", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => false),
+    );
+    const fetch = stubImport({ schematic: rcSchematic });
+    f.importLtspice();
+    await f.openDroppedFile(new File(["x"], "filtre.asc"));
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

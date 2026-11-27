@@ -7,6 +7,8 @@ export type NetlistResult = components["schemas"]["NetlistResult"];
 export type SimulationRequest = components["schemas"]["SimulationRequest"];
 export type SimulationResult = components["schemas"]["SimulationResult"];
 export type LibraryComponent = components["schemas"]["LibraryComponent"];
+export type AscImportRequest = components["schemas"]["AscImportRequest"];
+export type ImportResult = components["schemas"]["ImportResult"];
 
 /** Longest wait for a response by default, in ms (a simulation can take a while). */
 export const DEFAULT_TIMEOUT_MS = 60_000;
@@ -140,3 +142,7 @@ export const simulate = (body: SimulationRequest, options?: RequestOptions) =>
     { method: "POST", body: JSON.stringify(body) },
     options,
   );
+
+/** An LTspice schematic (`.asc` text) translated into a Psice schematic (#224). */
+export const importAsc = (body: AscImportRequest, options?: RequestOptions) =>
+  request<ImportResult>("/api/import/asc", { method: "POST", body: JSON.stringify(body) }, options);

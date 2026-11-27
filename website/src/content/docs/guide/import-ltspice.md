@@ -3,14 +3,19 @@ title: Import LTspice (.asc)
 description: Reprendre dans Psice un schéma dessiné avec LTspice — ce qui est importé, ce qui ne l'est pas.
 ---
 
-:::caution[En cours d'intégration]
-L'import `.asc` fonctionne déjà dans le moteur de Psice (il est testé sur des fichiers LTspice
-réels), mais le bouton **Importer** de la barre d'outils n'est pas encore branché. Il arrive avec
-le jalon S9-10.
-:::
-
 Psice sait lire les fichiers **`.asc`** de LTspice, pour que tu puisses reprendre les circuits
 d'un cours ou d'un laboratoire sans les redessiner.
+
+## Importer un fichier
+
+Clique sur le bouton **Importer un schéma LTspice (.asc)** de la barre d'outils (groupe
+Fichier) et choisis le fichier, ou fais-le simplement glisser depuis l'Explorateur Windows et
+dépose-le sur le schéma. Si le schéma ouvert a des modifications non enregistrées, Psice te
+demande d'abord confirmation.
+
+Le circuit s'ouvre comme un **nouveau schéma non enregistré**, avec l'analyse du fichier déjà
+réglée dans la barre d'outils : tu peux cliquer sur **Simuler** tout de suite. Si une partie du
+fichier n'a pas pu être reprise telle quelle, une fenêtre liste les remarques (voir plus bas).
 
 ## Ce qui est importé
 
@@ -43,4 +48,5 @@ d'être ignoré en silence. Par exemple :
 ## Après l'import
 
 Le schéma importé est un schéma Psice comme un autre : tu peux le modifier, l'enregistrer en
-`.psice.json` et le simuler. Le fichier `.asc` d'origine n'est jamais modifié.
+`.psice.json` (<kbd>Ctrl+S</kbd> te demande où) et le simuler. Le fichier `.asc` d'origine n'est
+jamais modifié.

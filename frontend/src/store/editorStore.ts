@@ -265,8 +265,12 @@ interface EditorState {
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
-  /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
-  openDocument: (doc: EditorDoc) => void;
+  /**
+   * Replaces the document by one read from a file (Ctrl+O). The undo history starts over.
+   * `unsaved`: it is not the content of a Psice file (an imported LTspice schematic), so it counts
+   * as unsaved until it is saved.
+   */
+  openDocument: (doc: EditorDoc, unsaved?: boolean) => void;
   /** Records that `doc` was saved (Ctrl+S); edits made while it was being written stay unsaved. */
   markSaved: (doc: EditorDoc) => void;
 }
@@ -567,7 +571,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
   // An older file may have pins touching without a wire: connect them, without marking it changed.
-  openDocument: (doc) => set((s) => ({ ...freshDocument(tidy(doc)), analysis: forgetSources(s) })),
+  openDocument: (doc, unsaved = false) =>
+    set((s) => ({
+      ...freshDocument(tidy(doc)),
+      ...(unsaved ? { savedDoc: emptyDoc() } : {}),
+      analysis: forgetSources(s),
+    })),
 
   markSaved: (doc) => set({ savedDoc: doc }),
 
