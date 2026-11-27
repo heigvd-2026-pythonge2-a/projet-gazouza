@@ -20,8 +20,8 @@ fichier n'a pas pu être reprise telle quelle, une fenêtre liste les remarques 
 ## Ce qui est importé
 
 - Les **composants du périmètre** de Psice : résistances, condensateurs, bobines, sources de
-  tension et de courant (y compris les piles), masses et étiquettes de nœud, ainsi que les
-  diodes et amplis-op au fur et à mesure qu'ils rejoignent la bibliothèque.
+  tension et de courant (y compris les piles), masses et étiquettes de nœud, diodes, Zener et
+  LED, amplis-op (idéal et réels), transistors NPN, PNP et MOSFET canal N.
 - Les **fils**, avec leurs connexions : un fil qui touche le milieu d'un autre devient une
   jonction.
 - La **direction** des étiquettes (port `In`, `Out` ou `BiDir` de LTspice) : entrée, sortie ou
@@ -43,7 +43,12 @@ d'être ignoré en silence. Par exemple :
 - un nombre de cycles sur une source `PULSE` ou `SIN` ;
 - une valeur absente : la valeur par défaut est utilisée ;
 - le modèle LTspice d'une diode (`1N4148`…) : il est remplacé par le modèle générique de Psice
-  le plus proche (signal, redressement, Zener, LED).
+  le plus proche (signal, redressement, Zener, LED de la couleur indiquée dans le nom du modèle,
+  rouge sinon) ;
+- le modèle LTspice d'un transistor (`2N3904`, `BSS123`…) ou d'un ampli-op réel (`LT1055`…) :
+  il est remplacé par le modèle générique de Psice ;
+- un symbole que Psice ne connaît pas (MOSFET canal P, interrupteur commandé `sw`…) : il est
+  laissé de côté.
 
 ## Après l'import
 
