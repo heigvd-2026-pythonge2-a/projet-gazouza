@@ -580,6 +580,29 @@ function updateComponents(
 const isDiagonal = (a: GridPoint, b: GridPoint): boolean => a.x !== b.x && a.y !== b.y;
 
 /**
+ * Makes every wire orthogonal (#346): a segment that is neither horizontal nor vertical gets a
+ * bend, horizontal first. The editor never draws one, but a file written by hand or by another
+ * tool may hold one. Returns `doc` itself when every wire is already orthogonal.
+ */
+export function straightenWires(doc: EditorDoc): EditorDoc {
+  let changed = false;
+  const wires = doc.wires.map((w) => {
+    const path = wirePath(doc, w);
+    if (!path.some((p, i) => i > 0 && isDiagonal(path[i - 1] as GridPoint, p))) return w;
+    changed = true;
+    const points: GridPoint[] = [];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as GridPoint;
+      const b = path[i] as GridPoint;
+      if (isDiagonal(a, b)) points.push({ x: b.x, y: a.y });
+      if (i < path.length - 1) points.push({ ...b });
+    }
+    return { ...w, points };
+  });
+  return changed ? { ...doc, wires } : doc;
+}
+
+/**
  * Moves the bend next to a wire end that went from `oldEnd` to `newEnd`, so the segment between
  * them keeps its direction: a horizontal segment keeps the end's y, a vertical one its x. The
  * direction is read on `original` (the bend before any change), the result built from `bend`.
@@ -1093,13 +1116,22 @@ export function normalizeContacts(doc: EditorDoc): EditorDoc {
   );
 }
 
-/** The unit steps of a wire's path, as keys that do not depend on the direction. */
+/**
+ * The unit steps of a wire's path, as keys that do not depend on the direction. A segment that is
+ * neither horizontal nor vertical (`straightenWires` adds a bend to it, #346) is one step: walking
+ * it one grid step at a time would never reach its end.
+ */
 function unitSteps(doc: EditorDoc, w: EditorWire): string[] {
   const steps: string[] = [];
   const path = wirePath(doc, w);
   for (let i = 0; i + 1 < path.length; i++) {
     const a = path[i] as GridPoint;
     const b = path[i + 1] as GridPoint;
+    if (isDiagonal(a, b)) {
+      const [u, v] = a.x < b.x || (a.x === b.x && a.y < b.y) ? [a, b] : [b, a];
+      steps.push(`${u.x},${u.y}-${v.x},${v.y}`);
+      continue;
+    }
     const dx = Math.sign(b.x - a.x);
     const dy = Math.sign(b.y - a.y);
     for (let p = a; !samePoint(p, b);) {
