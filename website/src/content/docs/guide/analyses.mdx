@@ -25,7 +25,8 @@ de Bode du `.ac` et les courbes du `.dc` arrivent avec le visualiseur.
 1. Choisis l'analyse dans le menu **Analyse** de la barre d'outils, puis tape ses réglages sur la
    **ligne en dessous** (elle reste au même endroit quelle que soit l'analyse, et les boutons de la
    barre ne bougent pas), avec les suffixes habituels (`5m` = 5 ms, `10u` = 10 µs, `100k` = 100 kHz, `1Meg` = 1 MHz) :
-   - `.tran` : la **Durée** et, si tu veux, le **Pas max** (vide : automatique) ;
+   - `.tran` : la **Durée**, le nombre de **Points** de la courbe (vide : 1000) et, en réglage
+     avancé, le **Pas max** (vide : automatique) ;
    - `.ac` : la source d'**Entrée**, les fréquences de début et de fin, et les **Points** par
      décade ;
    - `.dc` : la **Source** balayée, ses valeurs de début et de fin, et le **Pas**.
@@ -77,19 +78,32 @@ Passe la souris sur une ligne : le nœud ou le composant concerné s'allume sur 
 | Réglage | Unité | Rôle |
 |---|---|---|
 | Durée | s | Fin de la simulation (obligatoire) |
-| Pas maximal | s | Facultatif : force une courbe plus fine |
+| Points | — | Finesse de la courbe : nombre entier, 1000 si le champ est vide, 200 000 au plus |
+| Pas max | s | Réglage avancé, facultatif : plus grand pas de calcul |
 
-Sans pas maximal, Psice demande environ 1000 points sur la durée. Par exemple, pour 5 ms :
+Psice calcule le pas à partir de la durée et du nombre de points, et l'affiche à côté du champ
+(« soit un pas de 5 µs »). Tu obtiens **au moins** ce nombre de points : ngspice en ajoute là où
+le signal change vite (autour d'un front), jamais moins. Si tu donnes aussi un pas maximal,
+Psice garde le plus petit des deux pas.
+
+Sans rien d'autre que la durée, Psice demande environ 1000 points. Par exemple, pour 5 ms :
 
 ```
 .tran 5u 5m
 ```
 
-Avec un pas maximal de 10 µs :
+Avec 500 points sur 5 ms, soit un pas de 10 µs :
 
 ```
 .tran 10u 5m 0 10u
 ```
+
+<Aside type="caution">
+	Le pas dépend de la durée : si tu allonges la durée sans changer le nombre de points, la courbe
+	devient moins fine. Une sinusoïde de 10 kHz est parfaite sur 1 ms avec 1000 points (pas de
+	1 µs), mais méconnaissable sur 1 s (pas de 1 ms, soit 10 périodes entre deux points). Garde au
+	moins 20 points par période du signal le plus rapide.
+</Aside>
 
 <Aside type="tip">
 	Choisis une durée de 5 fois la constante de temps de ton circuit (5 τ) : le régime transitoire

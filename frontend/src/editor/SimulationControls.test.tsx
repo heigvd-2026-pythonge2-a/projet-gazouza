@@ -115,7 +115,7 @@ describe("SimulationReport (#253)", () => {
 
     await user.click(screen.getByRole("button", { name: /« out » est flottant/ }));
     expect(show).toHaveBeenCalledOnce();
-    expect(editorState().selection).toEqual(["w2", "w6"]);
+    expect(editorState().selection).toEqual(["w2", "w6", "w8"]);
     unregister();
   });
 
@@ -164,5 +164,24 @@ describe("the line of the analysis settings (#339)", () => {
     expect(screen.getByRole("group", { name: "Réglages de l'analyse" })).not.toContainElement(
       simulate,
     );
+  });
+});
+
+describe("the number of points of a transient analysis (#334)", () => {
+  it("is typed in the toolbar, with the step it gives next to it", async () => {
+    const user = userEvent.setup();
+    render(<SimulationControls />);
+    await user.selectOptions(screen.getByLabelText("Analyse"), "tran");
+    const row = screen.getByRole("group", { name: "Réglages de l'analyse" });
+    // 10 ms and 1000 points by default.
+    expect(row).toHaveTextContent("soit un pas de 10 µs");
+
+    await user.type(screen.getByLabelText("Nombre de points"), "20000");
+    expect(row).toHaveTextContent("soit un pas de 500 ns");
+    expect(analysisOf()).toEqual({ analysis: { kind: "tran", stop_time: 0.01, points: 20000 } });
+
+    // An invalid number hides the step: Simulate says what is wrong.
+    await user.type(screen.getByLabelText("Nombre de points"), "x");
+    expect(row).not.toHaveTextContent("soit un pas");
   });
 });

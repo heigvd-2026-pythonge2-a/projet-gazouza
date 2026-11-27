@@ -13,15 +13,21 @@ bas du schéma, et peut passer en plein écran.
 
 ## La sonde interactive
 
-C'est le cœur de Psice : pas besoin de connaître le nom SPICE d'un nœud.
+C'est le cœur de Psice : pas besoin de connaître le nom SPICE d'un nœud. Après une simulation,
+appuie sur <kbd>P</kbd> (ou le bouton **Sonder** de la barre d'outils), puis clique :
 
 | Tu cliques sur…  | Psice affiche…                                                          |
 | ---------------- | ----------------------------------------------------------------------- |
 | un **fil**       | la **tension** de son nœud par rapport à la masse, par exemple `v(out)` |
 | un **composant** | le **courant** qui le traverse, par exemple `i(R1)`                     |
 
-Pour une analyse `.op`, la sonde donne directement la valeur. Pour `.tran`, `.ac` et `.dc`, elle
-ajoute la courbe au graphique.
+Un nouveau clic sur le même nœud ou le même composant retire la sonde.
+
+:::caution[Pas encore dans les courbes]
+L'outil sonde existe sur le schéma, mais le panneau **Résultats** ne s'en sert pas encore : pour
+l'instant, il affiche toutes les courbes, et la légende permet d'en masquer. Le lien entre les
+sondes et le graphique est en cours (#105).
+:::
 
 :::note[Le signe du courant d'une source]
 En SPICE, le courant d'une source qui **fournit** de l'énergie est négatif (`i(V1) < 0` pour

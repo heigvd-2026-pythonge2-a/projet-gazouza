@@ -56,9 +56,11 @@ export async function runSimulation(): Promise<void> {
     const result = await simulate(built.request, { signal: controller.signal });
     let nets: Record<string, string[]> = {};
     const showValues = result.analysis === "op" && (result.errors ?? []).length === 0;
-    if (showValues || namesNets(result)) {
-      // Only needed to place the values and find the nodes named by the errors; the result is
-      // shown without them if this fails.
+    // Voltages to probe: the probe finds the node of a wire through `nets` (#105).
+    const probeable = (result.traces ?? []).some((t) => t.net);
+    if (showValues || namesNets(result) || probeable) {
+      // Needed to place the values, find the nodes named by the errors and probe the wires; the
+      // result is shown without them if this fails.
       nets = await generateNetlist(built.request, { signal: controller.signal })
         .then((n) => n.nets ?? {})
         .catch(() => ({}));

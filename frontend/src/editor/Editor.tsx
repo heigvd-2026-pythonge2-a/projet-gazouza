@@ -74,6 +74,12 @@ const BUTTON_ZOOM_STEP = 1.25;
 /** Radius of the ring drawn around a pin connected to nothing, in grid units. */
 const UNCONNECTED_RADIUS = 0.4;
 const NO_PINS: ReadonlySet<string> = new Set();
+/** Cursor of the probe tool (#105): a probe whose tip, bottom left, is the hot spot. */
+const PROBE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    '<path d="M14 3l7 7-7.5 7.5-7-7z" fill="#f59e0b" stroke="#1f2937" stroke-width="1.5"/>' +
+    '<path d="M9.5 14.5L1.5 22.5" stroke="#1f2937" stroke-width="2"/></svg>',
+)}") 1 23, crosshair`;
 /** A right press that moves more than this (screen pixels) pans the view instead of clicking. */
 const DRAG_THRESHOLD = 4;
 /** A left press in the void that moves more than this (screen pixels) draws a selection box. */
@@ -224,7 +230,7 @@ function useKeyboardShortcuts() {
         else if (key === "v") s.paste();
         else if (key === "d")
           s.duplicate(); // also keeps the browser from adding a bookmark
-        else if (key === "n") newFile();
+        else if (key === "n") void newFile();
         else if (key === "o") openFile();
         else if (key === "s" && e.shiftKey) saveFileAs();
         else if (key === "s") saveFile();
@@ -270,6 +276,10 @@ function useKeyboardShortcuts() {
         case "t":
         case "T":
           s.startText();
+          break;
+        case "p":
+        case "P":
+          s.startProbe();
           break;
         case "Delete":
         case "Backspace":
@@ -352,6 +362,7 @@ export function SchematicCanvas() {
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
   const toggleSwitch = useEditorStore((s) => s.toggleSwitch);
+  const probeAt = useEditorStore((s) => s.probeAt);
   const pressButton = useEditorStore((s) => s.pressButton);
   const pressedButton = useEditorStore((s) => s.pressedButton);
   const moveSelection = useEditorStore((s) => s.moveSelection);
@@ -851,6 +862,8 @@ export function SchematicCanvas() {
       placeText(p);
       // The new text is selected: type its content in the properties panel.
       focusInspector();
+    } else if (tool.kind === "probe") {
+      // Wires and components handle their own click (`probeAt`); the empty canvas does nothing.
     } else if (e.target === e.target.getStage()) {
       startBand(e.evt);
     }
@@ -983,7 +996,9 @@ export function SchematicCanvas() {
             ? "default"
             : tool.kind === "text"
               ? "text"
-              : "crosshair",
+              : tool.kind === "probe"
+                ? PROBE_CURSOR
+                : "crosshair",
       }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={onDragOver}
@@ -1030,7 +1045,13 @@ export function SchematicCanvas() {
               selection={shownSelection}
               part={tool.kind === "select" && !exporting ? wirePart : null}
               segments={tool.kind === "select" && !exporting ? segments : []}
-              onSelect={tool.kind === "select" ? selectItem : undefined}
+              onSelect={
+                tool.kind === "select"
+                  ? selectItem
+                  : tool.kind === "probe"
+                    ? (id) => probeAt({ wire: id })
+                    : undefined
+              }
               onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
               onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
               onWireHover={(id) => setHovered(id === null ? null : { wire: id })}
@@ -1055,9 +1076,11 @@ export function SchematicCanvas() {
                 }}
                 draggable={tool.kind === "select"}
                 onSelect={(e) =>
-                  tool.kind === "select" && isSwitch(c.type) && !e.evt.shiftKey
-                    ? pressSwitch(c)
-                    : selectItem(c.id, e)
+                  tool.kind === "probe"
+                    ? probeAt({ component: c.id })
+                    : tool.kind === "select" && isSwitch(c.type) && !e.evt.shiftKey
+                      ? pressSwitch(c)
+                      : selectItem(c.id, e)
                 }
                 onContextPress={() => {
                   rightPressed.current = c.id;

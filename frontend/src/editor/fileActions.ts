@@ -10,13 +10,13 @@ import { ApiError, importAsc, type ImportResult } from "../api/client";
 import {
   DEFAULT_FILE_NAME,
   FileFormatError,
-  isUnsaved,
   parseDoc,
   readDoc,
   serializeDoc,
   useEditorStore,
 } from "../store";
 import { analysisSettings, exampleContent } from "./examples";
+import { askBeforeDroppingChanges } from "./unsavedDialog";
 import { exportImage as renderImage, type ImageFormat, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
@@ -76,17 +76,9 @@ let saving: Promise<boolean> | null = null;
 /** The user closed a file dialog without choosing a file. */
 const isCancel = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
-/** Asks before dropping unsaved changes. True if there are none, or the user accepts. */
-function canDiscardChanges(): boolean {
-  if (!isUnsaved(useEditorStore.getState())) return true;
-  return window.confirm(
-    "Le schéma contient des modifications non enregistrées. Les abandonner et continuer ?",
-  );
-}
-
-/** Starts an empty schematic. */
-export function newFile() {
-  if (!canDiscardChanges()) return;
+/** Starts an empty schematic, once unsaved changes are saved or given up. */
+export async function newFile() {
+  if (!(await askBeforeDroppingChanges("new"))) return;
   useEditorStore.getState().newDocument();
   currentFile = null;
 }
@@ -95,31 +87,40 @@ export function newFile() {
  * Opens an example circuit of the Examples menu (#226) with its analysis set in the toolbar. It is
  * not tied to a file: saving it asks where, so the example itself is never overwritten.
  */
-export function openExample(name: string) {
+export async function openExample(name: string) {
   const example = exampleContent(name);
-  if (!example || !canDiscardChanges()) return;
+  if (!example || !(await askBeforeDroppingChanges("example"))) return;
   const store = useEditorStore.getState();
   store.openDocument(example.doc);
   store.setAnalysis(example.analysis);
   currentFile = null;
 }
 
-/** Opens the content of a schematic file, or tells the user why it cannot be opened. */
+/**
+ * Opens the content of a schematic file, or tells the user why it cannot be opened. The question
+ * about unsaved changes comes once the file is known to be readable.
+ */
 async function openContent(file: File, handle: FileSystemFileHandle | null) {
+  let doc;
   try {
-    const doc = parseDoc(await file.text());
-    useEditorStore.getState().openDocument(doc);
-    currentFile = { name: file.name, handle };
+    doc = parseDoc(await file.text());
   } catch (error: unknown) {
     window.alert(
       error instanceof FileFormatError ? error.message : "Impossible de lire ce fichier.",
     );
+    return;
   }
+  if (!(await askBeforeDroppingChanges("open"))) return;
+  useEditorStore.getState().openDocument(doc);
+  currentFile = { name: file.name, handle };
 }
 
-/** Lets the user pick a schematic file and opens it. */
+/**
+ * Lets the user pick a schematic file and opens it. The file is chosen before the question about
+ * unsaved changes: the file dialogs need a click of the user each, and "Enregistrer et ouvrir"
+ * may use its click for the save dialog (#332).
+ */
 export function openFile() {
-  if (!canDiscardChanges()) return;
   const api = pickers();
   if (api) {
     api
@@ -169,9 +170,10 @@ const bulletList = (diagnostics: { message: string }[]) =>
 /**
  * Opens what the backend made of an LTspice schematic: a new unsaved document (saving it asks
  * where, the `.asc` file is never overwritten), with the analysis of the file if it has one.
- * What was left out or adapted is listed to the user.
+ * What was left out or adapted is listed to the user. The question about unsaved changes comes
+ * once there is something to open.
  */
-function openImported(result: ImportResult) {
+async function openImported(result: ImportResult) {
   const errors = result.errors ?? [];
   const warnings = result.warnings ?? [];
   if (!result.schematic) {
@@ -199,6 +201,7 @@ function openImported(result: ImportResult) {
     );
     return;
   }
+  if (!(await askBeforeDroppingChanges("import"))) return;
   const store = useEditorStore.getState();
   store.openDocument(doc, true);
   if (result.analysis) store.setAnalysis(analysisSettings(result.analysis));
@@ -222,12 +225,14 @@ async function importContent(file: File) {
     );
     return;
   }
-  openImported(result);
+  await openImported(result);
 }
 
-/** Lets the user pick an LTspice schematic (`.asc`) and imports it (#225). */
+/**
+ * Lets the user pick an LTspice schematic (`.asc`) and imports it (#225). The file is chosen
+ * before the question about unsaved changes, as for Open.
+ */
 export function importLtspice() {
-  if (!canDiscardChanges()) return;
   const api = pickers();
   if (api) {
     api
@@ -260,14 +265,13 @@ export function droppedFileKind(name: string): "schematic" | "ltspice" | "other"
 }
 
 /**
- * Opens a file dropped on the window (#277), like Ctrl+O: the same question first if there are
- * unsaved changes. With its `handle` (WebView2, Chrome), Ctrl+S then writes back to that file.
+ * Opens a file dropped on the window (#277), like Ctrl+O: the same question if there are unsaved
+ * changes. With its `handle` (WebView2, Chrome), Ctrl+S then writes back to that file.
  * An LTspice `.asc` file is imported (#225); any other file is refused with a message.
  */
 export async function openDroppedFile(file: File, handle: FileSystemFileHandle | null = null) {
   switch (droppedFileKind(file.name)) {
     case "ltspice":
-      if (!canDiscardChanges()) return;
       await importContent(file);
       return;
     case "other":
@@ -277,7 +281,6 @@ export async function openDroppedFile(file: File, handle: FileSystemFileHandle |
       );
       return;
     case "schematic":
-      if (!canDiscardChanges()) return;
       await openContent(file, handle);
   }
 }

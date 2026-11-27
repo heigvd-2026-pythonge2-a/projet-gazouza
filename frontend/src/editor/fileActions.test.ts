@@ -9,9 +9,19 @@ import { fixtureDoc, fixtureLibrary } from "../store/testFixtures";
 async function load() {
   vi.resetModules();
   const actions = await import("./fileActions");
+  const dialog = await import("./unsavedDialog");
+  // As in the app, where CloseDialog shows the question (it is not rendered here).
+  dialog.registerUnsavedDialog();
   const store = await import("../store");
   store.setLibrary(fixtureLibrary()); // the fresh store has an empty library
-  return { ...actions, ...store, state: () => store.useEditorStore.getState() };
+  return {
+    ...actions,
+    ...dialog,
+    ...store,
+    state: () => store.useEditorStore.getState(),
+    /** The question about unsaved changes shown to the user, if any. */
+    question: () => dialog.useUnsavedDialog.getState().pending?.question ?? null,
+  };
 }
 
 /** A file handle of the File System Access API that keeps what is written to it. */
@@ -256,16 +266,28 @@ describe("opening with the system file dialogs", () => {
     expect(f.state().doc.components).toHaveLength(1);
   });
 
-  it("does not open anything if the user keeps unsaved changes", async () => {
+  it("picks the file first, then asks about unsaved changes, and keeps them on Annuler (#332)", async () => {
     const f = await load();
-    const { showOpenFilePicker } = stubPickers(fakeHandle("x"), fakeHandle("y", "{}"));
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false),
-    );
+    const file = fakeHandle("pont.psice.json", f.serializeDoc(fixtureDoc("divider_op")));
+    const { showOpenFilePicker } = stubPickers(fakeHandle("x"), file);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const before = f.state().doc;
+
+    f.openFile();
+    expect(showOpenFilePicker).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(f.question()).toMatchObject({ title: "Ouvrir un schéma" }));
+    f.answerUnsavedQuestion(false);
+    await Promise.resolve();
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("does not ask about a file it cannot open", async () => {
+    const f = await load();
+    stubPickers(fakeHandle("x"), fakeHandle("y", "{}"));
     f.state().dropComponent("resistor", { x: 0, y: 0 });
     f.openFile();
-    expect(showOpenFilePicker).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(f.question()).toBeNull();
   });
 });
 
@@ -308,11 +330,12 @@ describe("opening a dropped file (#277)", () => {
   it("asks before dropping unsaved changes", async () => {
     const f = await load();
     f.state().dropComponent("resistor", { x: 0, y: 0 });
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirm);
     const before = f.state().doc;
-    await f.openDroppedFile(new File(["{}"], "x.psice.json"));
-    expect(confirm).toHaveBeenCalledOnce();
+    const content = f.serializeDoc(fixtureDoc("divider_op"));
+    const opening = f.openDroppedFile(new File([content], "x.psice.json"));
+    await vi.waitFor(() => expect(f.question()).toMatchObject({ title: "Ouvrir un schéma" }));
+    f.answerUnsavedQuestion(false);
+    await opening;
     expect(f.state().doc).toBe(before);
   });
 
@@ -445,16 +468,81 @@ describe("importing an LTspice schematic (#225)", () => {
     expect(alert).toHaveBeenCalledWith("Impossible d'importer ce fichier LTspice : Erreur interne");
   });
 
-  it("asks before dropping unsaved changes", async () => {
+  it("asks before dropping unsaved changes, once the schematic is imported", async () => {
     const f = await load();
     f.state().dropComponent("resistor", { x: 0, y: 0 });
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false),
+    const before = f.state().doc;
+    stubImport({ schematic: rcSchematic });
+    const importing = f.openDroppedFile(new File(["x"], "filtre.asc"));
+    await vi.waitFor(() =>
+      expect(f.question()).toMatchObject({
+        title: "Importer un schéma LTspice",
+        save: "Enregistrer et importer",
+        discard: "Importer sans enregistrer",
+      }),
     );
-    const fetch = stubImport({ schematic: rcSchematic });
-    f.importLtspice();
-    await f.openDroppedFile(new File(["x"], "filtre.asc"));
-    expect(fetch).not.toHaveBeenCalled();
+    f.answerUnsavedQuestion(false);
+    await importing;
+    expect(f.state().doc).toBe(before);
+  });
+});
+
+describe("unsaved changes before New, Open and Examples (#332)", () => {
+  it("never uses the native confirmation", async () => {
+    const f = await load();
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    void f.newFile();
+    void f.openExample("rc_tran");
+    expect(confirm).not.toHaveBeenCalled();
+    f.answerUnsavedQuestion(false);
+  });
+
+  it("goes on without asking when everything is saved", async () => {
+    const f = await load();
+    await f.newFile();
+    expect(f.question()).toBeNull();
+  });
+
+  it("New: Créer sans enregistrer gives up the changes, Annuler keeps them", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    const cancelled = f.newFile();
+    expect(f.question()).toEqual({
+      title: "Nouveau schéma",
+      save: "Enregistrer et créer",
+      discard: "Créer sans enregistrer",
+    });
+    f.answerUnsavedQuestion(false);
+    await cancelled;
+    expect(f.state().doc.components).toHaveLength(1);
+
+    const discarded = f.newFile();
+    f.answerUnsavedQuestion(true);
+    await discarded;
+    expect(f.state().doc.components).toEqual([]);
+  });
+
+  it("Examples: opens the example once the question is answered", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const opening = f.openExample("rc_tran");
+    expect(f.question()).toMatchObject({ title: "Ouvrir un exemple" });
+    f.answerUnsavedQuestion(true);
+    await opening;
+    expect(f.state().doc).toEqual(fixtureDoc("rc_tran"));
+  });
+
+  it("a second question while one is shown gets the same answer", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const first = f.askBeforeDroppingChanges("new");
+    const second = f.askBeforeDroppingChanges("close");
+    expect(f.question()).toMatchObject({ title: "Nouveau schéma" });
+    f.answerUnsavedQuestion(true);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
   });
 });

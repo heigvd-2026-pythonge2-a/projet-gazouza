@@ -39,6 +39,7 @@ const ICONS = {
   paste: "M5 2.5H2.5v12h11v-12H11 M5.5 1.5h5v2.5h-5z",
   duplicate: "M2.5 2.5h8v8h-8z M13.5 5.5v8h-8 M6.5 4.5v4 M4.5 6.5h4",
   text: "M3 4.5V2.5h10v2 M8 2.5v11 M6 13.5h4",
+  probe: "M9.5 2l4.5 4.5-5 5-4.5-4.5z M7 9l-5.5 5.5 M11 3.5l1.5 1.5",
   zoomIn: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4 M7 5v4",
   zoomOut: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4",
   fit: "M2 5.5V2h3.5 M10.5 2H14v3.5 M14 10.5V14h-3.5 M5.5 14H2v-3.5",
@@ -343,7 +344,7 @@ function ExamplesButton() {
 
   const choose = (name: string) => {
     setOpen(false);
-    openExample(name);
+    void openExample(name);
   };
 
   return (
@@ -437,13 +438,14 @@ export function EditorToolbar() {
   );
   const canPaste = useEditorStore((s) => s.clipboard !== null);
   const writingText = useEditorStore((s) => s.tool.kind === "text");
+  const probing = useEditorStore((s) => s.tool.kind === "probe");
   const dark = useThemeStore((t) => t.theme === "dark");
   const s = useEditorStore.getState;
 
   return (
     <>
       <Group label="Fichier">
-        <ToolButton label="Nouveau schéma (Ctrl+N)" icon="new" onClick={newFile} />
+        <ToolButton label="Nouveau schéma (Ctrl+N)" icon="new" onClick={() => void newFile()} />
         <ToolButton label="Ouvrir un schéma (Ctrl+O)" icon="open" onClick={openFile} />
         <ExamplesButton />
         <ToolButton
@@ -475,6 +477,12 @@ export function EditorToolbar() {
           icon="text"
           pressed={writingText}
           onClick={() => (writingText ? s().cancel() : s().startText())}
+        />
+        <ToolButton
+          label="Sonder : clic sur un fil pour sa tension, sur un composant pour son courant (P)"
+          icon="probe"
+          pressed={probing}
+          onClick={() => (probing ? s().cancel() : s().startProbe())}
         />
         <ToolButton
           label="Annuler (Ctrl+Z)"

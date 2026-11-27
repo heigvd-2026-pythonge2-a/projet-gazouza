@@ -58,31 +58,34 @@ V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
     "version": 2,
     "title": "Diviseur de tension",
     "components": [
-      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 0 },
+      { "id": "c1", "type": "voltage_source", "name": "V1", "position": { "x": 0, "y": 2 },
         "rotation": 0, "mirror": false, "params": { "waveform": "dc", "dc": "10" } },
       { "id": "c2", "type": "resistor", "name": "R1", "position": { "x": 4, "y": -2 },
         "rotation": 270, "mirror": false, "params": { "resistance": "1k" } },
-      { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 0 },
+      { "id": "c3", "type": "resistor", "name": "R2", "position": { "x": 8, "y": 2 },
         "rotation": 0, "mirror": false, "params": { "resistance": "1k" } },
-      { "id": "c4", "type": "ground", "position": { "x": 0, "y": 4 },
+      { "id": "c4", "type": "ground", "position": { "x": 0, "y": 6 },
         "rotation": 0, "mirror": false, "params": {} },
-      { "id": "c5", "type": "ground", "position": { "x": 8, "y": 4 },
+      { "id": "c5", "type": "ground", "position": { "x": 8, "y": 6 },
         "rotation": 0, "mirror": false, "params": {} },
       { "id": "c6", "type": "label", "position": { "x": -1, "y": -2 },
-        "rotation": 180, "mirror": false, "params": { "net": "in" } },
+        "rotation": 180, "mirror": false, "params": { "net": "in", "direction": "input" } },
       { "id": "c7", "type": "label", "position": { "x": 9, "y": -2 },
-        "rotation": 0, "mirror": false, "params": { "net": "out" } }
+        "rotation": 0, "mirror": false, "params": { "net": "out", "direction": "output" } }
     ],
-    "junctions": [],
+    "junctions": [
+      { "id": "j1", "position": { "x": 0, "y": -2 } },
+      { "id": "j2", "position": { "x": 8, "y": -2 } }
+    ],
     "wires": [
-      { "id": "w1", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c2", "pin": "1" },
-        "points": [] },
-      { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "comp": "c3", "pin": "1" },
-        "points": [] },
+      { "id": "w1", "from": { "junction": "j1" }, "to": { "comp": "c2", "pin": "1" }, "points": [] },
+      { "id": "w2", "from": { "comp": "c2", "pin": "2" }, "to": { "junction": "j2" }, "points": [] },
       { "id": "w3", "from": { "comp": "c1", "pin": "-" }, "to": { "comp": "c4", "pin": "1" } },
       { "id": "w4", "from": { "comp": "c3", "pin": "2" }, "to": { "comp": "c5", "pin": "1" } },
-      { "id": "w5", "from": { "comp": "c1", "pin": "+" }, "to": { "comp": "c6", "pin": "1" } },
-      { "id": "w6", "from": { "comp": "c3", "pin": "1" }, "to": { "comp": "c7", "pin": "1" } }
+      { "id": "w5", "from": { "comp": "c6", "pin": "1" }, "to": { "junction": "j1" } },
+      { "id": "w6", "from": { "junction": "j2" }, "to": { "comp": "c7", "pin": "1" } },
+      { "id": "w7", "from": { "junction": "j1" }, "to": { "comp": "c1", "pin": "+" } },
+      { "id": "w8", "from": { "junction": "j2" }, "to": { "comp": "c3", "pin": "1" } }
     ]
   },
   "analysis": { "kind": "op" }
@@ -94,7 +97,7 @@ V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
 ```json
 {
   "netlist": "* Diviseur de tension\nV1 in 0 DC 10\nR1 in out 1k\nR2 out 0 1k\n.op\n.end\n",
-  "nets": { "in": ["w1", "w5"], "out": ["w2", "w6"], "0": ["w3", "w4"] },
+  "nets": { "in": ["w1", "w5", "w7"], "out": ["w2", "w6", "w8"], "0": ["w3", "w4"] },
   "components": { "V1": "c1", "R1": "c2", "R2": "c3" },
   "errors": [],
   "warnings": []
@@ -379,11 +382,11 @@ L'étudiant a oublié la masse, et un fil a un bout en l'air.
     { "code": "NO_GROUND", "message": "Le circuit n'a pas de masse.", "targets": [] }
   ],
   "warnings": [
-    { "code": "WIRE_DANGLING", "message": "Le fil w3 a un bout qui n'est relié à rien.",
-      "targets": [ { "wire": "w3" } ] },
     { "code": "MILLI_SUFFIX",
-      "message": "R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ».",
-      "targets": [ { "comp": "c2" } ] }
+      "message": "R1 : « 1M » se lit « milli » en SPICE. Pour « méga », écris « 1Meg ».",
+      "targets": [ { "comp": "c2" } ] },
+    { "code": "WIRE_DANGLING", "message": "Le fil w3 a un bout qui n'est relié à rien.",
+      "targets": [ { "wire": "w3" } ] }
   ]
 }
 ```
