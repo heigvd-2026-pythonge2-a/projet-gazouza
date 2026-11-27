@@ -26,6 +26,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/import/asc": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Import Ltspice
+     * @description Partial import: a part Psice does not know is left out with a warning, never an HTTP
+     *     error. Only an unreadable file gives an error (and no schematic).
+     */
+    post: operations["import_ltspice_api_import_asc_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -108,6 +129,19 @@ export interface components {
        * @default 20
        */
       points_per_decade: number;
+    };
+    /** AscImportRequest */
+    AscImportRequest: {
+      /**
+       * Text
+       * @description Content of the `.asc` file, decoded by the client.
+       */
+      text: string;
+      /**
+       * Title
+       * @description Title of the schematic (file name).
+       */
+      title?: string | null;
     };
     /**
      * Axis
@@ -230,7 +264,10 @@ export interface components {
         | "VOLTAGE_SOURCE_LOOP"
         | "NO_CONVERGENCE"
         | "SIMULATION_TIMEOUT"
-        | "SIMULATION_FAILED";
+        | "SIMULATION_FAILED"
+        | "IMPORT_UNREADABLE"
+        | "IMPORT_SKIPPED"
+        | "IMPORT_CHANGED";
       /**
        * Message
        * @description French message for the student. May change.
@@ -262,6 +299,36 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /**
+     * ImportResult
+     * @description A partial import is allowed: what could not be imported is listed in `warnings`.
+     */
+    ImportResult: {
+      /** @description The imported schematic. None if the file is unreadable. */
+      schematic?: components["schemas"]["Schematic"] | null;
+      /**
+       * Analysis
+       * @description The first analysis of the file, if it has one.
+       */
+      analysis?:
+        | (
+            | components["schemas"]["OpAnalysis"]
+            | components["schemas"]["TranAnalysis"]
+            | components["schemas"]["AcAnalysis"]
+            | components["schemas"]["DcAnalysis"]
+          )
+        | null;
+      /**
+       * Errors
+       * @description IMPORT_UNREADABLE: nothing could be imported.
+       */
+      errors?: components["schemas"]["Diagnostic"][];
+      /**
+       * Warnings
+       * @description IMPORT_SKIPPED (a part left out) and IMPORT_CHANGED (a part adapted).
+       */
+      warnings?: components["schemas"]["Diagnostic"][];
     };
     /**
      * Junction
@@ -671,6 +738,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LibraryComponent"][];
+        };
+      };
+    };
+  };
+  import_ltspice_api_import_asc_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AscImportRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ImportResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

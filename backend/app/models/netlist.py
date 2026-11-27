@@ -36,6 +36,10 @@ DiagnosticCode = Literal[
     "NO_CONVERGENCE",
     "SIMULATION_TIMEOUT",
     "SIMULATION_FAILED",
+    # Import of an LTspice .asc file (Damien)
+    "IMPORT_UNREADABLE",
+    "IMPORT_SKIPPED",
+    "IMPORT_CHANGED",
 ]
 
 
