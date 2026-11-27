@@ -66,6 +66,13 @@ def test_ground_and_label_produce_no_spice_line(component_type: str) -> None:
     assert LIBRARY[component_type].spice is None
 
 
+def test_label_direction_is_automatic_by_default() -> None:
+    # The editor works out the direction of a new label (#295); the others force it.
+    direction = next(p for p in LIBRARY["label"].params if p.name == "direction")
+    assert direction.default == "auto"
+    assert [o.value for o in direction.options] == ["auto", "none", "input", "output", "bidir"]
+
+
 @pytest.mark.parametrize("component_type", ["voltage_source", "current_source"])
 def test_source_waveforms(component_type: str) -> None:
     entry = LIBRARY[component_type]
