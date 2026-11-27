@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { SimulationResult } from "../api/client";
 import {
+  MAX_DOT_SPEED,
+  MIN_DOT_SPEED,
   animatable,
+  applyFlowPlan,
   componentCurrents,
+  dotSpeed,
   flowNetwork,
+  flowPlan,
   maxCurrent,
+  peakFlows,
   solveFlows,
   timeSpan,
   type FlowEdge,
@@ -199,5 +205,51 @@ describe("componentCurrents", () => {
     expect(maxCurrent(result)).toBe(20);
     expect(animatable(result)).toBe(true);
     expect(animatable({ ...result, analysis: "ac" } as SimulationResult)).toBe(false);
+  });
+});
+
+describe("dotSpeed (#341)", () => {
+  it("operating point: no dots for a zero current, a minimum speed for a small one", () => {
+    expect(dotSpeed(0, 1, false)).toBeNull();
+    expect(dotSpeed(1e-6, 1, false)).toBeNull();
+    expect(dotSpeed(0.01, 1, false)).toBe(MIN_DOT_SPEED);
+    expect(dotSpeed(-1, 1, false)).toBe(MAX_DOT_SPEED);
+    expect(dotSpeed(undefined, 1, false)).toBeNull();
+    expect(dotSpeed(1, 0, false)).toBeNull();
+  });
+
+  it("transient: slows down to a stop, without losing its dots, where a current flowed", () => {
+    expect(dotSpeed(0.5, 1, true, 1)).toBe(MAX_DOT_SPEED / 2);
+    expect(dotSpeed(0.01, 1, true, 1)).toBeCloseTo(MAX_DOT_SPEED / 100);
+    expect(dotSpeed(0, 1, true, 1)).toBe(0);
+    // A conductor that never carries a current has no dots.
+    expect(dotSpeed(0, 1, true, 0)).toBeNull();
+    expect(dotSpeed(0, 1, true)).toBeNull();
+  });
+});
+
+describe("the dots of a half-wave rectifier (#341)", () => {
+  it("stop in the diode while it blocks, instead of disappearing", () => {
+    const doc = fixtureDoc("half_wave_rectifier");
+    const result = fixtureResult("half_wave_rectifier");
+    const edges = flowNetwork(doc);
+    const plan = flowPlan(edges, new Set(componentCurrents(result).keys()));
+    const peaks = peakFlows(plan, result);
+    const imax = maxCurrent(result);
+    const diode = doc.components.find((c) => c.type === "diode")!;
+    expect(peaks.get(diode.id)).toBeGreaterThan(imax / 2);
+
+    // At some sample the diode blocks: its dots are still there, and (almost) still.
+    const speeds = (result.axis?.values ?? []).map((t) =>
+      dotSpeed(
+        applyFlowPlan(plan, componentCurrents(result, t)).get(diode.id),
+        imax,
+        true,
+        peaks.get(diode.id),
+      ),
+    );
+    expect(speeds.every((v) => v !== null)).toBe(true);
+    expect(Math.min(...(speeds as number[]))).toBeLessThan(MIN_DOT_SPEED / 10);
+    expect(Math.max(...(speeds as number[]))).toBeGreaterThan(MAX_DOT_SPEED / 2);
   });
 });
