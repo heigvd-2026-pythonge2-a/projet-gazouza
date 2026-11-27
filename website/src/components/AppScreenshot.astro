@@ -1,0 +1,43 @@
+---
+/**
+ * Screenshot of the real Psice window, in the theme of the site: Starlight sets data-theme on
+ * <html>, and the CSS below hides the capture of the other theme. Both captures are lazy, so the
+ * browser only downloads the one it shows (a hidden lazy image is never fetched); switching the
+ * theme fetches the other one then. Taken from the online demo with scripts/capture-app.ps1.
+ */
+import { Image } from "astro:assets";
+import light from "../assets/psice-app-light.png";
+import dark from "../assets/psice-app-dark.png";
+
+interface Props {
+  alt: string;
+  widths?: number[];
+  sizes?: string;
+}
+
+const { alt, widths, sizes } = Astro.props;
+---
+
+<Image
+  class="psice-shot psice-shot-light"
+  src={light}
+  alt={alt}
+  widths={widths}
+  sizes={sizes}
+  loading="lazy"
+/>
+<Image
+  class="psice-shot psice-shot-dark"
+  src={dark}
+  alt={alt}
+  widths={widths}
+  sizes={sizes}
+  loading="lazy"
+/>
+
+<style is:global>
+  :root[data-theme="dark"] .psice-shot-light,
+  :root:not([data-theme="dark"]) .psice-shot-dark {
+    display: none;
+  }
+</style>

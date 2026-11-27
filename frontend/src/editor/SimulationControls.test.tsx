@@ -115,7 +115,7 @@ describe("SimulationReport (#253)", () => {
 
     await user.click(screen.getByRole("button", { name: /« out » est flottant/ }));
     expect(show).toHaveBeenCalledOnce();
-    expect(editorState().selection).toEqual(["w2", "w6"]);
+    expect(editorState().selection).toEqual(["w2", "w6", "w8"]);
     unregister();
   });
 

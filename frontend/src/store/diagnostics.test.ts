@@ -34,14 +34,19 @@ describe("diagnosticMarks", () => {
   it("highlights the wires of a floating node, with a bubble on one of them", () => {
     const [mark, ...rest] = diagnosticMarks(doc, failed([floating("out")]), netlist.nets);
     expect(rest).toEqual([]);
-    expect(mark).toMatchObject({ level: "error", wires: ["w2", "w6"], components: [], pins: [] });
+    expect(mark).toMatchObject({
+      level: "error",
+      wires: ["w2", "w6", "w8"],
+      components: [],
+      pins: [],
+    });
     expect(mark!.message).toMatch(/« out »/);
     // The bubble points just below the middle of the node's first wire.
     const middle = wireMiddle(doc, "w2")!;
     expect(mark!.anchor.x).toBe(middle.x);
     expect(mark!.anchor.y).toBeGreaterThan(middle.y);
     // Every wire of the node is inside the rectangle to show.
-    for (const id of ["w2", "w6"]) {
+    for (const id of ["w2", "w6", "w8"]) {
       for (const p of partPath(
         doc,
         doc.wires.find((w) => w.id === id)!,

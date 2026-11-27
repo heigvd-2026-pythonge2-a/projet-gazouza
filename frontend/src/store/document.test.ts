@@ -168,7 +168,7 @@ describe("moving", () => {
   it("keeps wires attached and orthogonal when a component moves", () => {
     const doc = fixtureDoc("divider_op");
     const moved = moveItems(doc, new Set(["c3"]), { x: 3, y: 2 });
-    expect(moved.components.find((c) => c.id === "c3")!.position).toEqual({ x: 11, y: 2 });
+    expect(moved.components.find((c) => c.id === "c3")!.position).toEqual({ x: 11, y: 4 });
     for (const w of moved.wires) {
       const path = wirePath(moved, w);
       expect(orthogonal(path), `wire ${w.id}`).toBe(true);
