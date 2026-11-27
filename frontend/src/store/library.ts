@@ -105,6 +105,35 @@ const BIPOLAR_BODY: SymbolShape[] = [
   { kind: "line", points: [-0.5, 0.4, 1, 1.2, 1, 2] },
 ];
 
+/**
+ * Make contact (IEC 60617), pins at (0, -2) and (0, 2): the blade turns on the bottom contact.
+ * Open, it is lifted away from the top contact; closed, it rests on it. Both states stay in the
+ * box of the open one, so the bounds and the routing do not change with the state (#43).
+ */
+const SWITCH_LEADS: SymbolShape[] = [
+  { kind: "line", points: [0, -2, 0, -0.8, -0.4, -0.8] },
+  { kind: "line", points: [0, 0.8, 0, 2] },
+];
+const SWITCH_OPEN: SymbolShape = { kind: "line", points: [0, 0.8, -0.9, -0.9] };
+const SWITCH_CLOSED: SymbolShape = { kind: "line", points: [0, 0.8, -0.3, -0.8] };
+/** Push stem of a push button, from the middle of the blade to its T-shaped head. */
+const pushStem = (fromX: number): SymbolShape[] => [
+  { kind: "line", points: [fromX, -0.05, -1.3, -0.05] },
+  { kind: "line", points: [-1.3, -0.45, -1.3, 0.35] },
+];
+
+/** Drawing of a switch and a push button by state (their `state` parameter, a model name). */
+export const SWITCH_SYMBOLS = {
+  switch: {
+    SW_OPEN: [...SWITCH_LEADS, SWITCH_OPEN],
+    SW_CLOSED: [...SWITCH_LEADS, SWITCH_CLOSED],
+  },
+  push_button: {
+    SW_OPEN: [...SWITCH_LEADS, SWITCH_OPEN, ...pushStem(-0.45)],
+    SW_CLOSED: [...SWITCH_LEADS, SWITCH_CLOSED, ...pushStem(-0.15)],
+  },
+} as const satisfies Record<string, Record<string, SymbolShape[]>>;
+
 // Symbols follow IEC 60617 (rectangle resistor, humped inductor, circle sources). The order of
 // this table is the order of the palette (and of its digit shortcuts), whatever the API order.
 const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
@@ -171,6 +200,8 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
     ],
   },
   { type: "label", category: "connection", symbol: LABEL_FLAGS.none },
+  { type: "switch", category: "connection", symbol: SWITCH_SYMBOLS.switch.SW_OPEN },
+  { type: "push_button", category: "connection", symbol: SWITCH_SYMBOLS.push_button.SW_OPEN },
   { type: "diode", category: "semiconductor", symbol: [...DIODE_BODY, DIODE_BAR] },
   {
     type: "zener",
@@ -306,9 +337,14 @@ export function mainParam(def: ComponentDef, params: Record<string, string>): Pa
 
 /**
  * Drawing of a placed component: the symbol of its type, except for a label, whose flag follows
- * its direction (absent or unknown: no direction, as in files saved before it existed).
+ * its direction (absent or unknown: no direction, as in files saved before it existed), and for
+ * a switch or a push button, drawn open or closed by its state (absent or unknown: open).
  */
 export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
+  if (def.type === "switch" || def.type === "push_button") {
+    const states: Readonly<Record<string, SymbolShape[] | undefined>> = SWITCH_SYMBOLS[def.type];
+    return states[params.state ?? "SW_OPEN"] ?? def.symbol;
+  }
   if (def.type !== "label") return def.symbol;
   const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
   return flags[params.direction ?? "none"] ?? def.symbol;

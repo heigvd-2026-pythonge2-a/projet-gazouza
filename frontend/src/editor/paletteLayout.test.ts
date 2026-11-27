@@ -83,6 +83,13 @@ describe("searchPalette", () => {
     expect(searchPalette(GROUPS, "xyz")).toEqual([]);
   });
 
+  it("puts the wire tool after the label, before the switches, so it keeps its digit key", () => {
+    const connection = paletteLayout().find((g) => g.id === "connection");
+    const kinds = connection?.entries.map((e) => (e.kind === "wire" ? "wire" : e.def.type));
+    expect(kinds).toEqual(["ground", "label", "wire", "switch", "push_button"]);
+    expect(entryForKey("8")).toEqual({ kind: "wire" });
+  });
+
   it("numbers the real palette like the digit keys do", () => {
     const all = searchPalette(paletteLayout(), "").flatMap((g) => g.entries);
     for (const { entry, shortcut } of all) {
