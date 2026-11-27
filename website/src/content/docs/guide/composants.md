@@ -96,7 +96,7 @@ typiques des fiches techniques des composants cités : pas les modèles exacts d
 |---|---|---|
 | Diode | Signal (type 1N4148), Redressement (type 1N4007) | Chute d'environ 0,6 à 0,7 V en direct |
 | Diode Zener | 3,3 V, 5,1 V, 12 V | Montée en inverse, elle maintient sa tension Zener |
-| LED | Rouge, Verte | Chute d'environ 1,8 V (rouge) ou 2,2 V (verte) en direct |
+| LED | Rouge, Verte, Jaune, Bleue, Blanche | Chute en direct à 15 mA : environ 1,9 V (rouge), 2,4 V (verte), 2,0 V (jaune), 3,0 V (bleue), 3,1 V (blanche) |
 
 Le courant passe de l'anode `A` vers la cathode `K`. Sur le symbole, la cathode est le côté de
 la barre.
