@@ -1,5 +1,6 @@
 // Every mouse gesture and keyboard shortcut of the editor, shown in the shortcuts panel of the
-// status bar. Texts in French. Keep in sync with the handlers in `Editor.tsx`.
+// status bar. Texts in French. Keep in sync with the handlers: keys in `keyboard.ts`, mouse in
+// `Editor.tsx`.
 
 export interface Shortcut {
   keys: string;

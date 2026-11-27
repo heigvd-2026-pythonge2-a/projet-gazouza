@@ -106,7 +106,10 @@ pnpm build                # vérification de types + build
 pnpm build:demo           # démo en ligne, construite dans website/public/demo/
 ```
 
-La CI affiche le taux de couverture du frontend dans le résumé du job, sans seuil exigé.
+La CI affiche le taux de couverture du frontend dans le résumé du job. `pnpm test:coverage`
+échoue sous les seuils fixés dans `vite.config.ts` (`coverage.thresholds`) : un seuil pour
+tout `src/`, et un plus haut pour la logique pure de `src/store/`. Quand la couverture monte,
+remonte les seuils ; ne les baisse jamais pour faire passer une PR.
 
 </TabItem>
 <TabItem label="Site web">

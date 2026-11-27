@@ -45,22 +45,22 @@ import {
 import { AnimationControls } from "./AnimationControls";
 import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
-import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ContextMenu } from "./ContextMenu";
+import { componentMenu } from "./componentMenu";
 import { DiagnosticHalos } from "./DiagnosticHalos";
 import { EmptyCanvasHint } from "./EmptyCanvasHint";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport, showViewport } from "./fitView";
 import { FreeText } from "./FreeText";
-import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
 import { useFileDrop } from "./fileDrop";
+import { useKeyboardShortcuts } from "./keyboard";
 import { CurrentLayer } from "./CurrentLayer";
 import { LedGlow } from "./LedGlow";
 import { focusInspector } from "./inspectorFocus";
 import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
 import { resimulateOperatingPoint } from "./simulationActions";
-import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
 import { ValuePopover } from "./ValuePopover";
@@ -88,14 +88,6 @@ const BAND_THRESHOLD = 3;
 const EXPORT_PIXEL_RATIO = 2;
 const EXPORT_MARGIN = 20;
 
-/** Grid step of each arrow key, to move the selection. */
-const ARROWS: Record<string, GridPoint> = {
-  ArrowLeft: { x: -1, y: 0 },
-  ArrowRight: { x: 1, y: 0 },
-  ArrowUp: { x: 0, y: -1 },
-  ArrowDown: { x: 0, y: 1 },
-};
-
 /** Middle or right button held on the canvas. */
 interface Press {
   button: 1 | 2;
@@ -110,7 +102,6 @@ interface Press {
   componentId: string | null;
 }
 
-/** Actions of the menu opened by a right click on a component; they apply to the selection. */
 /** Width of the box of a value written on the schematic, and its font size, in pixels. */
 const VALUE_WIDTH = 90;
 const VALUE_FONT_SIZE = 11;
@@ -158,46 +149,6 @@ function ValueText({ label: l, color }: { label: OperatingPointLabel; color: str
   );
 }
 
-function componentMenu(selectionSize: number): MenuItem[] {
-  const s = () => useEditorStore.getState();
-  return [
-    { label: "Tourner", shortcut: "R", keys: ["r"], onSelect: () => s().rotate() },
-    {
-      label: "Tourner de 45°",
-      shortcut: "Maj+R",
-      keys: ["R"],
-      onSelect: () => s().rotate(45),
-    },
-    { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
-    {
-      label: "Replacer les textes automatiquement",
-      shortcut: "O",
-      keys: ["o", "O"],
-      onSelect: () => s().resetCaptions(),
-    },
-    {
-      label: "Dupliquer",
-      shortcut: "Ctrl+D",
-      keys: ["d", "D"],
-      onSelect: () => s().duplicate(),
-    },
-    { label: "Copier", shortcut: "Ctrl+C", keys: ["c", "C"], onSelect: () => s().copy() },
-    {
-      label: "Supprimer",
-      shortcut: "Suppr",
-      keys: ["Delete", "Backspace"],
-      onSelect: () => s().deleteSelection(),
-    },
-    {
-      label: "Propriétés…",
-      // The properties panel only shows the fields of a single component.
-      disabled: selectionSize !== 1,
-      // After the menu has closed and given the focus back to where it was.
-      onSelect: () => setTimeout(() => focusInspector()),
-    },
-  ];
-}
-
 /** Tracks the size of an element, so the Konva stage can fill its container. */
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -212,90 +163,6 @@ function useElementSize<T extends HTMLElement>() {
     return () => observer.disconnect();
   }, []);
   return [ref, size] as const;
-}
-
-function useKeyboardShortcuts() {
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
-      const s = useEditorStore.getState();
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        // In a text field the browser's own undo, copy... apply instead (returned above).
-        const key = e.key.toLowerCase();
-        if (key === "z" && !e.shiftKey) s.undo();
-        else if (key === "y" || (key === "z" && e.shiftKey)) s.redo();
-        else if (key === "a") s.selectAll();
-        else if (key === "c") s.copy();
-        else if (key === "v") s.paste();
-        else if (key === "d")
-          s.duplicate(); // also keeps the browser from adding a bookmark
-        else if (key === "n") void newFile();
-        else if (key === "o") openFile();
-        else if (key === "s" && e.shiftKey) saveFileAs();
-        else if (key === "s") saveFile();
-        else return;
-        e.preventDefault();
-        return;
-      }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const arrow = ARROWS[e.key];
-      if (arrow) {
-        if (s.tool.kind !== "select" || s.selection.length === 0) return;
-        // Holding the key down repeats it: one undo step for the whole move.
-        s.moveSelection(arrow, { merge: true });
-        e.preventDefault();
-        return;
-      }
-      // 1 to 9: the palette tool with that number.
-      const entry = entryForKey(e.key);
-      if (entry) {
-        if (entry.kind === "wire") s.startWiring();
-        else s.startPlacing(entry.def.type);
-        e.preventDefault();
-        return;
-      }
-      switch (e.key) {
-        case "r":
-        case "R":
-          // Shift+R: by 45 degrees, for the components with two pins (#161).
-          s.rotate(e.shiftKey ? 45 : 90);
-          break;
-        case "m":
-        case "M":
-          s.mirror();
-          break;
-        case "o":
-        case "O":
-          s.resetCaptions();
-          break;
-        case "w":
-        case "W":
-          s.startWiring();
-          break;
-        case "t":
-        case "T":
-          s.startText();
-          break;
-        case "p":
-        case "P":
-          s.startProbe();
-          break;
-        case "Delete":
-        case "Backspace":
-          s.deleteSelection();
-          break;
-        case "Escape":
-          s.cancel();
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 }
 
 /** Schematic canvas: zoomable, pannable; accepts components dragged from the palette. */

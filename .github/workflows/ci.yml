@@ -147,10 +147,12 @@ jobs:
       - name: Vérification du formatage (Prettier)
         run: pnpm format:check
 
+      # Fails if the coverage is under the thresholds of vite.config.ts.
       - name: Tests unitaires et couverture (vitest)
         run: pnpm test:coverage
 
-      # Shown on the run's summary page. No threshold yet: the rate is reported, not enforced.
+      # Shown on the run's summary page. The thresholds are in frontend/vite.config.ts: below
+      # one, the previous step fails.
       - name: Résumé de la couverture
         if: always() && hashFiles('frontend/coverage/coverage-summary.json') != ''
         shell: bash
