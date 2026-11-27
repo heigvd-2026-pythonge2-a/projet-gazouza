@@ -68,10 +68,10 @@ V1 = 10 V, R1 = R2 = 1 kΩ, point de fonctionnement `.op`.
         "rotation": 0, "mirror": false, "params": {} },
       { "id": "c5", "type": "ground", "position": { "x": 8, "y": 4 },
         "rotation": 0, "mirror": false, "params": {} },
-      { "id": "c6", "type": "label", "position": { "x": -1, "y": -2 },
-        "rotation": 180, "mirror": false, "params": { "net": "in" } },
+      { "id": "c6", "type": "label", "position": { "x": -3, "y": -2 },
+        "rotation": 180, "mirror": false, "params": { "net": "in", "direction": "input" } },
       { "id": "c7", "type": "label", "position": { "x": 9, "y": -2 },
-        "rotation": 0, "mirror": false, "params": { "net": "out" } }
+        "rotation": 0, "mirror": false, "params": { "net": "out", "direction": "output" } }
     ],
     "junctions": [],
     "wires": [

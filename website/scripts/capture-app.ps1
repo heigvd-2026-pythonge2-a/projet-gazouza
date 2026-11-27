@@ -22,16 +22,20 @@ $clicks = @'
 </script>
 </body>
 '@
-# The theme is the one chosen with the toolbar button (store/theme.ts), stored before the app
-# starts: an inline script runs before the module of the page.
+# Stored before the app starts (an inline script runs before the module of the page): the theme,
+# as chosen with the toolbar button (store/theme.ts), and the results panel at its smallest width
+# (layout/sizes.ts), which is enough for the values and leaves more room to the schematic.
 $index = Get-Content "$demo\index.html" -Raw -Encoding UTF8
 $page = Join-Path $demo "capture.html"
 $url = "file:///" + ($page -replace "\\", "/") + "?demo=divider_op"
 try {
   foreach ($theme in "light", "dark") {
     $out = Join-Path $assets "psice-app-$theme.png"
-    $setTheme = "<head>`n<script>localStorage.setItem('psice.theme', '$theme');</script>"
-    $index.Replace("<head>", $setTheme).Replace("</body>", $clicks) |
+    $setup = "<head>`n<script>" +
+      "localStorage.setItem('psice.theme', '$theme');" +
+      "localStorage.setItem('psice.layout.v1', JSON.stringify({ sideWidth: 300 }));" +
+      "</script>"
+    $index.Replace("<head>", $setup).Replace("</body>", $clicks) |
       Set-Content $page -Encoding UTF8 -NoNewline
 
     # A new profile for each theme, so nothing is left from the previous capture.
