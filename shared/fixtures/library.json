@@ -325,9 +325,13 @@
         "name": "direction",
         "label": "Direction",
         "unit": "",
-        "default": "none",
+        "default": "auto",
         "kind": "choice",
         "options": [
+          {
+            "value": "auto",
+            "label": "Automatique"
+          },
           {
             "value": "none",
             "label": "Aucune"

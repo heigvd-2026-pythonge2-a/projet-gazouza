@@ -48,6 +48,7 @@ La **direction** (panneau Propriétés) change seulement la forme du drapeau, pa
 
 | Direction | Drapeau |
 |---|---|
+| Automatique (par défaut) | Déduite du circuit par Psice ; en attendant, rectangle comme « Aucune » |
 | Aucune | Rectangle |
 | Entrée | Pointe vers la broche : le signal entre dans le circuit |
 | Sortie | Pointe à l'opposé de la broche : le signal sort du circuit |

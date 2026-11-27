@@ -118,7 +118,7 @@ def test_label_direction_only_changes_the_drawing() -> None:
     # Absent (a file saved before the parameter existed) or set: the same netlist, no error.
     wires = [*LOOP, wire("w4", "c1.+", "l1.1")]
     netlists = set()
-    for direction in [None, "none", "input", "output", "bidir"]:
+    for direction in [None, "auto", "none", "input", "output", "bidir"]:
         params = {"net": "out"} if direction is None else {"net": "out", "direction": direction}
         result = generate_netlist(
             schematic([SOURCE, RESISTOR, GROUND, comp("l1", "label", **params)], wires), OP
