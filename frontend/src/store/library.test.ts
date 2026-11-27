@@ -37,7 +37,7 @@ describe("setLibrary", () => {
     expect(groups).toEqual([
       ["passive", ["resistor", "capacitor", "inductor"]],
       ["source", ["voltage_source", "current_source"]],
-      ["connection", ["ground", "label"]],
+      ["connection", ["ground", "label", "switch", "push_button"]],
       ["semiconductor", ["diode", "zener", "led", "npn", "pnp", "nmos"]],
       ["amplifier", ["opamp", "opamp_real"]],
     ]);
@@ -154,7 +154,7 @@ describe("semiconductor and op-amp symbols", () => {
     expect(groups).toEqual([
       ["passive", ["resistor", "capacitor", "inductor"]],
       ["source", ["voltage_source", "current_source"]],
-      ["connection", ["ground", "label"]],
+      ["connection", ["ground", "label", "switch", "push_button"]],
       ["semiconductor", ["diode", "zener", "led", "npn", "pnp", "nmos"]],
       ["amplifier", ["opamp", "opamp_real"]],
     ]);

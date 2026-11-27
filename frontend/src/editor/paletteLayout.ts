@@ -12,16 +12,19 @@ export interface PaletteGroup {
   entries: PaletteEntry[];
 }
 
-/** Palette groups in display order; the wire tool closes the "Connexions" group. */
+/**
+ * Palette groups in display order. In the "Connexions" group the wire tool comes right after the
+ * label, before the switches (#43), so it keeps its digit key.
+ */
 export function paletteLayout(): PaletteGroup[] {
-  return paletteGroups().map((g) => ({
-    id: g.id,
-    label: g.label,
-    entries: [
-      ...g.defs.map((def): PaletteEntry => ({ kind: "place", def })),
-      ...(g.id === "connection" ? [{ kind: "wire" } as const] : []),
-    ],
-  }));
+  return paletteGroups().map((g) => {
+    const entries = g.defs.map((def): PaletteEntry => ({ kind: "place", def }));
+    if (g.id === "connection") {
+      const label = g.defs.findIndex((d) => d.type === "label");
+      entries.splice(label < 0 ? entries.length : label + 1, 0, { kind: "wire" });
+    }
+    return { id: g.id, label: g.label, entries };
+  });
 }
 
 /** Digit key of the entry at this position in the palette (0-based), if it has one. */
