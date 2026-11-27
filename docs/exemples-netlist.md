@@ -379,11 +379,11 @@ L'étudiant a oublié la masse, et un fil a un bout en l'air.
     { "code": "NO_GROUND", "message": "Le circuit n'a pas de masse.", "targets": [] }
   ],
   "warnings": [
-    { "code": "WIRE_DANGLING", "message": "Le fil w3 a un bout qui n'est relié à rien.",
-      "targets": [ { "wire": "w3" } ] },
     { "code": "MILLI_SUFFIX",
-      "message": "R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ».",
-      "targets": [ { "comp": "c2" } ] }
+      "message": "R1 : « 1M » se lit « milli » en SPICE. Pour « méga », écris « 1Meg ».",
+      "targets": [ { "comp": "c2" } ] },
+    { "code": "WIRE_DANGLING", "message": "Le fil w3 a un bout qui n'est relié à rien.",
+      "targets": [ { "wire": "w3" } ] }
   ]
 }
 ```
