@@ -51,7 +51,7 @@ Le corps de `POST /api/netlist` et `POST /api/simulate` :
 | `kind` | Champs (unités SI)                                                                          |
 | ------ | ------------------------------------------------------------------------------------------- |
 | `op`   | aucun                                                                                       |
-| `tran` | `stop_time`, `max_step` (facultatif)                                                        |
+| `tran` | `stop_time`, `points` (au moins N points, facultatif), `max_step` (facultatif)              |
 | `ac`   | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (20 par défaut) |
 | `dc`   | `source_id`, `start`, `stop`, `step`                                                        |
 

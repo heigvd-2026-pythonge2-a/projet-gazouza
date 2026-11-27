@@ -670,8 +670,13 @@ export interface components {
        */
       stop_time: number;
       /**
+       * Points
+       * @description Optional: at least this many time points (#334); the maximum step is stop_time / points. ngspice may give more points (adaptive step), never fewer. None: about 1000.
+       */
+      points?: number | null;
+      /**
        * Max Step
-       * @description Optional, in seconds.
+       * @description Optional advanced setting, in seconds. With `points` too, the smaller step of the two is used.
        */
       max_step?: number | null;
     };

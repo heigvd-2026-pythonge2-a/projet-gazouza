@@ -215,6 +215,11 @@ def test_current_source() -> None:
         (OpAnalysis(), ".op"),
         (TranAnalysis(stop_time=0.01), ".tran 10u 10m"),
         (TranAnalysis(stop_time=0.005, max_step=1e-5), ".tran 10u 5m 0 10u"),
+        # At least N points (#334): the maximum step is stop_time / points...
+        (TranAnalysis(stop_time=0.01, points=500), ".tran 20u 10m 0 20u"),
+        # ...and with max_step too, the smaller step wins.
+        (TranAnalysis(stop_time=0.01, points=500, max_step=1e-5), ".tran 10u 10m 0 10u"),
+        (TranAnalysis(stop_time=0.01, points=5000, max_step=1e-5), ".tran 2u 10m 0 2u"),
         (AcAnalysis(input_source_id="c1", start_frequency=1, stop_frequency=1e6),
          ".ac dec 20 1 1Meg"),
         (DcAnalysis(source_id="c1", start=-1, stop=1, step=0.1), ".dc V1 -1 1 100m"),

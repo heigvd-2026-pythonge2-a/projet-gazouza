@@ -124,6 +124,45 @@ const BIPOLAR_BODY: SymbolShape[] = [
   { kind: "line", points: [-0.5, 0.4, 1, 1.2, 1, 2] },
 ];
 
+/** Length of the head of an emitter arrow, along the emitter, and its half-width. */
+const ARROW_LENGTH = 0.4;
+const ARROW_HALF_WIDTH = 0.2;
+
+/**
+ * Head of the arrow on the emitter of a bipolar transistor, centred on the middle of the emitter
+ * line from the base bar (`bar`) to the bend (`bend`), as IEC 60617 draws it (#337). Only its
+ * direction differs between the two transistors: `out` (NPN) points towards the bend, else (PNP)
+ * towards the base. The wings come first and last, the tip in the middle.
+ */
+export function emitterArrow(
+  bar: readonly [number, number],
+  bend: readonly [number, number],
+  out: boolean,
+): SymbolShape {
+  const [bx, by] = bar;
+  const [ex, ey] = bend;
+  const length = Math.hypot(ex - bx, ey - by);
+  const sign = out ? 1 : -1;
+  const ux = (sign * (ex - bx)) / length;
+  const uy = (sign * (ey - by)) / length;
+  const cx = (bx + ex) / 2;
+  const cy = (by + ey) / 2;
+  const tip = [cx + (ux * ARROW_LENGTH) / 2, cy + (uy * ARROW_LENGTH) / 2];
+  const back = [cx - (ux * ARROW_LENGTH) / 2, cy - (uy * ARROW_LENGTH) / 2] as const;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  return {
+    kind: "line",
+    points: [
+      back[0] - uy * ARROW_HALF_WIDTH,
+      back[1] + ux * ARROW_HALF_WIDTH,
+      tip[0] as number,
+      tip[1] as number,
+      back[0] + uy * ARROW_HALF_WIDTH,
+      back[1] - ux * ARROW_HALF_WIDTH,
+    ].map(round),
+  };
+}
+
 /**
  * Make contact (IEC 60617), pins at (0, -2) and (0, 2): the blade turns on the bottom contact.
  * Open, it is lifted away from the top contact; closed, it rests on it. Both states stay in the
@@ -237,13 +276,13 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
     type: "npn",
     category: "semiconductor",
     // Emitter at the bottom; its arrow points out of the transistor.
-    symbol: [...BIPOLAR_BODY, { kind: "line", points: [0.24, 1.02, 0.65, 1.01, 0.43, 0.67] }],
+    symbol: [...BIPOLAR_BODY, emitterArrow([-0.5, 0.4], [1, 1.2], true)],
   },
   {
     type: "pnp",
     category: "semiconductor",
     // Emitter at the top; its arrow points into the transistor, towards the base.
-    symbol: [...BIPOLAR_BODY, { kind: "line", points: [0.3, -0.6, -0.1, -0.61, 0.11, -0.95] }],
+    symbol: [...BIPOLAR_BODY, emitterArrow([-0.5, -0.4], [1, -1.2], false)],
   },
   {
     type: "nmos",
