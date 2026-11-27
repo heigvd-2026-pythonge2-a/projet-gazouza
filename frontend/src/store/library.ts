@@ -253,7 +253,8 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
     symbol: [
       TRANSISTOR_ENVELOPE,
       { kind: "line", points: [-2, 0, -0.7, 0] },
-      { kind: "line", points: [-0.7, -0.8, -0.7, 0.8] },
+      // Gate: kept inside the envelope (ends at 1.18 from its centre, radius 1.2, #338).
+      { kind: "line", points: [-0.7, -0.7, -0.7, 0.7] },
       { kind: "line", points: [-0.4, -0.95, -0.4, -0.45] },
       { kind: "line", points: [-0.4, -0.25, -0.4, 0.25] },
       { kind: "line", points: [-0.4, 0.45, -0.4, 0.95] },
