@@ -1,0 +1,9 @@
+dist
+node_modules
+pnpm-lock.yaml
+.astro
+# The online demo, built from frontend/ by `pnpm build:demo`.
+public/demo
+# Prettier reads MDX as MDX 1, older than Astro's: it breaks a list, or a paragraph whose line
+# starts with an inline tag such as <kbd>.
+*.mdx

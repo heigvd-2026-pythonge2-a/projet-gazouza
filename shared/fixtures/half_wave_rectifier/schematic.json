@@ -17,7 +17,7 @@
         "offset": "0",
         "amplitude": "5",
         "frequency": "50",
-        "delay": "0",
+        "sin_delay": "0",
         "damping": "0",
         "phase": "0"
       }

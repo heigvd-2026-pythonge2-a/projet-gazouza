@@ -8,17 +8,17 @@ puissance de dix. Psice reprend les suffixes de SPICE.
 
 ## Les suffixes
 
-| Suffixe | Nom | Facteur | Exemple | Vaut |
-|---|---|---|---|---|
-| `f` | femto | 10⁻¹⁵ | `10f` | 10 fF |
-| `p` | pico | 10⁻¹² | `22p` | 22 pF |
-| `n` | nano | 10⁻⁹ | `100n` | 100 nF |
-| `u` | micro | 10⁻⁶ | `10u` | 10 µF |
-| `m` | milli | 10⁻³ | `5m` | 5 ms |
-| `k` | kilo | 10³ | `4.7k` | 4,7 kΩ |
-| `Meg` | méga | 10⁶ | `1Meg` | 1 MΩ |
-| `G` | giga | 10⁹ | `2G` | 2 GHz |
-| `T` | téra | 10¹² | `1T` | 1 THz |
+| Suffixe | Nom   | Facteur | Exemple | Vaut   |
+| ------- | ----- | ------- | ------- | ------ |
+| `f`     | femto | 10⁻¹⁵   | `10f`   | 10 fF  |
+| `p`     | pico  | 10⁻¹²   | `22p`   | 22 pF  |
+| `n`     | nano  | 10⁻⁹    | `100n`  | 100 nF |
+| `u`     | micro | 10⁻⁶    | `10u`   | 10 µF  |
+| `m`     | milli | 10⁻³    | `5m`    | 5 ms   |
+| `k`     | kilo  | 10³     | `4.7k`  | 4,7 kΩ |
+| `Meg`   | méga  | 10⁶     | `1Meg`  | 1 MΩ   |
+| `G`     | giga  | 10⁹     | `2G`    | 2 GHz  |
+| `T`     | téra  | 10¹²    | `1T`    | 1 THz  |
 
 Les majuscules ne comptent pas (`4.7K` = `4.7k`), sauf qu'il faut bien écrire `Meg` (ou `meg`)
 pour méga.
@@ -42,12 +42,12 @@ majuscule, pour que tu vérifies.
 Contrairement à SPICE, qui ignore les lettres qu'il ne comprend pas, Psice refuse les fautes de
 frappe pour qu'elles ne passent pas inaperçues :
 
-| Saisie | Problème |
-|---|---|
-| `1kk` | Deux suffixes |
-| `4,7k` | Virgule au lieu du point |
-| `1 k` | Espace entre le nombre et le suffixe |
-| *(vide)* | Paramètre non renseigné |
+| Saisie   | Problème                             |
+| -------- | ------------------------------------ |
+| `1kk`    | Deux suffixes                        |
+| `4,7k`   | Virgule au lieu du point             |
+| `1 k`    | Espace entre le nombre et le suffixe |
+| _(vide)_ | Paramètre non renseigné              |
 
 Une valeur refusée donne l'erreur `BAD_VALUE` (ou `MISSING_PARAM` si le champ est vide), avec le
 nom du composant concerné.

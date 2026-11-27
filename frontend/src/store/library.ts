@@ -336,9 +336,20 @@ export function mainParam(def: ComponentDef, params: Record<string, string>): Pa
 }
 
 /**
+ * Value of a choice parameter as the editor uses it. A label's `direction` missing from a file
+ * saved before it existed is "none", not the default ("auto"): old files keep their drawing.
+ */
+export function choiceValue(def: ComponentDef, params: Record<string, string>, param: ParamDef) {
+  const value = params[param.name];
+  if (value !== undefined) return value;
+  return def.type === "label" && param.name === "direction" ? "none" : param.default;
+}
+
+/**
  * Drawing of a placed component: the symbol of its type, except for a label, whose flag follows
- * its direction (absent or unknown: no direction, as in files saved before it existed), and for
- * a switch or a push button, drawn open or closed by its state (absent or unknown: open).
+ * its direction (absent or unknown: no direction, as in files saved before it existed; "auto" is
+ * drawn as "none" until the editor works the direction out, #295), and for a switch or a push
+ * button, drawn open or closed by its state (absent or unknown: open).
  */
 export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
   if (def.type === "switch" || def.type === "push_button") {
@@ -347,7 +358,8 @@ export function symbolOf(def: ComponentDef, params: Record<string, string>): Sym
   }
   if (def.type !== "label") return def.symbol;
   const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
-  return flags[params.direction ?? "none"] ?? def.symbol;
+  const direction = params.direction ?? "none";
+  return flags[direction === "auto" ? "none" : direction] ?? def.symbol;
 }
 
 export interface Bounds {

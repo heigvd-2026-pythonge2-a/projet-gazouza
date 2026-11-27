@@ -28,7 +28,7 @@ def label(comp_id: str, net: str) -> dict:
 def common_emitter() -> Schematic:
     """NPN common emitter: VCC 12 V, divider 47k / 10k, RC 4.7k, RE 1k, 10 mV / 1 kHz input."""
     source = part("vin", "voltage_source", "VIN", waveform="sin", offset="0", amplitude="10m",
-                  frequency="1k", delay="0", damping="0", phase="0")  # fmt: skip
+                  frequency="1k", sin_delay="0", damping="0", phase="0")  # fmt: skip
     components = [
         dc("vcc", "VCC", "12"),
         source,

@@ -15,10 +15,10 @@ bas du schéma, et peut passer en plein écran.
 
 C'est le cœur de Psice : pas besoin de connaître le nom SPICE d'un nœud.
 
-| Tu cliques sur… | Psice affiche… |
-|---|---|
-| un **fil** | la **tension** de son nœud par rapport à la masse, par exemple `v(out)` |
-| un **composant** | le **courant** qui le traverse, par exemple `i(R1)` |
+| Tu cliques sur…  | Psice affiche…                                                          |
+| ---------------- | ----------------------------------------------------------------------- |
+| un **fil**       | la **tension** de son nœud par rapport à la masse, par exemple `v(out)` |
+| un **composant** | le **courant** qui le traverse, par exemple `i(R1)`                     |
 
 Pour une analyse `.op`, la sonde donne directement la valeur. Pour `.tran`, `.ac` et `.dc`, elle
 ajoute la courbe au graphique.
@@ -34,11 +34,11 @@ une pile qui débite). Psice ne montre pas ce signe : le tableau du `.op` écrit
 Après une analyse `.op`, Psice écrit les résultats directement sur le schéma (la case
 **Afficher les valeurs sur le schéma** du panneau Résultats les masque) :
 
-| Ce qui est affiché | Comment le lire |
-|---|---|
-| **Potentiel** d'un nœud (violet) | Tension du nœud par rapport à la masse, écrite sur un de ses fils, ou à côté d'une broche pour un nœud sans fil. |
-| **Flèche de courant** (orange) | Pointe de flèche sur une patte du composant, dans le **sens réel** du courant ; la valeur est donnée sans signe. |
-| **V_CE** d'un transistor bipolaire, **V_DS** d'un MOSFET (violet) | Flèche le long du transistor, du collecteur vers l'émetteur (du drain vers la source), avec la valeur. |
+| Ce qui est affiché                                                | Comment le lire                                                                                                  |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Potentiel** d'un nœud (violet)                                  | Tension du nœud par rapport à la masse, écrite sur un de ses fils, ou à côté d'une broche pour un nœud sans fil. |
+| **Flèche de courant** (orange)                                    | Pointe de flèche sur une patte du composant, dans le **sens réel** du courant ; la valeur est donnée sans signe. |
+| **V_CE** d'un transistor bipolaire, **V_DS** d'un MOSFET (violet) | Flèche le long du transistor, du collecteur vers l'émetteur (du drain vers la source), avec la valeur.           |
 
 Survole un composant (ou sélectionne-le) pour voir en plus la **tension à ses bornes** : une
 flèche le long du composant, de la borne la plus positive vers l'autre : elle suit la **chute de
@@ -67,20 +67,20 @@ Le visualiseur affiche les résultats des analyses **`.tran`**, **`.ac`** et **`
 - **Balayage DC (`.dc`)** : trace les tensions et courants en fonction de la valeur de la source
   balayée (`V` ou `A`) en abscisse.
 - **Zoom** : glisse horizontalement sur le graphe ou utilise la molette de la souris ;
-  double-clique (ou clique sur *Réinitialiser le zoom*) pour revenir à la vue complète.
+  double-clique (ou clique sur _Réinitialiser le zoom_) pour revenir à la vue complète.
 - **Curseurs** : deux curseurs verticaux (`C1` et `C2`) déplaçables directement à la souris (ou
-  via les boutons *Placer C1* / *Placer C2*) pour lire chaque grandeur ainsi que leur écart
+  via les boutons _Placer C1_ / _Placer C2_) pour lire chaque grandeur ainsi que leur écart
   (`Δt`, `1/|Δt|`, `ΔV`, `ΔI`, `ΔdB`, `Δ°`).
 
 ## Mesures
 
 Le cahier des charges prévoit des mesures automatiques sur une courbe :
 
-| Mesure | Exemple d'usage |
-|---|---|
-| Valeur de crête | Amplitude d'un signal redressé |
-| Valeur moyenne | Composante continue |
-| Temps de montée (10 % → 90 %) | Rapidité d'un circuit RC |
+| Mesure                        | Exemple d'usage                |
+| ----------------------------- | ------------------------------ |
+| Valeur de crête               | Amplitude d'un signal redressé |
+| Valeur moyenne                | Composante continue            |
+| Temps de montée (10 % → 90 %) | Rapidité d'un circuit RC       |
 
 ## Export
 

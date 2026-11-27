@@ -2,157 +2,155 @@
 /**
  * Project milestones as a timeline, each linked to its GitHub milestone.
  */
-const REPO = 'https://github.com/heigvd-2026-pythonge2-a/projet-gazouza';
+const REPO = "https://github.com/heigvd-2026-pythonge2-a/projet-gazouza";
 
-type Status = 'done' | 'active' | 'next';
+type Status = "done" | "active" | "next";
 
 const milestones: { weeks: string; title: string; goal: string; status: Status; n: number }[] = [
-	{
-		weeks: 'S1–2',
-		title: 'Fondations',
-		goal: "Repo, CI, contrat d'API, ngspice validé sur toutes les machines, prototype netlist → courbe.",
-		status: 'done',
-		n: 1,
-	},
-	{
-		weeks: 'S3–5',
-		title: 'Éditeur de bout en bout',
-		goal: 'Éditeur basique de bout en bout : dessiner un circuit RC et le simuler.',
-		status: 'active',
-		n: 2,
-	},
-	{
-		weeks: 'S6–8',
-		title: 'Analyses et sauvegarde',
-		goal: 'Analyses AC et DC, sonde interactive, diodes, amplis-op et transistors, sauvegarde.',
-		status: 'active',
-		n: 3,
-	},
-	{
-		weeks: 'S9–10',
-		title: 'Import, annuler et mesures',
-		goal: 'Import .asc, annuler / rétablir, mesures et export.',
-		status: 'active',
-		n: 4,
-	},
-	{
-		weeks: 'S11–12',
-		title: 'Stabilisation et livraison',
-		goal: 'Tests, stabilisation, build final, rapport et démo.',
-		status: 'next',
-		n: 5,
-	},
+  {
+    weeks: "S1–2",
+    title: "Fondations",
+    goal: "Repo, CI, contrat d'API, ngspice validé sur toutes les machines, prototype netlist → courbe.",
+    status: "done",
+    n: 1,
+  },
+  {
+    weeks: "S3–5",
+    title: "Éditeur de bout en bout",
+    goal: "Éditeur basique de bout en bout : dessiner un circuit RC et le simuler.",
+    status: "active",
+    n: 2,
+  },
+  {
+    weeks: "S6–8",
+    title: "Analyses et sauvegarde",
+    goal: "Analyses AC et DC, sonde interactive, diodes, amplis-op et transistors, sauvegarde.",
+    status: "active",
+    n: 3,
+  },
+  {
+    weeks: "S9–10",
+    title: "Import, annuler et mesures",
+    goal: "Import .asc, annuler / rétablir, mesures et export.",
+    status: "active",
+    n: 4,
+  },
+  {
+    weeks: "S11–12",
+    title: "Stabilisation et livraison",
+    goal: "Tests, stabilisation, build final, rapport et démo.",
+    status: "next",
+    n: 5,
+  },
 ];
 
-const label: Record<Status, string> = { done: 'Terminé', active: 'En cours', next: 'À venir' };
+const label: Record<Status, string> = { done: "Terminé", active: "En cours", next: "À venir" };
 ---
 
 <ol class="roadmap not-content">
-	{
-		milestones.map((m) => (
-			<li class={`step ${m.status}`}>
-				<span class="marker" aria-hidden="true" />
-				<div class="body">
-					<div class="head">
-						<span class="weeks">{m.weeks}</span>
-						<span class={`status ${m.status}`}>{label[m.status]}</span>
-					</div>
-					<a class="title" href={`${REPO}/milestone/${m.n}`}>
-						{m.title}
-					</a>
-					<p>{m.goal}</p>
-				</div>
-			</li>
-		))
-	}
+  {milestones.map((m) => (
+    <li class={`step ${m.status}`}>
+      <span class="marker" aria-hidden="true" />
+      <div class="body">
+        <div class="head">
+          <span class="weeks">{m.weeks}</span>
+          <span class={`status ${m.status}`}>{label[m.status]}</span>
+        </div>
+        <a class="title" href={`${REPO}/milestone/${m.n}`}>
+          {m.title}
+        </a>
+        <p>{m.goal}</p>
+      </div>
+    </li>
+  ))}
 </ol>
 
 <style>
-	.roadmap {
-		list-style: none;
-		padding: 0;
-		margin: 2rem 0 0;
-		position: relative;
-	}
-	.roadmap::before {
-		content: '';
-		position: absolute;
-		left: 0.6rem;
-		top: 0.5rem;
-		bottom: 0.5rem;
-		width: 2px;
-		background: linear-gradient(var(--sl-color-accent), var(--psice-card-border));
-	}
-	.step {
-		position: relative;
-		padding-left: 2.6rem;
-		margin-bottom: 1.4rem;
-	}
-	.marker {
-		position: absolute;
-		left: 0;
-		top: 0.95rem;
-		width: 1.25rem;
-		height: 1.25rem;
-		border-radius: 50%;
-		border: 3px solid var(--sl-color-accent);
-		background: var(--sl-color-bg);
-	}
-	.done .marker {
-		background: var(--sl-color-accent);
-	}
-	.next .marker {
-		border-color: var(--sl-color-gray-4);
-	}
-	.body {
-		background: var(--psice-card-bg);
-		border: 1px solid var(--psice-card-border);
-		border-radius: 0.9rem;
-		padding: 0.9rem 1.1rem;
-	}
-	.head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-	}
-	.weeks {
-		font-family: var(--sl-font-mono);
-		font-size: var(--sl-text-sm);
-		color: var(--sl-color-gray-3);
-	}
-	.status {
-		font-size: var(--sl-text-xs);
-		font-weight: 600;
-		padding: 0.05rem 0.55rem;
-		border-radius: 999px;
-		border: 1px solid currentColor;
-	}
-	.status.done {
-		color: #22c55e;
-	}
-	/* Green 500 is too light on white (2.3:1): green 700 keeps the 4.5:1 of WCAG AA. */
-	:global(:root[data-theme='light']) .status.done {
-		color: #15803d;
-	}
-	.status.active {
-		color: var(--sl-color-accent);
-	}
-	.status.next {
-		color: var(--sl-color-gray-3);
-	}
-	.title {
-		display: block;
-		margin-top: 0.2rem;
-		font-size: var(--sl-text-lg);
-		font-weight: 700;
-		color: var(--sl-color-white);
-		text-decoration: none;
-	}
-	.title:hover {
-		color: var(--sl-color-accent);
-	}
-	p {
-		margin: 0.25rem 0 0;
-		color: var(--sl-color-gray-2);
-	}
+  .roadmap {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0 0;
+    position: relative;
+  }
+  .roadmap::before {
+    content: "";
+    position: absolute;
+    left: 0.6rem;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 2px;
+    background: linear-gradient(var(--sl-color-accent), var(--psice-card-border));
+  }
+  .step {
+    position: relative;
+    padding-left: 2.6rem;
+    margin-bottom: 1.4rem;
+  }
+  .marker {
+    position: absolute;
+    left: 0;
+    top: 0.95rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    border: 3px solid var(--sl-color-accent);
+    background: var(--sl-color-bg);
+  }
+  .done .marker {
+    background: var(--sl-color-accent);
+  }
+  .next .marker {
+    border-color: var(--sl-color-gray-4);
+  }
+  .body {
+    background: var(--psice-card-bg);
+    border: 1px solid var(--psice-card-border);
+    border-radius: 0.9rem;
+    padding: 0.9rem 1.1rem;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .weeks {
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .status {
+    font-size: var(--sl-text-xs);
+    font-weight: 600;
+    padding: 0.05rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+  }
+  .status.done {
+    color: #22c55e;
+  }
+  /* Green 500 is too light on white (2.3:1): green 700 keeps the 4.5:1 of WCAG AA. */
+  :global(:root[data-theme="light"]) .status.done {
+    color: #15803d;
+  }
+  .status.active {
+    color: var(--sl-color-accent);
+  }
+  .status.next {
+    color: var(--sl-color-gray-3);
+  }
+  .title {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: var(--sl-text-lg);
+    font-weight: 700;
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+  .title:hover {
+    color: var(--sl-color-accent);
+  }
+  p {
+    margin: 0.25rem 0 0;
+    color: var(--sl-color-gray-2);
+  }
 </style>

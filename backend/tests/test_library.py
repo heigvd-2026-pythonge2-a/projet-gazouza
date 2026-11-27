@@ -66,6 +66,13 @@ def test_ground_and_label_produce_no_spice_line(component_type: str) -> None:
     assert LIBRARY[component_type].spice is None
 
 
+def test_label_direction_is_automatic_by_default() -> None:
+    # The editor works out the direction of a new label (#295); the others force it.
+    direction = next(p for p in LIBRARY["label"].params if p.name == "direction")
+    assert direction.default == "auto"
+    assert [o.value for o in direction.options] == ["auto", "none", "input", "output", "bidir"]
+
+
 @pytest.mark.parametrize("component_type", ["voltage_source", "current_source"])
 def test_source_waveforms(component_type: str) -> None:
     entry = LIBRARY[component_type]
@@ -78,6 +85,10 @@ def test_source_waveforms(component_type: str) -> None:
     assert pulse_fields[0] in ("v1", "i1")
     assert "delay" in pulse_fields
     assert "amplitude" not in pulse_fields
+    # Each waveform keeps its own fields: a delay typed for a pulse is not the sine's (#165).
+    sin_fields = [p.name for p in entry.params if "sin" in p.waveforms]
+    assert "sin_delay" in sin_fields
+    assert not set(pulse_fields) & set(sin_fields)
 
 
 def test_every_fixture_component_type_exists() -> None:
