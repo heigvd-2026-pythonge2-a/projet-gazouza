@@ -22,7 +22,9 @@ Complète le fichier [`AGENTS.md`](../AGENTS.md) à la racine.
   de `shared/fixtures/` sont disponibles via `src/store/testFixtures.ts`.
 - Composants : Testing Library (`render`, `screen`, `userEvent`) dans un DOM simulé (jsdom).
   Cherche les éléments par rôle et par libellé, comme l'utilisateur les voit. `src/test/editorStore.ts`
-  remet le store à zéro. Le canvas Konva ne peut pas être rendu (jsdom n'a pas de `<canvas>`) :
-  remplace `SchematicCanvas` par un `vi.mock` (voir `App.test.tsx`).
+  remet le store à zéro. jsdom n'a pas de `<canvas>` : pour tester le canvas Konva, appelle
+  `installFakeCanvas()` (`src/test/canvas.ts`) en tête du fichier de test, puis inspecte et
+  déclenche les nœuds Konva (voir `editor/Editor.test.tsx`). Pour tester ce qui entoure le
+  canvas, remplace plutôt `SchematicCanvas` par un `vi.mock` (voir `App.test.tsx`).
 - Un module n'importe pas les fichiers internes d'un autre module : passer par `src/store/`
   ou par une fonction exportée explicitement.
