@@ -63,6 +63,19 @@ Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) bra
 pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
 débranche. `R` fait le tour des côtés libres seulement.
 
+### Interrupteur et bouton-poussoir
+
+**Clique** sur un interrupteur pour le fermer, clique encore pour l'ouvrir : le symbole montre la
+lame posée ou levée, et l'état est enregistré avec le schéma. Un **bouton-poussoir** n'est fermé
+que tant que tu gardes le clic appuyé, et se rouvre quand tu le relâches.
+
+Le clic ne sélectionne pas le composant et ne le déplace pas. Pour le déplacer, fais-le glisser ;
+pour ses propriétés (dont l'**État**), fais un clic droit ou entoure-le d'une sélection par zone.
+
+Si tu as déjà lancé un **point de fonctionnement** (`.op`), changer l'état relance la simulation :
+les tensions et courants affichés suivent l'interrupteur. Ouvert, il vaut 1 GΩ plutôt qu'une vraie
+coupure, pour qu'un nœud laissé « en l'air » ne donne pas d'erreur.
+
 ## Formes d'onde des sources
 
 Une source de tension ou de courant a une **forme d'onde**. L'inspecteur n'affiche que les

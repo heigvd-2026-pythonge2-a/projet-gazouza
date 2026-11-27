@@ -11,6 +11,7 @@ import {
   docBounds,
   freshSimulation,
   getDef,
+  isSwitch,
   layoutCaptions,
   mainParam,
   moveItems,
@@ -23,6 +24,7 @@ import {
   pinPosition,
   rectFrom,
   samePoint,
+  simulatedDoc,
   unconnectedPins,
   PALETTES,
   useEditorStore,
@@ -56,6 +58,7 @@ import { LedGlow } from "./LedGlow";
 import { focusInspector } from "./inspectorFocus";
 import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
+import { resimulateOperatingPoint } from "./simulationActions";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
@@ -306,6 +309,11 @@ export function SchematicCanvas() {
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
   /**
+   * Switch or push button pressed with the left button (#43), and whether it has been dragged
+   * since: a press released where it started toggles the switch, a drag only moves it.
+   */
+  const switchPress = useRef<{ id: string; moved: boolean } | null>(null);
+  /**
    * Items being dragged and how far (grid units): shown moved before the store changes. With
    * Ctrl (`detach`), the wires stay where they are.
    */
@@ -335,6 +343,9 @@ export function SchematicCanvas() {
   const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
+  const toggleSwitch = useEditorStore((s) => s.toggleSwitch);
+  const pressButton = useEditorStore((s) => s.pressButton);
+  const pressedButton = useEditorStore((s) => s.pressedButton);
   const moveSelection = useEditorStore((s) => s.moveSelection);
   const moveCaption = useEditorStore((s) => s.moveCaption);
   const draft = useEditorStore((s) => s.draft);
@@ -854,6 +865,42 @@ export function SchematicCanvas() {
     else if (!selection.includes(id)) select([id]);
   };
 
+  /**
+   * Left press on a switch or a push button (#43), with the select tool and without Shift: it is
+   * not selected (a click works it). A push button closes at once, until the button is released;
+   * a switch toggles on release, unless it was dragged meanwhile.
+   */
+  const pressSwitch = (c: PlacedComponent) => {
+    switchPress.current = { id: c.id, moved: false };
+    if (c.type === "push_button") {
+      pressButton(c.id);
+      resimulateOperatingPoint();
+    }
+    window.addEventListener(
+      "mouseup",
+      () => {
+        const press = switchPress.current;
+        switchPress.current = null;
+        if (!press || press.moved) return;
+        if (c.type === "push_button") pressButton(null);
+        else toggleSwitch(c.id);
+        resimulateOperatingPoint();
+      },
+      { once: true },
+    );
+  };
+
+  /** A pressed switch or push button that moves is dragged, not worked: it opens again. */
+  const switchDragged = (c: PlacedComponent, delta: GridPoint) => {
+    const press = switchPress.current;
+    if (!press || press.id !== c.id || press.moved || (delta.x === 0 && delta.y === 0)) return;
+    press.moved = true;
+    if (c.type === "push_button") {
+      pressButton(null);
+      resimulateOperatingPoint();
+    }
+  };
+
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
     e.preventDefault();
@@ -965,7 +1012,12 @@ export function SchematicCanvas() {
             {doc.components.map((c) => (
               <ComponentSymbol
                 key={c.id}
-                component={c}
+                // A push button held down is drawn closed (#43).
+                component={
+                  pressedButton === c.id
+                    ? (simulatedDoc(doc, c.id).components.find((x) => x.id === c.id) ?? c)
+                    : c
+                }
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
                 captions={captions.get(c.id)}
@@ -975,13 +1027,19 @@ export function SchematicCanvas() {
                   moveCaption(c.id, kind, centre);
                 }}
                 draggable={tool.kind === "select"}
-                onSelect={(e) => selectItem(c.id, e)}
+                onSelect={(e) =>
+                  tool.kind === "select" && isSwitch(c.type) && !e.evt.shiftKey
+                    ? pressSwitch(c)
+                    : selectItem(c.id, e)
+                }
                 onContextPress={() => {
                   rightPressed.current = c.id;
                 }}
-                onDrag={(position, detach) =>
-                  dragTo(c, deltaFrom(storeComponent(c), position), detach)
-                }
+                onDrag={(position, detach) => {
+                  const delta = deltaFrom(storeComponent(c), position);
+                  switchDragged(c, delta);
+                  dragTo(c, delta, detach);
+                }}
                 onMove={(position, detach) =>
                   dropAt(c, deltaFrom(storeComponent(c), position), detach)
                 }
