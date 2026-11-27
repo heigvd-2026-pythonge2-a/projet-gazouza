@@ -202,7 +202,9 @@ circuits de référence s'ouvrent avec `?demo=<circuit>`, avec leur résultat et
 `shared/fixtures/`, et la CI vérifie qu'elle se construit sur chaque PR. Pour la voir en local,
 lance `pnpm build:demo` dans `frontend/` avant `pnpm dev` dans `website/`.
 
-La capture de l'application sur la page d'accueil (`website/src/assets/psice-app.png`) est prise
-dans cette démo. Quand l'interface change, refais-la avec `.\scripts\capture-app.ps1` dans
-`website/`, après `pnpm build:demo` : Edge (fourni avec Windows) ouvre la démo, simule le diviseur
-de tension et enregistre l'image.
+La capture de l'application sur la page d'accueil est prise dans cette démo, en deux versions :
+`website/src/assets/psice-app-light.png` (thème clair de l'app) et `psice-app-dark.png` (thème
+sombre). Le site affiche celle de son propre thème et change d'image quand on change de thème
+(`src/components/AppScreenshot.astro`). Quand l'interface change, refais les deux avec
+`.\scripts\capture-app.ps1` dans `website/`, après `pnpm build:demo` : Edge (fourni avec Windows)
+ouvre la démo dans chaque thème, simule le diviseur de tension et enregistre les images.
