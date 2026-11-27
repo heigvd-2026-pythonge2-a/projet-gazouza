@@ -24,7 +24,7 @@ relient deux extrémités. **Chaque fil dit explicitement à quoi il est accroch
 | Points en T | Fil qui touche le milieu d'un autre | Objet `junction` |
 | Nom d'un nœud | Non défini | Composant `label` |
 | `name` des masses et étiquettes | Obligatoire (`GND1`, `GND2`) | Absent |
-| Dessin des symboles | Non défini | Champ `symbol` dans la bibliothèque |
+| Dessin des symboles | Non défini | Dans l'éditeur (`frontend/src/store/library.ts`) |
 | Erreurs | `message`, `component_id`, `wire_id` | `code` (liste fermée), `message`, `targets` |
 | `version` | `1` | `2` |
 
@@ -228,10 +228,11 @@ Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie �
   - `text` : du texte libre (le nom d'une étiquette) ;
   - `choice` : une valeur parmi `options`, chacune avec sa `value` (enregistrée) et son `label`
     (affiché), par exemple `{ "value": "pulse", "label": "Impulsion" }`.
-- `symbol` : le **dessin** du symbole, sous forme d'une liste de formes simples (`line`, `rect`,
-  `circle`, `arc`, `text`) en unités de grille, à la rotation 0. Le cahier des charges (§3) demande
-  que les symboles soient dans la bibliothèque, pour l'étendre sans toucher au code. **Format exact
-  proposé par Noé** (c'est l'éditeur qui le dessine).
+- **Pas de champ `symbol`** : le dessin du symbole est dans l'éditeur
+  (`frontend/src/store/library.ts`, liste de formes simples `line`, `rect`, `circle`, `arc`, `text`
+  en unités de grille, à la rotation 0), avec le groupe de la palette. Le backend ne fournit que
+  ce qui sert à la netlist et aux propriétés ; un nouveau type de composant demande donc aussi son
+  symbole côté éditeur.
 - `spice` : le modèle de ligne. `{name}` = nom du composant, `{pin:X}` = nœud de la broche X,
   `{param}` = valeur d'un paramètre.
 - `models` (facultatif, interne au backend) : le **texte** des modèles SPICE, par nom : une ligne
@@ -463,13 +464,16 @@ Les tableaux forment **une seule liste fermée** de codes.
 - `nets` : nœud → fils qui le forment. Clic sur un fil → tension du nœud (`v(out)`).
 - `components` : nom SPICE → id. Clic sur un composant → son courant.
 
-## 10. Questions encore ouvertes
+## 10. Questions tranchées
 
-| Question | Avec qui |
+Ces questions étaient ouvertes dans la proposition ; voici ce qui a été décidé.
+
+| Question | Décision |
 | --- | --- |
-| Format exact du champ `symbol` de la bibliothèque. | Noé (il propose) |
-| Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | Antoine |
-| Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Noémi |
+| Format exact du champ `symbol` de la bibliothèque. | Pas de champ `symbol` dans le backend : les symboles sont dessinés par l'éditeur (`frontend/src/store/library.ts`, Noé), voir la section 5. |
+| Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | `.save @r1[i]` (et `@c1[i]`, `@d1[id]`, `@i1[c]`), sans source ajoutée : la netlist reste celle de l'étudiant (`engines/runner.py`, Antoine). |
+| Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Le backend renvoie la valeur de SPICE, sans changer le signe. L'éditeur écrit « V1 fournit 5 mA » dans le tableau du `.op` et dessine une flèche dans le sens réel du courant (#290). |
+| Courants des broches d'un transistor. | Proposition dans #289 (courant entrant dans la broche, traces `i(Q1:C)`, champ `pin` de `Trace`), PR #360 en attente de l'accord d'Antoine et Noémi. |
 
 Les exemples complets (ce que je reçois, ce que je renvoie) sont dans
 [`exemples-netlist.md`](exemples-netlist.md).
