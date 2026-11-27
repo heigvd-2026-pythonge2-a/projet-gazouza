@@ -51,17 +51,36 @@ résistance (un rectangle vide). Son nom est écrit à côté de la pointe.
 
 La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
 
-| Direction                | Drapeau                                                                 |
-| ------------------------ | ----------------------------------------------------------------------- |
-| Automatique (par défaut) | Déduite du circuit par Psice ; en attendant, rectangle comme « Aucune » |
-| Aucune                   | Rectangle                                                               |
-| Entrée                   | Pointe vers la broche : le signal entre dans le circuit                 |
-| Sortie                   | Pointe à l'opposé de la broche : le signal sort du circuit              |
-| Bidirectionnelle         | Pointe des deux côtés                                                   |
+| Direction                | Drapeau                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| Automatique (par défaut) | Déduite du circuit par Psice (voir ci-dessous)             |
+| Aucune                   | Rectangle                                                  |
+| Entrée                   | Pointe vers la broche : le signal entre dans le circuit    |
+| Sortie                   | Pointe à l'opposé de la broche : le signal sort du circuit |
+| Bidirectionnelle         | Pointe des deux côtés                                      |
 
 Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) branché sur l'étiquette,
 pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
 débranche. `R` fait le tour des côtés libres seulement.
+
+En **Automatique**, Psice regarde d'où vient le signal, pas de quel côté arrive le fil. Il prend le
+morceau de circuit où chaque étiquette est branchée (sans compter les autres étiquettes du même
+nom) et cherche une broche qui **produit** le signal : une borne de source (tension ou courant)
+qui n'est pas à la masse, ou la sortie d'un ampli-op.
+
+- L'étiquette du morceau qui produit le signal est une **sortie**.
+- Les étiquettes du même nom posées ailleurs sont des **entrées** : le signal leur arrive.
+- Si plusieurs morceaux du même nom produisent le signal, leurs étiquettes sont
+  **bidirectionnelles**.
+- Une étiquette sans partenaire du même nom ailleurs, ou dont aucun morceau ne produit le
+  signal, n'a **pas de direction**.
+
+Par exemple, générateur → étiquette `in` … étiquette `in` → filtre : la première devient une
+sortie, la seconde une entrée, quelle que soit la façon de dessiner. La direction se met à jour à
+chaque modification du circuit. Une direction choisie à la main n'est jamais changée, et un
+ancien schéma s'ouvre avec ses drapeaux d'origine.
+
+Survoler une étiquette **allume tout son nœud**, avec les autres étiquettes du même nom.
 
 ## Formes d'onde des sources
 

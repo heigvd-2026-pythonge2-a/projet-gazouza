@@ -13,6 +13,7 @@ import {
   type Caption,
   type CaptionKind,
   type GridPoint,
+  type LabelDirection,
   type PlacedComponent,
   type SymbolShape,
 } from "../store";
@@ -185,6 +186,8 @@ interface ComponentSymbolProps {
   onCaptionDrag?: (kind: CaptionKind, centre: GridPoint) => GridPoint | null;
   /** End of a text's drag: where it landed. When set, the texts can be dragged. */
   onCaptionMove?: (kind: CaptionKind, centre: GridPoint) => void;
+  /** A label on "Automatique": the direction worked out from the circuit (#295). */
+  autoDirection?: LabelDirection;
 }
 
 /**
@@ -208,6 +211,7 @@ export function ComponentSymbol({
   captions,
   onCaptionDrag,
   onCaptionMove,
+  autoDirection,
 }: ComponentSymbolProps) {
   const colors = useCanvasColors();
   const def = getDef(c.type);
@@ -268,7 +272,7 @@ export function ComponentSymbol({
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
-        {symbolOf(def, c.params).map((shape, i) => (
+        {symbolOf(def, c.params, autoDirection).map((shape, i) => (
           <SymbolShapeNode
             key={i}
             shape={shape}

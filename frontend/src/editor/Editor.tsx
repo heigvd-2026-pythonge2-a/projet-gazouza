@@ -15,6 +15,7 @@ import {
   mainParam,
   moveItems,
   moveWirePart,
+  autoLabelDirections,
   nodeIndex,
   currentArrows,
   operatingPointLabels,
@@ -446,9 +447,27 @@ export function SchematicCanvas() {
     if (wirePart) wireIds.add(wirePart.wire);
     for (const wire of wireIds) add(index({ wire }), true);
     if (hovered) add(index(hovered), false);
+    // A hovered label lights its node, with the other labels of the same name (#295).
+    const hoveredLabel = storeDoc.components.find(
+      (c) => c.id === hoveredComponent && c.type === "label",
+    );
+    if (hoveredLabel) add(index({ comp: hoveredLabel.id, pin: "1" }), false);
     if (reportHighlight && !("component" in reportHighlight)) add(index(reportHighlight), true);
     return out;
-  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered, reportHighlight]);
+  }, [
+    exporting,
+    doc,
+    storeDoc,
+    tool.kind,
+    selection,
+    wirePart,
+    hovered,
+    hoveredComponent,
+    reportHighlight,
+  ]);
+
+  /** Directions of the labels on "Automatique", from the circuit as drawn (#295). */
+  const labelDirections = useMemo(() => autoLabelDirections(doc), [doc]);
 
   /** The component of a hovered line of the results panel (#292), glowing on the schematic. */
   const highlightedComponent =
@@ -966,6 +985,7 @@ export function SchematicCanvas() {
               <ComponentSymbol
                 key={c.id}
                 component={c}
+                autoDirection={labelDirections.get(c.id)}
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
                 captions={captions.get(c.id)}
