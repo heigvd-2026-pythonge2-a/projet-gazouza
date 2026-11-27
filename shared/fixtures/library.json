@@ -577,6 +577,43 @@
     ]
   },
   {
+    "type": "push_button",
+    "label": "Bouton-poussoir",
+    "prefix": "S",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "state",
+        "label": "État",
+        "unit": "",
+        "default": "SW_OPEN",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "SW_OPEN",
+            "label": "Ouvert"
+          },
+          {
+            "value": "SW_CLOSED",
+            "label": "Fermé"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
     "type": "resistor",
     "label": "Résistance",
     "prefix": "R",
@@ -600,6 +637,43 @@
         "default": "1k",
         "kind": "value",
         "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "switch",
+    "label": "Interrupteur",
+    "prefix": "S",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "state",
+        "label": "État",
+        "unit": "",
+        "default": "SW_OPEN",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "SW_OPEN",
+            "label": "Ouvert"
+          },
+          {
+            "value": "SW_CLOSED",
+            "label": "Fermé"
+          }
+        ],
         "waveforms": []
       }
     ]

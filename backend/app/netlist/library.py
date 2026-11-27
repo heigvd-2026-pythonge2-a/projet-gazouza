@@ -116,12 +116,14 @@ class ComponentType(LibraryComponent):
         if len(set(lowered)) != len(lowered):  # SPICE ignores the case: D1 and d1 collide
             raise ValueError(f"{self.type}: two models differ only by case {sorted(self.models)}")
         # Every option of a 'model' choice must have its text, and every text must be reachable
-        # (an option, or a name written as is in the template).
+        # (an option of a choice, or a name written as is in the template). Another choice may
+        # also pick a model: the 'state' of a switch picks SW_OPEN or SW_CLOSED (#43).
         model_param = next((p for p in self.params if p.name == "model"), None)
         options = {o.value for o in model_param.options} if model_param else set()
         if self.models and options - set(self.models):
             missing = sorted(options - set(self.models))
             raise ValueError(f"{self.type}: model options {missing} have no text in `models`")
+        options |= {o.value for p in self.params if p.kind == "choice" for o in p.options}
         fixed = self.fixed_tokens()
         for name in self.models:
             if name not in options and name.lower() not in fixed:

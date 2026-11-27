@@ -18,6 +18,8 @@ de code. Les symboles suivent la norme **CEI 60617**.
 | Source de courant | `I` | `+`, `-` | Forme d'onde (voir ci-dessous) |
 | Masse | — | `1` | — |
 | Étiquette de nœud | — | `1` | Nom du nœud (`out`), direction |
+| Interrupteur | `S` | `1`, `2` | État (Ouvert) |
+| Bouton-poussoir | `S` | `1`, `2` | État (Ouvert) |
 | Diode | `D` | `A` (anode), `K` (cathode) | Modèle (Signal) |
 | Diode Zener | `D` | `A`, `K` | Tension Zener (`5,1 V`) |
 | LED | `D` | `A`, `K` | Couleur (Rouge) |
