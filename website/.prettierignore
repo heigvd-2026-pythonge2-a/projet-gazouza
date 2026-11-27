@@ -1,0 +1,6 @@
+dist
+node_modules
+pnpm-lock.yaml
+.astro
+# The online demo, built from frontend/ by `pnpm build:demo`.
+public/demo
