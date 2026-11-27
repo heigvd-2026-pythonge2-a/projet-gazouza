@@ -192,10 +192,18 @@ describe("PlotPanel", () => {
     expect(within(table).getByText(/2[.,]498 ms|2[.,]5 ms/)).toBeInTheDocument();
   });
 
-  it("renders Bode Gain and Phase charts for .ac with linked zoom and -3 dB at 1 kHz", async () => {
+  it("renders Bode Gain and Phase charts for .ac with currents hidden by default and linked zoom", async () => {
     const user = userEvent.setup();
     act(() => editorState().setSimulation(acResult));
     render(<PlotPanel />);
+
+    const legend = screen.getByRole("group", { name: "Traces affichées" });
+    expect(within(legend).getByLabelText("v(in)")).toBeChecked();
+    expect(within(legend).getByLabelText("v(out)")).toBeChecked();
+    for (const currentName of ["i(V1)", "i(R1)", "i(C1)"]) {
+      const box = within(legend).queryByLabelText(currentName);
+      if (box) expect(box).not.toBeChecked();
+    }
 
     await waitFor(() => expect(mockInstances).toHaveLength(2));
     const [gainChart, phaseChart] = mockInstances;
@@ -212,6 +220,13 @@ describe("PlotPanel", () => {
     expect(within(table).getByText("1 kHz")).toBeInTheDocument();
     expect(within(table).getByText(/-3[.,]01 dB/)).toBeInTheDocument();
     expect(within(table).getByText(/-44[.,]999°|-45°/)).toBeInTheDocument();
+
+    // Toggling a current trace on in the legend makes it appear in the readout table.
+    const currentBox = within(legend).queryByLabelText("i(R1)");
+    if (currentBox) {
+      await user.click(currentBox);
+      expect(within(table).getByText("i(R1)")).toBeInTheDocument();
+    }
 
     // Zooming on the Gain chart synchronizes X scale to the Phase chart.
     phaseChart!.setScale.mockClear();

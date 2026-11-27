@@ -58,8 +58,9 @@ Les valeurs s'écrivent avec la virgule décimale : `4,27 mA`.
 Le visualiseur affiche les résultats des analyses **`.tran`**, **`.ac`** et **`.dc`** :
 
 - **Légende interactive** : coche ou décoche chaque tension (`V`) et chaque courant (`A`) pour
-  n'afficher que les signaux utiles. Les tensions utilisent l'axe gauche et les courants l'axe
-  droit.
+  n'afficher que les signaux utiles. En **`.tran`** et **`.dc`**, les tensions utilisent l'axe
+  gauche et les courants l'axe droit ; en **`.ac`**, les courants sont masqués par défaut pour ne
+  pas tasser la courbe de gain en tension (`dB`), et peuvent être réaffichés depuis la légende.
 - **Diagramme de Bode (`.ac`)** : deux graphiques liés (**gain en dB** et **phase en degrés**)
   sur une **échelle de fréquence logarithmique**. Le zoom et les curseurs sont synchronisés entre
   les deux graphiques.

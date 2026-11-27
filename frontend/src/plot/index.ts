@@ -12,7 +12,6 @@ export {
 export {
   buildBodePlotData,
   buildPlotData,
-  buildTranPlotData,
   computeCursorReadout,
   computeZoomBounds,
   nearestIndex,

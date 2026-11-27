@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { UI } from "../store";
 import { PlotToolbar, TranChart, type InteractionMode, type XRange } from "./TranChart";
 import {
   CURSOR_COLORS,
-  PLOT_TABLE_CELL,
   computeCursorReadout,
   type BodePlotData,
+  type CursorTraceDelta,
 } from "./plotData";
+import { PLOT_TABLE_CELL } from "./plotStyles";
 import { formatSI, formatSignedSI } from "./siFormat";
 
 interface BodeChartProps {
@@ -33,10 +34,10 @@ export function BodeChart({ bode, visibleNames }: BodeChartProps) {
     max: bode.gain.xMax,
   });
 
-  const handleCursorChange = (which: "c1" | "c2", idx: number) => {
+  const handleCursorChange = useCallback((which: "c1" | "c2", idx: number) => {
     if (which === "c1") setC1Index(idx);
     else setC2Index(idx);
-  };
+  }, []);
 
   const controlledCursors = useMemo(
     () => ({
@@ -46,7 +47,7 @@ export function BodeChart({ bode, visibleNames }: BodeChartProps) {
       c2Index,
       onCursorChange: handleCursorChange,
     }),
-    [showCursors, mode, c1Index, c2Index],
+    [showCursors, mode, c1Index, c2Index, handleCursorChange],
   );
 
   const gainReadout = useMemo(
@@ -132,10 +133,9 @@ export function BodeChart({ bode, visibleNames }: BodeChartProps) {
                 <td style={PLOT_TABLE_CELL}>{formatSI(gainReadout.x2, "Hz")}</td>
                 <td style={PLOT_TABLE_CELL}>{formatSignedSI(gainReadout.dx, "Hz")}</td>
               </tr>
-              {gainReadout.traces.map((g, idx) => {
-                const p = phaseReadout.traces[idx];
-                return <BodeTraceRows key={g.name} gain={g} phase={p} />;
-              })}
+              {gainReadout.traces.map((g, idx) => (
+                <BodeTraceRows key={g.name} gain={g} phase={phaseReadout.traces[idx]} />
+              ))}
             </tbody>
           </table>
         </div>
@@ -148,10 +148,8 @@ function BodeTraceRows({
   gain,
   phase,
 }: {
-  gain: BodePlotData["gain"] extends never
-    ? never
-    : ReturnType<typeof computeCursorReadout>["traces"][number];
-  phase: ReturnType<typeof computeCursorReadout>["traces"][number] | undefined;
+  gain: CursorTraceDelta;
+  phase: CursorTraceDelta | undefined;
 }) {
   return (
     <>

@@ -7,7 +7,6 @@ import type { SimulationResult } from "../api/client";
 import {
   buildBodePlotData,
   buildPlotData,
-  buildTranPlotData,
   computeCursorReadout,
   computeZoomBounds,
   nearestIndex,
@@ -17,9 +16,9 @@ const rcResult = rcTranResult as SimulationResult;
 const acResult = acResultJson as SimulationResult;
 const dcResult = dcResultJson as SimulationResult;
 
-describe("buildPlotData / buildTranPlotData", () => {
+describe("buildPlotData", () => {
   it("builds aligned uPlot data from the rc_tran fixture", () => {
-    const plot = buildTranPlotData(rcResult);
+    const plot = buildPlotData(rcResult);
     expect(plot).not.toBeNull();
     expect(plot!.xLabel).toBe("Temps (s)");
     expect(plot!.xUnit).toBe("s");
@@ -139,7 +138,7 @@ describe("nearestIndex", () => {
 
 describe("computeCursorReadout", () => {
   it("computes cursor values and deltas for visible traces on rc_tran", () => {
-    const plot = buildTranPlotData(rcResult)!;
+    const plot = buildPlotData(rcResult)!;
     const i1 = nearestIndex(plot.xValues, 0.001);
     const i2 = nearestIndex(plot.xValues, 0.005);
     const visible = new Set(["v(in)", "v(out)"]);

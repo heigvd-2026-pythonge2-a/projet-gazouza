@@ -6,13 +6,13 @@ import { useElementSize } from "../layout";
 import { COLORS, PALETTES, UI, useThemeStore } from "../store";
 import {
   CURSOR_COLORS,
-  PLOT_TABLE_CELL,
   computeCursorReadout,
   computeZoomBounds,
   nearestIndex,
   type CursorReadout,
   type TranPlotData,
 } from "./plotData";
+import { PLOT_TABLE_CELL } from "./plotStyles";
 import { formatAxisTick, formatSI, formatSignedSI } from "./siFormat";
 
 export type InteractionMode = "zoom" | "c1" | "c2";

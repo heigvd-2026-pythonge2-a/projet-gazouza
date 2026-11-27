@@ -181,7 +181,11 @@ function CurveSection({
   plotData: TranPlotData | null;
   bodeData: BodePlotData | null;
 }) {
-  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  // In .ac Bode plots, currents expressed in dB(A) (~ -80 dB) compress voltage gain (0 to -20 dB):
+  // hide currents by default so voltage curves are legible immediately.
+  const [hidden, setHidden] = useState<Set<string>>(
+    () => new Set(bodeData ? series.filter((s) => s.kind === "current").map((s) => s.name) : []),
+  );
 
   const visibleNames = new Set(series.map((s) => s.name).filter((name) => !hidden.has(name)));
 

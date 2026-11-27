@@ -1,18 +1,8 @@
 // Pure data transformation, cursor math, and zoom helpers for simulation plots (.tran, .ac, .dc).
 
-import type { CSSProperties } from "react";
 import type uPlot from "uplot";
 
 import type { SimulationResult } from "../api/client";
-import { UI } from "../store";
-
-export const PLOT_TABLE_CELL: CSSProperties = {
-  padding: "3px 8px",
-  borderBottom: `1px solid ${UI.border}`,
-  textAlign: "right",
-  fontVariantNumeric: "tabular-nums",
-  whiteSpace: "nowrap",
-};
 
 /** High-contrast color palette for traces on light and dark backgrounds. */
 export const TRACE_COLORS = [
@@ -165,9 +155,6 @@ export function buildPlotData(result: SimulationResult): TranPlotData | null {
     hasCurrent,
   };
 }
-
-/** Alias kept for backwards compatibility with `.tran` callers. */
-export const buildTranPlotData = buildPlotData;
 
 /**
  * Convert an `.ac` `SimulationResult` into linked Gain (dB) and Phase (°) datasets
