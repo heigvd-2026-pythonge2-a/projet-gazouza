@@ -1,5 +1,7 @@
 """Step of a `.tran` too large for the sources (#350): TRAN_STEP_TOO_LARGE warnings."""
 
+import math
+
 import pytest
 
 from app.models import AcAnalysis, ComponentTarget, Schematic, TranAnalysis
@@ -87,8 +89,38 @@ def test_more_points_than_the_limit() -> None:
     # 100 kHz over 1 s: 2 000 000 points would be needed, more than 200 000.
     [warning] = tran_step_warnings(sine("100k"), TranAnalysis(stop_time=1))
     assert warning.message.endswith(
-        "Il faudrait au moins 2 000 000 points, plus que la limite de 200 000 : réduis la durée "
-        "de la simulation."
+        "Il faudrait plus de points que la limite de 200 000 : réduis la durée de la simulation."
+    )
+
+
+@pytest.mark.parametrize(
+    ("frequency", "stop_time"), [("1e300", 1e10), ("1e308", 1e300), ("1e308", 1)]
+)
+def test_extreme_values_do_not_crash(frequency: str, stop_time: float) -> None:
+    # The number of points overflows to infinity: a warning, never an HTTP 500 (#359 review).
+    result = generate_netlist(sine(frequency), TranAnalysis(stop_time=stop_time))
+    [warning] = result.warnings
+    assert warning.message.endswith("réduis la durée de la simulation.")
+
+
+def test_plateau_too_small_to_divide() -> None:
+    # 5e-324 s / 10 underflows to 0: no number of points can be given, still no crash.
+    [warning] = tran_step_warnings(pulse("5e-324", "0"), TranAnalysis(stop_time=1))
+    assert warning.message.endswith("réduis la durée de la simulation.")
+
+
+def test_negative_edges_do_not_crash() -> None:
+    # The low part (period - width - rise - fall) would be infinite: only the high part counts.
+    schematic = pulse("1m", "2m", rise="-1e308")
+    assert tran_step_warnings(schematic, TranAnalysis(stop_time=0.01)) == []
+
+
+def test_tiny_plateau_gives_a_readable_message() -> None:
+    [warning] = tran_step_warnings(pulse("1e-300", "0"), TranAnalysis(stop_time=1))
+    assert warning.message == (
+        "V1 (impulsion, durée haute 1e-300 s) : un point toutes les 1 ms, la courbe sera mal "
+        "dessinée. Il faudrait plus de points que la limite de 200 000 : réduis la durée de la "
+        "simulation."
     )
 
 
@@ -163,6 +195,11 @@ def test_no_warning_for_an_infinite_analysis() -> None:
         (0.0, "s", "0 s"),
         (999.99, "Hz", "1 kHz"),
         (1e-3, "s", "1 ms"),
+        (1e-300, "s", "1e-300 s"),
+        (2.5e-15, "s", "2,5e-15 s"),
+        (1.5e13, "Hz", "1,5e+13 Hz"),
+        (5e11, "Hz", "500 GHz"),
+        (math.inf, "s", "inf s"),
     ],
 )
 def test_french_si(value: float, unit: str, text: str) -> None:

@@ -26,9 +26,13 @@ _PREFIXES = {-12: "p", -9: "n", -6: "µ", -3: "m", 0: "", 3: "k", 6: "M", 9: "G"
 
 
 def french_si(value: float, unit: str) -> str:
-    """0.0001, 's' -> '100 µs'; 2500.0, 'Hz' -> '2,5 kHz' (3 significant digits at most)."""
+    """0.0001, 's' -> '100 µs'; 2500.0, 'Hz' -> '2,5 kHz' (3 significant digits at most).
+    Outside the prefixes (below 1 p or from 1000 G): '1e-300 s', not '1e-288 ps'."""
+    if not math.isfinite(value):
+        return f"{value} {unit}"
     exponent = 0 if value == 0 else math.floor(math.log10(abs(value)) / 3) * 3
-    exponent = max(-12, min(9, exponent))
+    if not -12 <= exponent <= 9:
+        return f"{value:.3g}".replace(".", ",") + f" {unit}"
     mantissa = float(f"{value / 10**exponent:.3g}")
     if abs(mantissa) >= 1000 and exponent < 9:
         exponent += 3
@@ -74,7 +78,8 @@ def _limit(comp: Component, stop_time: float) -> tuple[float, str] | None:
         plateaus = [("durée haute", width)]
         if period > 0:
             plateaus.append(("durée basse", period - width - rise - fall))
-        positive = [p for p in plateaus if p[1] > 0]
+        # Negative edges (-1e308) can push the low part to infinity: not a usable plateau.
+        positive = [p for p in plateaus if 0 < p[1] < math.inf]
         if not positive:
             return None
         label, plateau = min(positive, key=lambda p: p[1])
@@ -93,13 +98,16 @@ def tran_step_warnings(schematic: Schematic, analysis: TranAnalysis) -> list[Dia
         if found is None or step <= found[0] * (1 + 1e-9):  # rounding of stop_time / points
             continue
         limit, what = found
-        needed = math.ceil(analysis.stop_time / limit * (1 - 1e-9))
-        if needed <= MAX_RESULT_POINTS:
-            advice = f"Demande au moins {thousands(needed)} points."
+        # A float first: with extreme values (1e300 Hz over 1e10 s) the division overflows to
+        # infinity, which math.ceil refuses, and a number of 300 digits says nothing anyway.
+        # A limit of 0 (a plateau of 5e-324 s divided by 10 underflows): no number of points.
+        needed = analysis.stop_time / limit * (1 - 1e-9) if limit > 0 else math.inf
+        if math.isfinite(needed) and needed <= MAX_RESULT_POINTS:
+            advice = f"Demande au moins {thousands(math.ceil(needed))} points."
         else:
             advice = (
-                f"Il faudrait au moins {thousands(needed)} points, plus que la limite de "
-                f"{thousands(MAX_RESULT_POINTS)} : réduis la durée de la simulation."
+                f"Il faudrait plus de points que la limite de {thousands(MAX_RESULT_POINTS)} : "
+                "réduis la durée de la simulation."
             )
         warnings.append(
             Diagnostic(
