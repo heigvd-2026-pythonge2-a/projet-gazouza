@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 
+from app.api.imports import router as imports_router
 from app.api.library import router as library_router
 from app.engines import run_simulation
 from app.models import NetlistResult, SimulationRequest, SimulationResult
@@ -10,6 +11,7 @@ from app.netlist.leds import led_warnings
 
 app = FastAPI(title="Psice API", version="0.1.0")
 app.include_router(library_router)
+app.include_router(imports_router)
 
 
 @app.get("/api/health")

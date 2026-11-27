@@ -422,7 +422,17 @@ câblé donne donc une erreur `PIN_NOT_CONNECTED` par broche.
 | `SIMULATION_TIMEOUT` | Simulation trop longue, processus arrêté | aucune |
 | `SIMULATION_FAILED` | Tout le reste ; le message brut de ngspice est ajouté à la fin du message | aucune |
 
-Les deux tableaux forment **une seule liste fermée** de codes.
+**Import d'un fichier `.asc`** (`POST /api/import/asc`, réponse `ImportResult`) :
+
+| Code | Type | Quand | Cible |
+| --- | --- | --- | --- |
+| `IMPORT_UNREADABLE` | erreur | Fichier illisible (pas un `.asc`, trop gros, ligne incomplète) : pas de schéma | aucune |
+| `IMPORT_SKIPPED` | avertissement | Une partie du fichier est laissée de côté (symbole hors périmètre, orientation inconnue…) | aucune |
+| `IMPORT_CHANGED` | avertissement | Une partie est adaptée (nœud renommé, modèle remplacé, analyse ignorée…) | aucune |
+
+L'import est **partiel** : un composant inconnu ne bloque pas le reste du schéma.
+
+Les tableaux forment **une seule liste fermée** de codes.
 
 ### Règles
 
