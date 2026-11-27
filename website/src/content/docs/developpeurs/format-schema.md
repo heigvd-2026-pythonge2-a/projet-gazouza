@@ -26,14 +26,14 @@ n'a aucun calcul géométrique à faire, et un composant déplacé garde ses fil
 }
 ```
 
-| Clé | Contenu |
-|---|---|
-| `version` | `2`, augmentée à chaque changement incompatible |
-| `title` | Facultatif ; devient l'en-tête de la netlist (`* Circuit RC`) |
-| `components` | Les composants posés, y compris masses et étiquettes |
-| `junctions` | Les points où des fils se rejoignent hors d'une broche (un « T ») |
-| `wires` | Les fils |
-| `texts` | Facultatif ; texte libre décoratif, ignoré par la netlist |
+| Clé          | Contenu                                                           |
+| ------------ | ----------------------------------------------------------------- |
+| `version`    | `2`, augmentée à chaque changement incompatible                   |
+| `title`      | Facultatif ; devient l'en-tête de la netlist (`* Circuit RC`)     |
+| `components` | Les composants posés, y compris masses et étiquettes              |
+| `junctions`  | Les points où des fils se rejoignent hors d'une broche (un « T ») |
+| `wires`      | Les fils                                                          |
+| `texts`      | Facultatif ; texte libre décoratif, ignoré par la netlist         |
 
 L'**analyse** n'est pas dans le schéma : elle est envoyée à côté
 (`{ schematic, analysis }`, voir [API du backend](/projet-gazouza/developpeurs/api/)).
@@ -55,25 +55,25 @@ plus récente de l'éditeur s'ouvre quand même.
 }
 ```
 
-| Champ | Règle |
-|---|---|
-| `id` | Identifiant interne, unique et stable (`c1`, `c2`…), jamais affiché |
-| `type` | Un type de la bibliothèque (`resistor`, `voltage_source`, `ground`, `label`…) |
-| `name` | Nom SPICE unique qui commence par le préfixe du type ; absent pour `ground` et `label` |
-| `position` | En unités de grille (entiers), l'axe *y* vers le bas |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire ; aussi `45`, `135`, `225`, `315` (broches arrondies en s'éloignant de zéro) |
-| `mirror` | Miroir horizontal, appliqué **avant** la rotation |
-| `params` | Valeurs **telles que tapées** (`"10k"`, `"1u"`) ; l'éditeur écrit tous les défauts à la pose |
+| Champ                         | Règle                                                                                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                          | Identifiant interne, unique et stable (`c1`, `c2`…), jamais affiché                                                                                                          |
+| `type`                        | Un type de la bibliothèque (`resistor`, `voltage_source`, `ground`, `label`…)                                                                                                |
+| `name`                        | Nom SPICE unique qui commence par le préfixe du type ; absent pour `ground` et `label`                                                                                       |
+| `position`                    | En unités de grille (entiers), l'axe _y_ vers le bas                                                                                                                         |
+| `rotation`                    | `0`, `90`, `180` ou `270`, sens horaire ; aussi `45`, `135`, `225`, `315` (broches arrondies en s'éloignant de zéro)                                                         |
+| `mirror`                      | Miroir horizontal, appliqué **avant** la rotation                                                                                                                            |
+| `params`                      | Valeurs **telles que tapées** (`"10k"`, `"1u"`) ; l'éditeur écrit tous les défauts à la pose                                                                                 |
 | `name_offset`, `value_offset` | Facultatifs : position du nom et de la valeur placés à la main (centre du texte, en cases, décimales permises, dans le repère du composant). Absents : placement automatique |
 
 ## Fils et jonctions
 
 Une extrémité de fil (`from`, `to`) a l'une de ces trois formes :
 
-| Forme | Exemple |
-|---|---|
-| Broche | `{ "comp": "c1", "pin": "+" }` |
-| Jonction | `{ "junction": "j1" }` |
+| Forme      | Exemple                                              |
+| ---------- | ---------------------------------------------------- |
+| Broche     | `{ "comp": "c1", "pin": "+" }`                       |
+| Jonction   | `{ "junction": "j1" }`                               |
 | Bout libre | `{ "x": 6, "y": 2 }` (avertissement `WIRE_DANGLING`) |
 
 ```json

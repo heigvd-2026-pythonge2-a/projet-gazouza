@@ -16,18 +16,18 @@ Psice intègre ou utilise des composants externes, soumis à leurs propres licen
 des mentions de copyright est dans
 [`THIRD_PARTY_LICENSES.md`](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/blob/main/THIRD_PARTY_LICENSES.md).
 
-| Composant | Rôle | Licence |
-|---|---|---|
-| ngspice | Moteur de simulation (binaires inclus) | BSD 3-Clause |
-| NumPy, SciPy | Calcul numérique | BSD 3-Clause |
-| FastAPI, Pydantic | API du backend | MIT |
-| pywebview | Fenêtre native | BSD 3-Clause |
-| PyInstaller | Packaging de l'application | GPL v2 avec exception (l'exécutable produit peut être distribué sous toute licence) |
-| React, Vite | Interface | MIT |
-| Konva, React-Konva | Dessin du schéma | MIT |
-| uPlot | Courbes | MIT |
-| Zustand | État de l'application | MIT |
-| Astro, Starlight | Ce site | MIT |
+| Composant          | Rôle                                   | Licence                                                                             |
+| ------------------ | -------------------------------------- | ----------------------------------------------------------------------------------- |
+| ngspice            | Moteur de simulation (binaires inclus) | BSD 3-Clause                                                                        |
+| NumPy, SciPy       | Calcul numérique                       | BSD 3-Clause                                                                        |
+| FastAPI, Pydantic  | API du backend                         | MIT                                                                                 |
+| pywebview          | Fenêtre native                         | BSD 3-Clause                                                                        |
+| PyInstaller        | Packaging de l'application             | GPL v2 avec exception (l'exécutable produit peut être distribué sous toute licence) |
+| React, Vite        | Interface                              | MIT                                                                                 |
+| Konva, React-Konva | Dessin du schéma                       | MIT                                                                                 |
+| uPlot              | Courbes                                | MIT                                                                                 |
+| Zustand            | État de l'application                  | MIT                                                                                 |
+| Astro, Starlight   | Ce site                                | MIT                                                                                 |
 
 :::note[ngspice]
 Les mentions de copyright et les termes de la licence BSD de ngspice doivent être conservés à

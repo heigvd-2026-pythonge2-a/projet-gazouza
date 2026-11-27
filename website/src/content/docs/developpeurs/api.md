@@ -14,13 +14,13 @@ essayer chaque route depuis le navigateur.
 
 ## Routes
 
-| Méthode | Route | Reçoit | Renvoie |
-|---|---|---|---|
-| `GET` | `/api/health` | — | `{ "status": "ok" }` |
-| `GET` | `/api/library` | — | Liste de `LibraryComponent` |
-| `POST` | `/api/netlist` | `SimulationRequest` | `NetlistResult` |
-| `POST` | `/api/simulate` | `SimulationRequest` | `SimulationResult` |
-| `POST` | `/api/import/asc` | `{ "text": "...", "title": "..." }` (texte du `.asc`) | `ImportResult` |
+| Méthode | Route             | Reçoit                                                | Renvoie                     |
+| ------- | ----------------- | ----------------------------------------------------- | --------------------------- |
+| `GET`   | `/api/health`     | —                                                     | `{ "status": "ok" }`        |
+| `GET`   | `/api/library`    | —                                                     | Liste de `LibraryComponent` |
+| `POST`  | `/api/netlist`    | `SimulationRequest`                                   | `NetlistResult`             |
+| `POST`  | `/api/simulate`   | `SimulationRequest`                                   | `SimulationResult`          |
+| `POST`  | `/api/import/asc` | `{ "text": "...", "title": "..." }` (texte du `.asc`) | `ImportResult`              |
 
 ### `GET /api/library`
 
@@ -48,12 +48,12 @@ Le corps de `POST /api/netlist` et `POST /api/simulate` :
 }
 ```
 
-| `kind` | Champs (unités SI) |
-|---|---|
-| `op` | aucun |
-| `tran` | `stop_time`, `max_step` (facultatif) |
-| `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (20 par défaut) |
-| `dc` | `source_id`, `start`, `stop`, `step` |
+| `kind` | Champs (unités SI)                                                                          |
+| ------ | ------------------------------------------------------------------------------------------- |
+| `op`   | aucun                                                                                       |
+| `tran` | `stop_time`, `max_step` (facultatif)                                                        |
+| `ac`   | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (20 par défaut) |
+| `dc`   | `source_id`, `start`, `stop`, `step`                                                        |
 
 ### `NetlistResult`
 
@@ -104,10 +104,10 @@ Chaque erreur est un `Diagnostic` :
 }
 ```
 
-| Champ | Rôle |
-|---|---|
-| `code` | Valeur d'une liste fermée, stable (c'est ce que les tests vérifient) |
-| `message` | En français, pour l'étudiant ; peut changer |
+| Champ     | Rôle                                                                           |
+| --------- | ------------------------------------------------------------------------------ |
+| `code`    | Valeur d'une liste fermée, stable (c'est ce que les tests vérifient)           |
+| `message` | En français, pour l'étudiant ; peut changer                                    |
 | `targets` | Les éléments à surligner : `comp`, `comp` + `pin`, `wire`, `junction` ou `net` |
 
 Un JSON mal formé donne **422** (validation Pydantic), un bug du serveur **500**. La liste des
