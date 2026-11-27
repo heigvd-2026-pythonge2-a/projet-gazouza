@@ -7,9 +7,11 @@ import {
   PLAYBACK_SECONDS,
   applyFlowPlan,
   componentCurrents,
+  dotSpeed,
   flowNetwork,
   flowPlan,
   maxCurrent,
+  peakFlows,
   timeSpan,
   type CurrentAnimation,
   type EditorDoc,
@@ -20,12 +22,6 @@ import { GRID, useCanvasColors } from "./theme";
 
 /** Distance between two dots on a conductor, in grid units. */
 const SPACING = 1;
-/** Speed of the dots for the largest current of the simulation, in grid units per second. */
-const MAX_SPEED = 4;
-/** Slowest speed of a dot that moves at all, so a small current stays visible. */
-const MIN_SPEED = 0.4;
-/** Below this fraction of the largest current, the current counts as zero: no dots. */
-const ZERO_FRACTION = 1e-3;
 const DOT_RADIUS = 2.5;
 /** How often the time shown by the controls is refreshed, in ms. */
 const CLOCK_REFRESH = 100;
@@ -94,6 +90,12 @@ export function CurrentLayer({
     () => (transient ? null : applyFlowPlan(plan, componentCurrents(result))),
     [plan, result, transient],
   );
+  // Transient: the conductors that carry a current at some time keep their dots, still when it
+  // vanishes (#341).
+  const peaks = useMemo(
+    () => (transient ? peakFlows(plan, result) : null),
+    [plan, result, transient],
+  );
 
   /** Where the dots of each conductor are, as a distance along it (grid units). */
   const offsets = useRef(new Map<string, number>());
@@ -134,10 +136,8 @@ export function CurrentLayer({
       const next: GridPoint[] = [];
       for (const { edge, length: len } of drawn) {
         const current = flows.get(edge.id);
-        if (current === undefined || imax === 0 || Math.abs(current) < imax * ZERO_FRACTION) {
-          continue;
-        }
-        const speed = Math.max(MIN_SPEED, (MAX_SPEED * Math.abs(current)) / imax);
+        const speed = dotSpeed(current, imax, transient, peaks?.get(edge.id));
+        if (speed === null || current === undefined) continue;
         const direction = Math.sign(current) * (s.electrons ? -1 : 1);
         const offset = (offsets.current.get(edge.id) ?? 0) + (moving ? direction * speed * dt : 0);
         offsets.current.set(edge.id, offset);
@@ -150,7 +150,7 @@ export function CurrentLayer({
     return () => {
       animation.stop();
     };
-  }, [plan, steadyFlows, drawn, result, imax, start, end, transient]);
+  }, [plan, steadyFlows, peaks, drawn, result, imax, start, end, transient]);
 
   return (
     <Layer ref={layerRef} listening={false}>

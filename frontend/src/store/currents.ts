@@ -222,3 +222,51 @@ export function maxCurrent(r: SimulationResult): number {
   }
   return max;
 }
+
+/** Speed of the dots for the largest current of the simulation, in grid units per second. */
+export const MAX_DOT_SPEED = 4;
+/** Slowest speed of a dot of an operating point, so that a small current stays visible. */
+export const MIN_DOT_SPEED = 0.4;
+/** Below this fraction of the largest current, a current counts as zero. */
+export const ZERO_CURRENT_FRACTION = 1e-3;
+
+/** At most this many samples are read to find the largest current of each conductor. */
+const PEAK_SAMPLES = 2000;
+
+/**
+ * Largest current magnitude of every conductor of `plan` over a transient result (edge id -> A),
+ * read on its samples (at most `PEAK_SAMPLES` of them, evenly spread).
+ */
+export function peakFlows(plan: FlowPlan, r: SimulationResult): Map<string, number> {
+  const times = r.axis?.values ?? [];
+  const stride = Math.max(1, Math.ceil(times.length / PEAK_SAMPLES));
+  const peaks = new Map<string, number>();
+  for (let k = 0; k < times.length; k += stride) {
+    for (const [id, v] of applyFlowPlan(plan, componentCurrents(r, times[k] as number))) {
+      peaks.set(id, Math.max(peaks.get(id) ?? 0, Math.abs(v)));
+    }
+  }
+  return peaks;
+}
+
+/**
+ * Speed of the dots of a conductor carrying `current` (grid units per second), or null when it
+ * shows no dots. `imax` is the largest current of the simulation.
+ * - Operating point: no dots for a zero current; otherwise at least `MIN_DOT_SPEED`.
+ * - Transient (#341): the speed follows the current down to zero, so the dots slow down and stop
+ *   when it vanishes (a diode that blocks) instead of disappearing. A conductor keeps its dots as
+ *   long as it carries a current at some time of the simulation (`peak`, see `peakFlows`).
+ */
+export function dotSpeed(
+  current: number | undefined,
+  imax: number,
+  transient: boolean,
+  peak = 0,
+): number | null {
+  if (current === undefined || imax === 0) return null;
+  const zero = imax * ZERO_CURRENT_FRACTION;
+  const magnitude = Math.abs(current);
+  if (transient) return peak < zero ? null : (MAX_DOT_SPEED * magnitude) / imax;
+  if (magnitude < zero) return null;
+  return Math.max(MIN_DOT_SPEED, (MAX_DOT_SPEED * magnitude) / imax);
+}
