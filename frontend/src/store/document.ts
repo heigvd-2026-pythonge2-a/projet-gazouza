@@ -17,7 +17,50 @@ export interface GridPoint {
   y: number;
 }
 
-export type Rotation = 0 | 90 | 180 | 270;
+/**
+ * Clockwise, in degrees: quarter turns, or a diagonal (45, 135, 225, 315, #161). On a diagonal
+ * the pins are put back on the grid (`toWorld`), so their leads grow a little.
+ */
+export type Rotation = 0 | 45 | 90 | 135 | 180 | 225 | 270 | 315;
+
+/** True for 45, 135, 225 and 315. */
+export const isDiagonalRotation = (r: Rotation): boolean => r % 90 !== 0;
+
+/** Only the components with two pins turn by 45 degrees (resistor, diode, source...). */
+export const canTurnDiagonally = (type: string): boolean => getDef(type).pins.length === 2;
+
+/**
+ * A point of the component's own frame, mirrored (x -> -x) then turned clockwise, exactly: on a
+ * diagonal the result is not on the grid. Written with the integers s = x + y and d = x - y
+ * rather than cos and sin, as docs/format-schema.md asks, so that a 0 stays exactly 0.
+ */
+export function turnPoint(local: GridPoint, rotation: Rotation, mirror: boolean): GridPoint {
+  const x = mirror ? -local.x : local.x;
+  const y = local.y;
+  const s = (x + y) / Math.SQRT2;
+  const d = (x - y) / Math.SQRT2;
+  switch (rotation) {
+    case 0:
+      return { x, y };
+    case 45:
+      return { x: d, y: s };
+    case 90:
+      return { x: -y, y: x };
+    case 135:
+      return { x: -s, y: d };
+    case 180:
+      return { x: -x, y: -y };
+    case 225:
+      return { x: -d, y: -s };
+    case 270:
+      return { x: y, y: -x };
+    case 315:
+      return { x: s, y: -d };
+  }
+}
+
+/** Rounding of a diagonal pin coordinate (docs/format-schema.md): away from zero, 0 stays 0. */
+const awayFromZero = (v: number): number => (v === 0 ? 0 : Math.sign(v) * Math.ceil(Math.abs(v)));
 
 export interface PlacedComponent {
   id: string;
@@ -103,32 +146,46 @@ export function textBounds(t: EditorText): GridRect {
 }
 
 /**
- * Local symbol coordinates -> grid coordinates.
+ * Local symbol coordinates of a grid point (a pin) -> grid coordinates.
  * Convention (same as Konva): mirror (x -> -x) first, then clockwise rotation, then translate.
+ * On a diagonal, each coordinate is rounded away from zero, as the backend does
+ * (docs/format-schema.md): the pins stay on the grid, a little further from the body.
  */
 export function toWorld(
   local: GridPoint,
   c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
 ): GridPoint {
-  const x = c.mirror ? -local.x : local.x;
-  const y = local.y;
-  let r: GridPoint;
-  switch (c.rotation) {
-    case 0:
-      r = { x, y };
-      break;
-    case 90:
-      r = { x: -y, y: x };
-      break;
-    case 180:
-      r = { x: -x, y: -y };
-      break;
-    case 270:
-      r = { x: y, y: -x };
-      break;
-  }
+  const r = turnPoint(local, c.rotation, c.mirror);
+  const x = isDiagonalRotation(c.rotation) ? awayFromZero(r.x) : r.x;
+  const y = isDiagonalRotation(c.rotation) ? awayFromZero(r.y) : r.y;
   // `+ 0` turns -0 into 0, which keeps positions clean when compared or serialized.
+  return { x: x + c.position.x + 0, y: y + c.position.y + 0 };
+}
+
+/** Like `toWorld`, without the rounding of the diagonals: for drawings, boxes and texts. */
+export function toWorldExact(
+  local: GridPoint,
+  c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
+): GridPoint {
+  const r = turnPoint(local, c.rotation, c.mirror);
   return { x: r.x + c.position.x + 0, y: r.y + c.position.y + 0 };
+}
+
+/** The box `local` of the component's frame, turned like the component, on the grid. */
+export function turnedRect(
+  local: { min: GridPoint; max: GridPoint },
+  c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
+): GridRect {
+  const { min, max } = local;
+  const corners = [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }].map((p) =>
+    toWorldExact(p, c),
+  );
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  return {
+    min: { x: Math.min(...xs), y: Math.min(...ys) },
+    max: { x: Math.max(...xs), y: Math.max(...ys) },
+  };
 }
 
 export function pinPosition(c: PlacedComponent, pinName: string): GridPoint {
@@ -317,9 +374,8 @@ const inRect = (p: GridPoint, r: GridRect): boolean =>
  */
 export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   const components = doc.components.filter((c) => {
-    const { min, max } = symbolBounds(getDef(c.type));
-    const corners = [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }];
-    return corners.every((p) => inRect(toWorld(p, c), r));
+    const box = componentBox(c);
+    return inRect(box.min, r) && inRect(box.max, r);
   });
   const wires = doc.wires.filter((w) => wirePath(doc, w).every((p) => inRect(p, r)));
   const junctions = doc.junctions.filter((j) => inRect(j.position, r));
@@ -339,10 +395,7 @@ const rectsMeet = (a: GridRect, b: GridRect): boolean =>
  * rectangle with Shift (#93).
  */
 export function itemsTouchingRect(doc: EditorDoc, r: GridRect): string[] {
-  const components = doc.components.filter((c) => {
-    const { min, max } = symbolBounds(getDef(c.type));
-    return rectsMeet(rectFrom(toWorld(min, c), toWorld(max, c)), r);
-  });
+  const components = doc.components.filter((c) => rectsMeet(componentBox(c), r));
   const wires = doc.wires.filter((w) => {
     const path = wirePath(doc, w);
     return path.some(
@@ -379,8 +432,8 @@ export function segmentsInRect(doc: EditorDoc, r: GridRect): WirePart[] {
 export function docBounds(doc: EditorDoc): GridRect | null {
   const points: GridPoint[] = [
     ...doc.components.flatMap((c) => {
-      const { min, max } = symbolBounds(getDef(c.type));
-      return [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }].map((p) => toWorld(p, c));
+      const { min, max } = componentBox(c);
+      return [min, max];
     }),
     ...doc.wires.flatMap((w) => wirePath(doc, w)),
     ...doc.junctions.map((j) => j.position),
@@ -400,10 +453,23 @@ export function docBounds(doc: EditorDoc): GridRect | null {
 
 // --- Overlapping components -----------------------------------------------------------------
 
-/** Box of a component's symbol and pins, on the grid (rotation and mirror applied). */
-export function componentBox(c: PlacedComponent): GridRect {
-  const { min, max } = symbolBounds(getDef(c.type));
-  return rectFrom(toWorld(min, c), toWorld(max, c));
+/**
+ * Box of a component's symbol and pins, on the grid (rotation and mirror applied). On a diagonal,
+ * the turned box of the symbol, and the pins, which `toWorld` puts a little further out.
+ */
+export function componentBox(
+  c: Pick<PlacedComponent, "type" | "position" | "rotation" | "mirror">,
+): GridRect {
+  const def = getDef(c.type);
+  const box = turnedRect(symbolBounds(def), c);
+  if (!isDiagonalRotation(c.rotation)) return box;
+  const points = [box.min, box.max, ...def.pins.map((pin) => toWorld(pin, c))];
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return {
+    min: { x: Math.min(...xs), y: Math.min(...ys) },
+    max: { x: Math.max(...xs), y: Math.max(...ys) },
+  };
 }
 
 const pinPoints = (c: PlacedComponent): GridPoint[] =>
@@ -1362,9 +1428,31 @@ export function netNameProblem(net: string): string | null {
   return null;
 }
 
-export const rotateCw = (r: Rotation): Rotation => ((r + 90) % 360) as Rotation;
+export const rotateCw = (r: Rotation, step: 45 | 90 = 90): Rotation =>
+  ((r + step) % 360) as Rotation;
 
-export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
+/**
+ * Turns the components `ids` clockwise by a quarter turn, or by 45 degrees (`step` 45, #161):
+ * then only the components with two pins turn (`canTurnDiagonally`).
+ */
+export function rotateComponents(
+  doc: EditorDoc,
+  ids: ReadonlySet<string>,
+  step: 45 | 90 = 90,
+): EditorDoc {
+  if (step === 45) {
+    const turning = new Set(
+      [...ids].filter((id) => {
+        const c = doc.components.find((x) => x.id === id);
+        return c !== undefined && canTurnDiagonally(c.type);
+      }),
+    );
+    if (turning.size === 0) return doc;
+    return realignWires(
+      doc,
+      updateComponents(doc, turning, (c) => ({ ...c, rotation: rotateCw(c.rotation, 45) })),
+    );
+  }
   const rotated = updateComponents(doc, ids, (c) => {
     // A node label skips the directions where its flag would lie on what it is connected to
     // (see `orientLabels`): pressing R goes round the free ones.

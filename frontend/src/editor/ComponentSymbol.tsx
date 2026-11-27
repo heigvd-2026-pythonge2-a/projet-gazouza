@@ -10,6 +10,8 @@ import {
   ledColor,
   symbolBounds,
   symbolOf,
+  toLocal,
+  toWorld,
   type Caption,
   type CaptionKind,
   type GridPoint,
@@ -221,6 +223,9 @@ export function ComponentSymbol({
   const pad = 0.3;
 
   const texts = captions ?? standaloneCaptions(c);
+  // On a diagonal a pin is put back on the grid, a little further out (#161): where it is drawn,
+  // in the component's frame, and the extra lead from the symbol to it.
+  const pins = def.pins.map((pin) => ({ ...pin, at: toLocal(toWorld(pin, c), c) }));
 
   const snap = (v: number) => Math.round(v / GRID) * GRID;
 
@@ -277,13 +282,25 @@ export function ComponentSymbol({
             fillColor={colors.labelFill}
           />
         ))}
-        {def.pins
+        {pins
+          .filter((pin) => pin.at.x !== pin.x || pin.at.y !== pin.y)
+          .map((pin) => (
+            <Line
+              key={`lead-${pin.name}`}
+              points={[pin.x * GRID, pin.y * GRID, pin.at.x * GRID, pin.at.y * GRID]}
+              stroke={color}
+              strokeWidth={STROKE}
+              lineCap="round"
+              listening={false}
+            />
+          ))}
+        {pins
           .filter((pin) => !markedPins || markedPins.has(pin.name))
           .map((pin) => (
             <Rect
               key={pin.name}
-              x={(pin.x - PIN_SIZE / 2) * GRID}
-              y={(pin.y - PIN_SIZE / 2) * GRID}
+              x={(pin.at.x - PIN_SIZE / 2) * GRID}
+              y={(pin.at.y - PIN_SIZE / 2) * GRID}
               width={PIN_SIZE * GRID}
               height={PIN_SIZE * GRID}
               stroke={colors.pin}
@@ -292,11 +309,11 @@ export function ComponentSymbol({
             />
           ))}
         {onPinMouseDown &&
-          def.pins.map((pin) => (
+          pins.map((pin) => (
             <Rect
               key={`hit-${pin.name}`}
-              x={(pin.x - PIN_HIT / 2) * GRID}
-              y={(pin.y - PIN_HIT / 2) * GRID}
+              x={(pin.at.x - PIN_HIT / 2) * GRID}
+              y={(pin.at.y - PIN_HIT / 2) * GRID}
               width={PIN_HIT * GRID}
               height={PIN_HIT * GRID}
               fill="rgba(0,0,0,0)"

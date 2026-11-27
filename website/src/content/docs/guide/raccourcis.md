@@ -34,6 +34,7 @@ afficher cette liste à tout moment.
 | <kbd>Ctrl</kbd> + glisser             | Déplacer sans que les fils suivent                                                                |
 | Flèches                               | Déplacer la sélection d'un pas                                                                    |
 | <kbd>R</kbd>                          | Tourner                                                                                           |
+| <kbd>Maj+R</kbd>                      | Tourner de 45° (composants à deux broches)                                                        |
 | <kbd>M</kbd>                          | Miroir                                                                                            |
 | Glisser un nom ou une valeur          | Déplacer ce texte seul (demi-case, près de son composant)                                         |
 | <kbd>O</kbd>                          | Replacer automatiquement les textes de la sélection                                               |

@@ -151,7 +151,13 @@ function ValueText({ label: l, color }: { label: OperatingPointLabel; color: str
 function componentMenu(selectionSize: number): MenuItem[] {
   const s = () => useEditorStore.getState();
   return [
-    { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
+    { label: "Tourner", shortcut: "R", keys: ["r"], onSelect: () => s().rotate() },
+    {
+      label: "Tourner de 45°",
+      shortcut: "Maj+R",
+      keys: ["R"],
+      onSelect: () => s().rotate(45),
+    },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
     {
       label: "Replacer les textes automatiquement",
@@ -242,7 +248,8 @@ function useKeyboardShortcuts() {
       switch (e.key) {
         case "r":
         case "R":
-          s.rotate();
+          // Shift+R: by 45 degrees, for the components with two pins (#161).
+          s.rotate(e.shiftKey ? 45 : 90);
           break;
         case "m":
         case "M":
