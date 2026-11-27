@@ -81,7 +81,7 @@ garantit qu'elles n'ont qu'une seule forme.
 | `type` | Un type de la bibliothèque (`resistor`, `capacitor`, `voltage_source`, `ground`, `label`…). |
 | `name` | Nom SPICE affiché, unique, qui **commence par le préfixe** du type (`R1`, `Rcharge`). **Absent** pour `ground` et `label`. |
 | `position` | En unités de grille (entiers). L'axe y va vers le bas. |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire. |
+| `rotation` | `0`, `90`, `180` ou `270`, sens horaire ; en diagonale `45`, `135`, `225` ou `315` (voir ci-dessous). |
 | `mirror` | `true` ou `false`. |
 | `params` | Valeurs **telles que l'utilisateur les tape** : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
 | `name_offset` | Facultatif. Position du nom (ou du nom de nœud d'une étiquette) **placée à la main**. Absent : placement automatique. |
@@ -89,6 +89,41 @@ garantit qu'elles n'ont qu'une seule forme.
 
 **Miroir et rotation** : le miroir est horizontal (`x → −x`) et s'applique **avant** la rotation.
 L'éditeur et l'import `.asc` utilisent la même règle.
+
+**Rotation en diagonale** (`45`, `135`, `225`, `315`, #163) : la position d'une broche doit rester
+sur la grille pour qu'un fil s'y accroche. Pour une broche `(x, y)` (rotation 0, unités de grille) :
+
+1. miroir d'abord (`x → −x`), puis rotation horaire (axe y vers le bas). En diagonale, on
+   n'utilise **pas** `cos` / `sin` (en flottants, un 0 exact sort comme ±2·10⁻¹⁶ et deviendrait
+   ±1 à l'arrondi) : on calcule d'abord les **entiers** `s = x + y` et `d = x − y`, puis :
+
+   | Rotation | `x'` | `y'` |
+   |---|---|---|
+   | 45 | `d / √2` | `s / √2` |
+   | 135 | `−s / √2` | `d / √2` |
+   | 225 | `−d / √2` | `−s / √2` |
+   | 315 | `s / √2` | `−d / √2` |
+
+   (c'est la rotation horaire `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`, écrite
+   exactement) ;
+2. en diagonale, **chaque coordonnée est arrondie en s'éloignant de zéro**
+   (`signe(v) · ⌈|v|⌉`, et `0` reste `0`), pas à l'entier le plus proche ; les quarts de tour
+   restent exacts ;
+3. puis translation à `position`.
+
+| Rotation | Broche `(0, −2)` | Broche `(0, 2)` |
+|---|---|---|
+| 0 | (0, −2) | (0, 2) |
+| 45 | (2, −2) | (−2, 2) |
+| 90 | (2, 0) | (−2, 0) |
+| 135 | (2, 2) | (−2, −2) |
+
+Les pattes s'allongent un peu, le corps du symbole tient toujours entre les broches. Avec des
+broches entières, `s` et `d` sont entiers : `0` donne exactement `0`, et `k/√2` (k ≠ 0) n'est
+jamais entier, donc `⌈|v|⌉` ne tombe jamais sur un cas limite. Python et TypeScript arrondissent
+donc pareil. Exemple : `(2, 2)` à 135° donne `(−4/√2, 0)`, soit `(−3, 0)`.
+L'import `.asc` ne produit que des quarts de tour. La netlist n'utilise pas les positions (les
+fils sont liés par `comp` + `pin`).
 
 **Position des textes d'un composant** (`name_offset`, `value_offset`) : `{ "x": 1.5, "y": -0.5 }`,
 en unités de grille (**nombres décimaux**, l'éditeur aimante sur une demi-case). C'est la position

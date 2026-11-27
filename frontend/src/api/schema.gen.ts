@@ -150,11 +150,11 @@ export interface components {
       position: components["schemas"]["Point"];
       /**
        * Rotation
-       * @description Clockwise, in degrees.
+       * @description Clockwise, in degrees. On a diagonal (45, 135, 225, 315) each pin coordinate is rotated exactly, then rounded away from zero, so wires still attach to grid points (docs/format-schema.md, section 2).
        * @default 0
        * @enum {integer}
        */
-      rotation: 0 | 90 | 180 | 270;
+      rotation: 0 | 45 | 90 | 135 | 180 | 225 | 270 | 315;
       /**
        * Mirror
        * @description Horizontal mirror (x -> -x), applied before the rotation.

@@ -112,8 +112,18 @@ def test_ground_and_label_have_no_name() -> None:
     assert [c.name for c in schematic.components] == [None, None]
 
 
-def test_rotation_must_be_a_quarter_turn() -> None:
-    component = {"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0}, "rotation": 45}
+@pytest.mark.parametrize("rotation", [0, 45, 90, 135, 180, 225, 270, 315])
+def test_rotation_by_eighths_of_a_turn(rotation: int) -> None:
+    # Diagonals (#163): a Graetz bridge with its diodes as a diamond.
+    component = {"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0},
+                 "rotation": rotation}  # fmt: skip
+    assert Schematic.model_validate({"components": [component]}).components[0].rotation == rotation
+
+
+@pytest.mark.parametrize("rotation", [30, 360, -90])
+def test_other_rotations_are_rejected(rotation: int) -> None:
+    component = {"id": "c1", "type": "resistor", "position": {"x": 0, "y": 0},
+                 "rotation": rotation}  # fmt: skip
     with pytest.raises(ValidationError):
         Schematic.model_validate({"components": [component]})
 
