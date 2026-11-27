@@ -181,10 +181,25 @@ def test_milli_suffix_is_a_warning() -> None:
 
 def test_source_only_needs_the_params_of_its_waveform() -> None:
     source = comp("c1", "voltage_source", "V1", waveform="sin", offset="0", amplitude="1",
-                  frequency="50", delay="0", damping="0", phase="0")  # fmt: skip
+                  frequency="50", sin_delay="0", damping="0", phase="0")  # fmt: skip
     result = generate_netlist(schematic([source, RESISTOR, GROUND], LOOP), OP)
 
     assert "V1 n1 0 SIN(0 1 50 0 0 0)\n" in result.netlist
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"delay": "1m"}, "SIN(0 1 50 1m 0 0)"),  # saved before #165: the old delay is kept
+        ({"delay": "1m", "sin_delay": "2m"}, "SIN(0 1 50 2m 0 0)"),  # "delay" is the pulse's
+    ],
+)
+def test_sine_delay_of_an_old_file(params: dict[str, str], expected: str) -> None:
+    source = comp("c1", "voltage_source", "V1", waveform="sin", offset="0", amplitude="1",
+                  frequency="50", damping="0", phase="0", **params)  # fmt: skip
+    result = generate_netlist(schematic([source, RESISTOR, GROUND], LOOP), OP)
+    assert result.errors == []
+    assert f"V1 n1 0 {expected}\n" in result.netlist
 
 
 def test_current_source() -> None:

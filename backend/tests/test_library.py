@@ -85,6 +85,10 @@ def test_source_waveforms(component_type: str) -> None:
     assert pulse_fields[0] in ("v1", "i1")
     assert "delay" in pulse_fields
     assert "amplitude" not in pulse_fields
+    # Each waveform keeps its own fields: a delay typed for a pulse is not the sine's (#165).
+    sin_fields = [p.name for p in entry.params if "sin" in p.waveforms]
+    assert "sin_delay" in sin_fields
+    assert not set(pulse_fields) & set(sin_fields)
 
 
 def test_every_fixture_component_type_exists() -> None:

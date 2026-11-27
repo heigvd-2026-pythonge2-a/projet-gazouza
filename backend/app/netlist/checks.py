@@ -9,6 +9,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 
+from app.engines.parser import MAX_RESULT_POINTS
 from app.models import (
     AcAnalysis,
     Analysis,
@@ -25,6 +26,7 @@ from app.models import (
     PinTarget,
     Schematic,
     Target,
+    TranAnalysis,
     WireTarget,
 )
 from app.netlist.connectivity import Nodes, touches
@@ -260,6 +262,43 @@ def _check_analysis(report: Report, analysis: Analysis, components: dict[str, Co
     numbers = [v for v in analysis.model_dump().values() if isinstance(v, float)]
     if not all(math.isfinite(v) for v in numbers):
         report.error("BAD_VALUE", "L'analyse contient une valeur infinie ou invalide.")
+        return
+    _check_points(report, analysis)
+
+
+def minimum_points(analysis: Analysis) -> float:
+    """The fewest points ngspice can give for this analysis (#241). With an adaptive step a
+    `.tran` may give more, never fewer: refusing on this number never blocks a simulation that
+    could have worked."""
+    if isinstance(analysis, TranAnalysis):
+        # Without a maximum step, ngspice takes stop_time / 1000 (writer.analysis_line).
+        return analysis.stop_time / analysis.max_step if analysis.max_step else 1000
+    if isinstance(analysis, DcAnalysis):
+        return abs(analysis.stop - analysis.start) / analysis.step + 1
+    if isinstance(analysis, AcAnalysis):
+        low, high = sorted((analysis.start_frequency, analysis.stop_frequency))
+        return math.log10(high / low) * analysis.points_per_decade + 1
+    return 1
+
+
+def _thousands(value: float) -> str:
+    """10000000 -> '10 000 000', with the narrow no-break space of French."""
+    return f"{value:,.0f}".replace(",", " ")
+
+
+def _check_points(report: Report, analysis: Analysis) -> None:
+    points = minimum_points(analysis)
+    if points > MAX_RESULT_POINTS:
+        advice = {
+            "tran": "augmente le pas maximal ou réduis la durée",
+            "dc": "augmente le pas du balayage",
+            "ac": "réduis le nombre de points par décade ou la plage de fréquences",
+        }.get(analysis.kind, "réduis la taille de l'analyse")
+        report.error(
+            "SIMULATION_FAILED",
+            f"La simulation produirait au moins {_thousands(points)} points, la limite est "
+            f"{_thousands(MAX_RESULT_POINTS)} : {advice}.",
+        )
 
 
 def check_nodes(

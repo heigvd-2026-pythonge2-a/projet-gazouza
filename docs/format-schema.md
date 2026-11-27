@@ -272,7 +272,7 @@ Une source a une **forme d'onde**, utilisée pour `.op`, `.tran` et `.dc` :
   "waveforms": {
     "dc":    "DC {dc}",
     "pulse": "PULSE({v1} {v2} {delay} {rise} {fall} {width} {period})",
-    "sin":   "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
+    "sin":   "SIN({offset} {amplitude} {frequency} {sin_delay} {damping} {phase})"
   }
 }
 ```
@@ -285,7 +285,8 @@ Dans la bibliothèque, chaque paramètre d'une source indique les formes d'onde 
 pour que l'éditeur n'affiche que les champs utiles :
 
 ```json
-{ "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse", "sin"] }
+{ "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse"] }
+{ "name": "sin_delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["sin"] }
 ```
 
 Le chargeur vérifie que cette liste correspond exactement aux `{…}` des modèles de `waveforms`.
