@@ -94,7 +94,12 @@ class Component(BaseModel):
         description="SPICE name shown to the user (e.g. 'R1'). Absent for 'ground' and 'label'.",
     )
     position: Point
-    rotation: Literal[0, 90, 180, 270] = Field(default=0, description="Clockwise, in degrees.")
+    rotation: Literal[0, 45, 90, 135, 180, 225, 270, 315] = Field(
+        default=0,
+        description="Clockwise, in degrees. On a diagonal (45, 135, 225, 315) each pin "
+        "coordinate is rotated exactly, then rounded away from zero, so wires still attach "
+        "to grid points (docs/format-schema.md, section 2).",
+    )
     mirror: bool = Field(
         default=False, description="Horizontal mirror (x -> -x), applied before the rotation."
     )
