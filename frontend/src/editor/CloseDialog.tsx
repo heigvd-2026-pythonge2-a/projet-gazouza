@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { saveFile } from "./fileActions";
+import { endRecovery } from "./recovery";
 import { COLORS, UI } from "./theme";
 import {
   answerUnsavedQuestion,
@@ -54,7 +55,12 @@ export function CloseDialog() {
 
   useEffect(() => {
     const unregister = registerUnsavedDialog();
-    window.psiceRequestClose = () => askBeforeDroppingChanges("close");
+    window.psiceRequestClose = async () => {
+      const close = await askBeforeDroppingChanges("close");
+      // The window goes: no copy to offer at the next start (#274).
+      if (close) endRecovery();
+      return close;
+    };
     return () => {
       unregister();
       delete window.psiceRequestClose;

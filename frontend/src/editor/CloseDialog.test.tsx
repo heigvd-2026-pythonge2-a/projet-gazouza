@@ -145,6 +145,21 @@ describe("CloseDialog", () => {
     expect(window.psiceRequestClose).toBeUndefined();
   });
 
+  it("removes the recovery copy when the window may close, not when cancelled (#274)", async () => {
+    const user = userEvent.setup();
+    render(<CloseDialog />);
+    window.localStorage.setItem("psice.recovery", "{}");
+    act(() => void dropComponent("resistor"));
+    const cancelled = requestClose();
+    await user.click(button("Annuler"));
+    expect(await cancelled).toBe(false);
+    expect(window.localStorage.getItem("psice.recovery")).toBe("{}");
+    const closed = requestClose();
+    await user.click(button("Fermer sans enregistrer"));
+    expect(await closed).toBe(true);
+    expect(window.localStorage.getItem("psice.recovery")).toBeNull();
+  });
+
   it("shows while the schematic is hidden, the results taking the whole window", () => {
     render(
       <div style={{ display: "none" }} data-testid="schematic">

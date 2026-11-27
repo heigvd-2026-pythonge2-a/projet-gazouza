@@ -63,6 +63,7 @@ import { resimulateOperatingPoint } from "./simulationActions";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
+import { RecoveryPrompt } from "./RecoveryPrompt";
 import { ValuePopover } from "./ValuePopover";
 import { layerToSvg } from "./svgExport";
 import { registerViewCommands, type ImageOptions } from "./viewCommands";
@@ -1283,6 +1284,7 @@ export function SchematicCanvas() {
         </div>
       )}
       <CloseDialog />
+      <RecoveryPrompt />
     </div>
   );
 }

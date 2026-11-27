@@ -70,6 +70,17 @@ const pickers = (): FilePickers | null =>
  */
 let currentFile: { name: string; handle: FileSystemFileHandle | null } | null = null;
 
+/** Name of the file of the current document, null if it was never saved (kept by the recovery). */
+export const currentFileName = (): string | null => currentFile?.name ?? null;
+
+/**
+ * Takes the name of the file a recovered schematic came from (#274): saving it proposes that name
+ * again. The file itself cannot be written without asking where, its handle being lost.
+ */
+export function adoptFileName(name: string | null) {
+  currentFile = name ? { name, handle: null } : null;
+}
+
 /** The save being written, if any (a second Ctrl+S then waits for it instead of saving again). */
 let saving: Promise<boolean> | null = null;
 
