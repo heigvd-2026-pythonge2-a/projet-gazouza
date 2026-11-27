@@ -35,8 +35,12 @@ describe("analysisSettings", () => {
     expect(analysisSettings({ kind: "tran", stop_time: 0.005 })).toEqual({
       kind: "tran",
       stopTime: "5m",
+      tranPoints: "",
       maxStep: "",
     });
+    expect(
+      analysisSettings({ kind: "tran", stop_time: 0.005, points: 2000, max_step: 1e-6 }),
+    ).toEqual({ kind: "tran", stopTime: "5m", tranPoints: "2000", maxStep: "1u" });
     expect(
       analysisSettings({
         kind: "ac",
