@@ -14,6 +14,8 @@ const HINTS: Record<Tool["kind"], string> = {
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
   paste: "Clic : poser la copie · R : tourner · M : miroir · Échap ou clic droit : annuler",
   text: "Clic : poser un texte, à écrire dans les propriétés · Échap : arrêter",
+  probe:
+    "Clic sur un fil : sa tension · Clic sur un composant : son courant · Nouveau clic : retirer · Échap : arrêter",
 };
 
 /** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */

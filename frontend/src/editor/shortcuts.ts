@@ -102,6 +102,16 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     ],
   },
   {
+    title: "Sonde",
+    items: [
+      { keys: "P", action: "Sonder (après une simulation)" },
+      { keys: "Clic sur un fil (sonde)", action: "Tracer la tension de son nœud" },
+      { keys: "Clic sur un composant (sonde)", action: "Tracer le courant qui le traverse" },
+      { keys: "Nouveau clic (sonde)", action: "Retirer la sonde" },
+      { keys: "Échap (sonde)", action: "Arrêter de sonder" },
+    ],
+  },
+  {
     title: "Vue",
     items: [
       { keys: "Molette", action: "Zoom" },

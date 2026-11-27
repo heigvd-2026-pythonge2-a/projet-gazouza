@@ -4,6 +4,7 @@
 import { create } from "zustand";
 
 import type { SimulationResult } from "../api/client";
+import { keptProbes, toggleProbe, type Probe, type ProbeTarget } from "./probes";
 import {
   addComponent,
   addText,
@@ -64,7 +65,9 @@ export type Tool =
    */
   | { kind: "paste"; clip: Clip }
   /** Click on the schematic to write a free text there (#123). */
-  | { kind: "text" };
+  | { kind: "text" }
+  /** Click on a wire or a component to probe its voltage or its current (#105). */
+  | { kind: "probe" };
 
 /** Why Shift+R did nothing (#161). */
 export const DIAGONAL_NOTICE = "Seuls les composants à deux broches se tournent de 45°.";
@@ -143,6 +146,11 @@ interface EditorState {
     doc: EditorDoc;
     nets: Record<string, string[]>;
   } | null;
+  /**
+   * Traces probed with the probe tool (#105), in the order of the clicks, for the results panel.
+   * Kept by a new simulation while their trace is still in its result.
+   */
+  probes: Probe[];
   /** The analysis set in the toolbar, used by the Simulate button and the netlist export. */
   analysis: AnalysisSettings;
   /** A simulation is running (the Simulate button then stops it). */
@@ -196,6 +204,16 @@ interface EditorState {
   startWiring: () => void;
   /** Starts the text tool (T). */
   startText: () => void;
+  /** Starts the probe tool (P, #105). */
+  startProbe: () => void;
+  /**
+   * Click with the probe tool on a wire or a component: adds the probe of its voltage or current,
+   * or removes it if it is already there. When there is nothing to probe (no simulation, the
+   * ground...), says why in `notice`.
+   */
+  probeAt: (target: ProbeTarget) => void;
+  /** Removes every probe. */
+  clearProbes: () => void;
   /**
    * Click with the text tool: adds a text there, selects it and goes back to the select tool (its
    * content is then typed in the properties panel).
@@ -350,6 +368,7 @@ function freshDocument(doc: EditorDoc) {
     draft: null,
     // A result of another document would show as stale: forget it.
     simulation: null,
+    probes: [],
     pressedButton: null,
   };
 }
@@ -489,6 +508,18 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   startText: () => set({ tool: { kind: "text" }, selection: [], wirePart: null, draft: null }),
 
+  startProbe: () =>
+    set({ tool: { kind: "probe" }, selection: [], wirePart: null, segments: [], draft: null }),
+
+  probeAt: (target) =>
+    set((s) => {
+      if (s.tool.kind !== "probe") return {};
+      const next = toggleProbe(s.probes, s.simulation, target);
+      return "error" in next ? { notice: next.error } : { probes: next.probes, notice: null };
+    }),
+
+  clearProbes: () => set({ probes: [] }),
+
   placeText: (position) =>
     set((s) => {
       if (s.tool.kind !== "text") return {};
@@ -620,6 +651,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setSimulation: (result, nets = {}) =>
     set((s) => ({
       simulation: result ? { result, doc: s.doc, nets } : null,
+      probes: keptProbes(s.probes, result),
       animation: { ...s.animation, on: false },
     })),
 

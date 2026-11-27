@@ -48,8 +48,9 @@ describe("runSimulation (#100)", () => {
     await runSimulation();
     const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
     expect(body.analysis).toEqual({ kind: "tran", stop_time: 0.005, max_step: 1e-5 });
-    // Only an operating point needs the nodes.
-    expect(fetch).toHaveBeenCalledOnce();
+    // The nodes too, so that the probe finds the node of a wire (#105).
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(editorState().simulation?.nets).toEqual(netlist.nets);
   });
 
   it("fetches the nodes when an error names one, to highlight its wires (#253)", async () => {
@@ -193,9 +194,10 @@ describe("switches and push buttons on an operating point (#43)", () => {
     const id = withButton();
     editorState().setAnalysis({ kind: "tran", stopTime: "5m" });
     await runSimulation();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    // The simulation and its nodes (for the probe, #105), then nothing: it is not an .op.
+    expect(fetch).toHaveBeenCalledTimes(2);
     resimulateOperatingPoint();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
 
     stubBackend();
     editorState().setAnalysis({ kind: "op" });

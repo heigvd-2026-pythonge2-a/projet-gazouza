@@ -200,3 +200,17 @@ describe("EditorToolbar", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+describe("the probe button (#105)", () => {
+  it("starts the probe tool, and stops it when pressed again", async () => {
+    const user = userEvent.setup();
+    render(<EditorToolbar />);
+    const probe = button(/^Sonder/);
+    expect(probe).toHaveAttribute("aria-pressed", "false");
+    await user.click(probe);
+    expect(editorState().tool).toEqual({ kind: "probe" });
+    expect(probe).toHaveAttribute("aria-pressed", "true");
+    await user.click(probe);
+    expect(editorState().tool).toEqual({ kind: "select" });
+  });
+});

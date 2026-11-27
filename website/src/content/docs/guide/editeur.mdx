@@ -125,6 +125,20 @@ Un texte se sélectionne, se déplace, se copie et se supprime comme un composan
 dessus pour modifier son contenu. Il est enregistré avec le schéma, mais il est **purement
 décoratif** : la simulation l'ignore complètement.
 
+## Sonder une tension ou un courant
+
+Après une simulation, appuie sur <kbd>P</kbd> ou clique sur le bouton **Sonder** de la barre
+d'outils : le curseur prend la forme d'une sonde. Clique ensuite :
+
+- sur un **fil** pour la tension de son nœud par rapport à la masse ;
+- sur un **composant** pour le courant qui le traverse.
+
+Un nouveau clic sur le même nœud (n'importe lequel de ses fils) ou le même composant retire la
+sonde. <kbd>Échap</kbd> revient à l'outil de sélection, sans retirer les sondes posées. Si le
+clic ne donne rien, la barre d'état dit pourquoi : pas encore de simulation, la masse (toujours
+0 V), ou un fil dessiné après la dernière simulation (relance-la). Voir aussi
+[Courbes et sondes](/projet-gazouza/guide/courbes-et-sondes/).
+
 ## Sélectionner et modifier
 
 | Geste | Effet |
