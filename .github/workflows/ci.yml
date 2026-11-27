@@ -179,7 +179,7 @@ jobs:
 
   # Pull requests only: on main, pages.yml builds and deploys the site.
   website:
-    name: Site web (Astro build)
+    name: Site web (Prettier & Astro build)
     needs: changes
     if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-latest
@@ -206,6 +206,9 @@ jobs:
 
       - name: Installation des dépendances
         run: pnpm install --frozen-lockfile
+
+      - name: Vérification du formatage (Prettier)
+        run: pnpm format:check
 
       - name: Build du site
         run: pnpm build

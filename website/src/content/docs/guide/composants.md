@@ -9,23 +9,23 @@ de code. Les symboles suivent la norme **CEI 60617**.
 
 ## Disponibles
 
-| Composant | Préfixe | Broches | Paramètres (valeur par défaut) |
-|---|---|---|---|
-| Résistance | `R` | `1`, `2` | Résistance (`1k` Ω) |
-| Condensateur | `C` | `1`, `2` | Capacité (`1u` F) |
-| Bobine | `L` | `1`, `2` | Inductance (`1m` H) |
-| Source de tension | `V` | `+`, `-` | Forme d'onde (voir ci-dessous) |
-| Source de courant | `I` | `+`, `-` | Forme d'onde (voir ci-dessous) |
-| Masse | — | `1` | — |
-| Étiquette de nœud | — | `1` | Nom du nœud (`out`), direction |
-| Diode | `D` | `A` (anode), `K` (cathode) | Modèle (Signal) |
-| Diode Zener | `D` | `A`, `K` | Tension Zener (`5,1 V`) |
-| LED | `D` | `A`, `K` | Couleur (Rouge) |
-| Ampli-op idéal | `X` | `+`, `-`, `out` | Modèle (Idéal) |
-| Ampli-op réel | `X` | `+`, `-`, `out`, `V+`, `V-` | Modèle (Générique) |
-| Transistor NPN | `Q` | `C`, `B`, `E` | Modèle (Usage général) |
-| Transistor PNP | `Q` | `C`, `B`, `E` | Modèle (Usage général) |
-| MOSFET canal N | `M` | `D`, `G`, `S` | Modèle (Usage général) |
+| Composant         | Préfixe | Broches                     | Paramètres (valeur par défaut) |
+| ----------------- | ------- | --------------------------- | ------------------------------ |
+| Résistance        | `R`     | `1`, `2`                    | Résistance (`1k` Ω)            |
+| Condensateur      | `C`     | `1`, `2`                    | Capacité (`1u` F)              |
+| Bobine            | `L`     | `1`, `2`                    | Inductance (`1m` H)            |
+| Source de tension | `V`     | `+`, `-`                    | Forme d'onde (voir ci-dessous) |
+| Source de courant | `I`     | `+`, `-`                    | Forme d'onde (voir ci-dessous) |
+| Masse             | —       | `1`                         | —                              |
+| Étiquette de nœud | —       | `1`                         | Nom du nœud (`out`), direction |
+| Diode             | `D`     | `A` (anode), `K` (cathode)  | Modèle (Signal)                |
+| Diode Zener       | `D`     | `A`, `K`                    | Tension Zener (`5,1 V`)        |
+| LED               | `D`     | `A`, `K`                    | Couleur (Rouge)                |
+| Ampli-op idéal    | `X`     | `+`, `-`, `out`             | Modèle (Idéal)                 |
+| Ampli-op réel     | `X`     | `+`, `-`, `out`, `V+`, `V-` | Modèle (Générique)             |
+| Transistor NPN    | `Q`     | `C`, `B`, `E`               | Modèle (Usage général)         |
+| Transistor PNP    | `Q`     | `C`, `B`, `E`               | Modèle (Usage général)         |
+| MOSFET canal N    | `M`     | `D`, `G`, `S`               | Modèle (Usage général)         |
 
 Le **préfixe** est la première lettre du nom du composant (`R1`, `Rcharge`). Tu peux renommer
 un composant, mais son nom doit garder ce préfixe et rester unique.
@@ -46,13 +46,13 @@ Les majuscules ne comptent pas : `Out` et `out` désignent le même nœud.
 
 La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
 
-| Direction | Drapeau |
-|---|---|
+| Direction                | Drapeau                                                                 |
+| ------------------------ | ----------------------------------------------------------------------- |
 | Automatique (par défaut) | Déduite du circuit par Psice ; en attendant, rectangle comme « Aucune » |
-| Aucune | Rectangle |
-| Entrée | Pointe vers la broche : le signal entre dans le circuit |
-| Sortie | Pointe à l'opposé de la broche : le signal sort du circuit |
-| Bidirectionnelle | Pointe des deux côtés |
+| Aucune                   | Rectangle                                                               |
+| Entrée                   | Pointe vers la broche : le signal entre dans le circuit                 |
+| Sortie                   | Pointe à l'opposé de la broche : le signal sort du circuit              |
+| Bidirectionnelle         | Pointe des deux côtés                                                   |
 
 Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) branché sur l'étiquette,
 pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
@@ -63,11 +63,11 @@ débranche. `R` fait le tour des côtés libres seulement.
 Une source de tension ou de courant a une **forme d'onde**. L'inspecteur n'affiche que les
 paramètres de celle que tu as choisie.
 
-| Forme d'onde | Paramètres | Usage typique |
-|---|---|---|
-| **Continue** | Tension (ou courant) continue | Alimentation, polarisation |
+| Forme d'onde  | Paramètres                                                                                   | Usage typique                             |
+| ------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Continue**  | Tension (ou courant) continue                                                                | Alimentation, polarisation                |
 | **Impulsion** | Valeur basse, valeur haute, retard, temps de montée, temps de descente, durée haute, période | Échelon, signal carré, réponse indicielle |
-| **Sinusoïde** | Décalage, amplitude, fréquence, retard, amortissement, phase | Signal alternatif, redressement |
+| **Sinusoïde** | Décalage, amplitude, fréquence, retard, amortissement, phase                                 | Signal alternatif, redressement           |
 
 :::note[Analyse fréquentielle]
 Il n'y a pas d'amplitude « AC » à régler sur la source. Pour une analyse `.ac`, tu choisis la
@@ -90,11 +90,11 @@ typiques des fiches techniques des composants cités : pas les modèles exacts d
 
 ### Diodes
 
-| Composant | Modèles | Utilisation |
-|---|---|---|
-| Diode | Signal (type 1N4148), Redressement (type 1N4007) | Chute d'environ 0,6 à 0,7 V en direct |
-| Diode Zener | 3,3 V, 5,1 V, 12 V | Montée en inverse, elle maintient sa tension Zener |
-| LED | Rouge, Verte, Jaune, Bleue, Blanche | Chute en direct à 15 mA : environ 1,9 V (rouge), 2,4 V (verte), 2,0 V (jaune), 3,0 V (bleue), 3,1 V (blanche) |
+| Composant   | Modèles                                          | Utilisation                                                                                                   |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Diode       | Signal (type 1N4148), Redressement (type 1N4007) | Chute d'environ 0,6 à 0,7 V en direct                                                                         |
+| Diode Zener | 3,3 V, 5,1 V, 12 V                               | Montée en inverse, elle maintient sa tension Zener                                                            |
+| LED         | Rouge, Verte, Jaune, Bleue, Blanche              | Chute en direct à 15 mA : environ 1,9 V (rouge), 2,4 V (verte), 2,0 V (jaune), 3,0 V (bleue), 3,1 V (blanche) |
 
 Le courant passe de l'anode `A` vers la cathode `K`. Sur le symbole, la cathode est le côté de
 la barre.
@@ -108,10 +108,10 @@ au fil du temps : un montage clignotant clignote sur le schéma.
 
 ### Amplis-op
 
-| Composant | Modèle | Comportement |
-|---|---|---|
-| Ampli-op idéal | Idéal (gain 10⁶, sans limite) | Pas d'alimentation, la sortie peut prendre n'importe quelle tension |
-| Ampli-op réel | Générique (type 741 : gain 10⁵, 1 MHz) | Alimenté par `V+` et `V-`, la sortie sature avant les alimentations |
+| Composant      | Modèle                                 | Comportement                                                        |
+| -------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| Ampli-op idéal | Idéal (gain 10⁶, sans limite)          | Pas d'alimentation, la sortie peut prendre n'importe quelle tension |
+| Ampli-op réel  | Générique (type 741 : gain 10⁵, 1 MHz) | Alimenté par `V+` et `V-`, la sortie sature avant les alimentations |
 
 :::caution[Alimenter l'ampli-op réel]
 Les broches `V+` et `V-` de l'ampli-op réel doivent être reliées à des sources de tension (par
@@ -122,8 +122,8 @@ alimentations : entre -13,5 V et +13,5 V avec ±15 V.
 
 ### Transistors
 
-| Composant | Modèle | Broches |
-|---|---|---|
-| Transistor NPN | Usage général (type 2N3904) | `C` (collecteur), `B` (base), `E` (émetteur) |
-| Transistor PNP | Usage général (type 2N3906) | `C`, `B`, `E` |
-| MOSFET canal N | Usage général (type 2N7000, seuil 2 V) | `D` (drain), `G` (grille), `S` (source) |
+| Composant      | Modèle                                 | Broches                                      |
+| -------------- | -------------------------------------- | -------------------------------------------- |
+| Transistor NPN | Usage général (type 2N3904)            | `C` (collecteur), `B` (base), `E` (émetteur) |
+| Transistor PNP | Usage général (type 2N3906)            | `C`, `B`, `E`                                |
+| MOSFET canal N | Usage général (type 2N7000, seuil 2 V) | `D` (drain), `G` (grille), `S` (source)      |

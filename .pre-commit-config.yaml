@@ -22,3 +22,11 @@ repos:
         language: system
         files: ^frontend/
         exclude: ^frontend/pnpm-lock\.yaml$
+      # Run from the root: the ignore file of website/ is given, and its config names the Astro
+      # plugin by path (a package name would be looked for from the root).
+      - id: prettier-website
+        name: prettier (website)
+        entry: node website/node_modules/prettier/bin/prettier.cjs --write --ignore-unknown --ignore-path website/.prettierignore
+        language: system
+        files: ^website/
+        exclude: ^website/(pnpm-lock\.yaml$|public/demo/)|\.mdx$

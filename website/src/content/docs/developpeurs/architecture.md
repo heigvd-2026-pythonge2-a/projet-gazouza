@@ -48,14 +48,14 @@ travail de simulation.
 
 ## Stack technique
 
-| Partie | Technologies |
-|---|---|
-| Frontend | React, TypeScript, Vite, Konva (ou SVG), uPlot, Zustand — géré avec **pnpm** |
-| Backend | Python 3.12+, FastAPI, Pydantic, NumPy / SciPy — géré avec **uv** |
-| Simulation | ngspice, binaires Windows inclus dans le dépôt |
-| Application | pywebview (fenêtre native), PyInstaller (packaging) |
-| Qualité | pytest, vitest, ruff, ESLint, Prettier, GitHub Actions |
-| Site web | Astro + Starlight, déployé sur GitHub Pages |
+| Partie      | Technologies                                                                 |
+| ----------- | ---------------------------------------------------------------------------- |
+| Frontend    | React, TypeScript, Vite, Konva (ou SVG), uPlot, Zustand — géré avec **pnpm** |
+| Backend     | Python 3.12+, FastAPI, Pydantic, NumPy / SciPy — géré avec **uv**            |
+| Simulation  | ngspice, binaires Windows inclus dans le dépôt                               |
+| Application | pywebview (fenêtre native), PyInstaller (packaging)                          |
+| Qualité     | pytest, vitest, ruff, ESLint, Prettier, GitHub Actions                       |
+| Site web    | Astro + Starlight, déployé sur GitHub Pages                                  |
 
 ## Structure du dépôt
 
@@ -91,13 +91,13 @@ projet-gazouza/
 Chaque module a un propriétaire. Une modification hors de son module se coordonne avec son
 propriétaire.
 
-| Chemin | Propriétaire |
-|---|---|
-| `frontend/src/editor/`, `frontend/src/store/` | Noé Guenin |
-| `frontend/src/plot/` | Noémi Voélin |
-| `backend/app/models/`, `netlist/`, `importers/`, `api/` | Damien Bignens |
-| `backend/app/engines/`, `backend/vendor/ngspice/`, `launcher.py`, `build.ps1` | Antoine Bezençon |
-| `shared/fixtures/` | Tous (chaque fichier a un producteur) |
-| `website/` | Noé Guenin |
+| Chemin                                                                                   | Propriétaire                                                  |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `frontend/src/editor/`, `frontend/src/store/`                                            | Noé Guenin                                                    |
+| `frontend/src/plot/`                                                                     | Noémi Voélin                                                  |
+| `backend/app/models/`, `netlist/`, `importers/`, `api/`                                  | Damien Bignens                                                |
+| `backend/app/engines/`, `backend/vendor/ngspice/`, `launcher.py`, `build.ps1`            | Antoine Bezençon                                              |
+| `shared/fixtures/`                                                                       | Tous (chaque fichier a un producteur)                         |
+| `website/`                                                                               | Noé Guenin                                                    |
 | `.github/` (CI, modèles), configs racine, réglages du dépôt (labels, milestones, règles) | Noé Guenin (gère le dépôt ; changement à annoncer à l'équipe) |
-| `frontend/src/api/client.ts`, `frontend/src/App.tsx` | À coordonner en équipe |
+| `frontend/src/api/client.ts`, `frontend/src/App.tsx`                                     | À coordonner en équipe                                        |
