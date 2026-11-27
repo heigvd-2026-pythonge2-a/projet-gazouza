@@ -87,6 +87,9 @@ describe("folding the groups of the palette (#331)", () => {
     expect(header("Passifs")).toHaveAttribute("aria-expanded", "true");
     await user.click(header("Passifs"));
     expect(header("Passifs")).toHaveAttribute("aria-expanded", "false");
+    // Hidden by its style: an inline `display` would win over the `hidden` attribute.
+    const panel = document.getElementById(header("Passifs").getAttribute("aria-controls")!);
+    expect(panel).toHaveStyle({ display: "none" });
     expect(screen.queryByRole("button", { name: /Résistance/ })).toBeNull();
     // The other groups stay open.
     expect(tile("Fil")).toBeInTheDocument();

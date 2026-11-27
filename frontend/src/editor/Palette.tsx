@@ -261,7 +261,7 @@ export function Palette() {
                 {group.label}
               </button>
             </h4>
-            <div id={panel} style={gridStyle} hidden={!open}>
+            <div id={panel} style={{ ...gridStyle, display: open ? "grid" : "none" }}>
               {group.entries.map(({ entry, shortcut }) =>
                 entry.kind === "wire" ? (
                   <Tile
