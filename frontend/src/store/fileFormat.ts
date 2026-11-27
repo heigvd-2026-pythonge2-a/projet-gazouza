@@ -72,6 +72,16 @@ function component(v: unknown): PlacedComponent {
       params[k] = value;
     }
   }
+  // A sine saved before its delay was split from the pulse's (#165) kept it in `delay`: it
+  // becomes `sin_delay`, as the backend does, so the old delay is shown and kept.
+  if (
+    params.waveform === "sin" &&
+    params.delay !== undefined &&
+    params.sin_delay === undefined &&
+    def.params.some((p) => p.name === "sin_delay")
+  ) {
+    params.sin_delay = params.delay;
+  }
   return {
     id: v.id as string,
     type: def.type,

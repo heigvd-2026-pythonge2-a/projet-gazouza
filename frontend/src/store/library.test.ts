@@ -241,6 +241,7 @@ describe("mainParam", () => {
     const source = getDef("voltage_source");
     expect(mainParam(source, { waveform: "dc" })?.name).toBe("dc");
     expect(mainParam(source, { waveform: "pulse" })?.name).toBe("v1");
-    expect(mainParam(source, { waveform: "sin" })?.name).toBe("delay");
+    // The first value of the sine (#165 gave it its own delay, after the frequency).
+    expect(mainParam(source, { waveform: "sin" })?.name).toBe("offset");
   });
 });
