@@ -7,7 +7,7 @@ import { analysisSources, toAnalysis } from "../store";
 import { fixtureDoc, fixtureResult } from "../store/testFixtures";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
-import { SimulationControls, SimulationReport } from "./SimulationControls";
+import { SETTINGS_ROW_HEIGHT, SimulationControls, SimulationReport } from "./SimulationControls";
 import { registerViewCommands } from "./viewCommands";
 
 beforeEach(resetEditorStore);
@@ -134,5 +134,35 @@ describe("SimulationReport (#253)", () => {
     expect(editorState().reportHighlight).toEqual({ component: "c1" });
     await user.unhover(screen.getByRole("row", { name: "V1 fournit 5 mA" }));
     expect(editorState().reportHighlight).toBeNull();
+  });
+});
+
+describe("the line of the analysis settings (#339)", () => {
+  it("holds the settings of every analysis, always as high and always last", async () => {
+    const user = userEvent.setup();
+    render(<SimulationControls />);
+    const row = screen.getByRole("group", { name: "Réglages de l'analyse" });
+    for (const [kind, field] of [
+      ["op", null],
+      ["tran", "Durée de la simulation (s)"],
+      ["ac", "Fréquence de début (Hz)"],
+      ["dc", "Valeur de début (V)"],
+    ] as const) {
+      await user.selectOptions(screen.getByLabelText("Analyse"), kind);
+      expect(screen.getByRole("group", { name: "Réglages de l'analyse" })).toBe(row);
+      expect(row).toHaveStyle({ height: `${SETTINGS_ROW_HEIGHT}px`, order: "1" });
+      if (field) expect(row).toContainElement(screen.getByLabelText(field));
+      else expect(row).toHaveTextContent("sans réglage");
+    }
+  });
+
+  it("keeps the Simulate button next to the choice of the analysis, outside that line", () => {
+    render(<SimulationControls />);
+    const choice = screen.getByLabelText("Analyse");
+    const simulate = screen.getByRole("button", { name: /Simuler/ });
+    expect(choice.nextElementSibling).toBe(simulate);
+    expect(screen.getByRole("group", { name: "Réglages de l'analyse" })).not.toContainElement(
+      simulate,
+    );
   });
 });
