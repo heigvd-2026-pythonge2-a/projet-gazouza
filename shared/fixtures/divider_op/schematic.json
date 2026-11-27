@@ -8,7 +8,7 @@
       "name": "V1",
       "position": {
         "x": 0,
-        "y": 0
+        "y": 2
       },
       "rotation": 0,
       "mirror": false,
@@ -37,7 +37,7 @@
       "name": "R2",
       "position": {
         "x": 8,
-        "y": 0
+        "y": 2
       },
       "rotation": 0,
       "mirror": false,
@@ -50,7 +50,7 @@
       "type": "ground",
       "position": {
         "x": 0,
-        "y": 4
+        "y": 6
       },
       "rotation": 0,
       "mirror": false,
@@ -61,7 +61,7 @@
       "type": "ground",
       "position": {
         "x": 8,
-        "y": 4
+        "y": 6
       },
       "rotation": 0,
       "mirror": false,
@@ -71,7 +71,7 @@
       "id": "c6",
       "type": "label",
       "position": {
-        "x": -3,
+        "x": -1,
         "y": -2
       },
       "rotation": 180,
@@ -96,13 +96,27 @@
       }
     }
   ],
-  "junctions": [],
+  "junctions": [
+    {
+      "id": "j1",
+      "position": {
+        "x": 0,
+        "y": -2
+      }
+    },
+    {
+      "id": "j2",
+      "position": {
+        "x": 8,
+        "y": -2
+      }
+    }
+  ],
   "wires": [
     {
       "id": "w1",
       "from": {
-        "comp": "c1",
-        "pin": "+"
+        "junction": "j1"
       },
       "to": {
         "comp": "c2",
@@ -117,8 +131,7 @@
         "pin": "2"
       },
       "to": {
-        "comp": "c3",
-        "pin": "1"
+        "junction": "j2"
       },
       "points": []
     },
@@ -131,7 +144,8 @@
       "to": {
         "comp": "c4",
         "pin": "1"
-      }
+      },
+      "points": []
     },
     {
       "id": "w4",
@@ -142,29 +156,52 @@
       "to": {
         "comp": "c5",
         "pin": "1"
-      }
+      },
+      "points": []
     },
     {
       "id": "w5",
       "from": {
-        "comp": "c1",
-        "pin": "+"
-      },
-      "to": {
         "comp": "c6",
         "pin": "1"
-      }
+      },
+      "to": {
+        "junction": "j1"
+      },
+      "points": []
     },
     {
       "id": "w6",
       "from": {
-        "comp": "c3",
-        "pin": "1"
+        "junction": "j2"
       },
       "to": {
         "comp": "c7",
         "pin": "1"
-      }
+      },
+      "points": []
+    },
+    {
+      "id": "w7",
+      "from": {
+        "junction": "j1"
+      },
+      "to": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "points": []
+    },
+    {
+      "id": "w8",
+      "from": {
+        "junction": "j2"
+      },
+      "to": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "points": []
     }
   ],
   "texts": [
