@@ -111,6 +111,9 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   },
   {
     title: "Aide",
-    items: [{ keys: "?", action: "Afficher ou masquer cette liste" }],
+    items: [
+      { keys: "?", action: "Afficher ou masquer cette liste" },
+      { keys: "Ctrl+Maj+E", action: "Invoquer l'équipe" },
+    ],
   },
 ];

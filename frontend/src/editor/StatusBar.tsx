@@ -2,6 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 
 import { unconnectedPins, useEditorStore, type Tool } from "../store";
 import { SHORTCUT_GROUPS } from "./shortcuts";
+import { isTeamShortcut } from "./team";
+import { TeamDialog } from "./TeamDialog";
 import { COLORS, UI } from "./theme";
 
 /** Main gestures of the active tool; the full list is in the shortcuts panel. */
@@ -86,15 +88,23 @@ function ShortcutsPanel({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Bottom bar: main shortcuts of the active tool, what is selected, and a button (or the ? key)
- * that shows every shortcut.
+ * Bottom bar: main shortcuts of the active tool, what is selected, a button (or the ? key)
+ * that shows every shortcut, and the "À propos" window (Ctrl+Shift+E: the team, animated).
  */
 export function StatusBar() {
   const [help, setHelp] = useState(false);
   const closeHelp = useCallback(() => setHelp(false), []);
+  const [about, setAbout] = useState<"about" | "team" | null>(null);
+  const closeAbout = useCallback(() => setAbout(null), []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isTeamShortcut(e)) {
+        e.preventDefault();
+        setHelp(false);
+        setAbout("team");
+        return;
+      }
       const target = e.target as HTMLElement | null;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
       if (e.key !== "?" || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -192,6 +202,24 @@ export function StatusBar() {
         Raccourcis (?)
       </button>
       {help && <ShortcutsPanel onClose={closeHelp} />}
+      <button
+        type="button"
+        title="Version, auteurs et licence de Psice"
+        onClick={() => setAbout("about")}
+        style={{
+          font: "inherit",
+          flex: "none",
+          padding: 0,
+          height: 18,
+          border: "none",
+          background: "none",
+          color: UI.muted,
+          cursor: "pointer",
+        }}
+      >
+        À propos
+      </button>
+      {about && <TeamDialog animated={about === "team"} onClose={closeAbout} />}
     </footer>
   );
 }
