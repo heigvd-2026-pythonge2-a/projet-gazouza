@@ -81,7 +81,7 @@ garantit qu'elles n'ont qu'une seule forme.
 | `type` | Un type de la bibliothèque (`resistor`, `capacitor`, `voltage_source`, `ground`, `label`…). |
 | `name` | Nom SPICE affiché, unique, qui **commence par le préfixe** du type (`R1`, `Rcharge`). **Absent** pour `ground` et `label`. |
 | `position` | En unités de grille (entiers). L'axe y va vers le bas. |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire. |
+| `rotation` | `0`, `90`, `180` ou `270`, sens horaire ; en diagonale `45`, `135`, `225` ou `315` (voir ci-dessous). |
 | `mirror` | `true` ou `false`. |
 | `params` | Valeurs **telles que l'utilisateur les tape** : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
 | `name_offset` | Facultatif. Position du nom (ou du nom de nœud d'une étiquette) **placée à la main**. Absent : placement automatique. |
@@ -89,6 +89,28 @@ garantit qu'elles n'ont qu'une seule forme.
 
 **Miroir et rotation** : le miroir est horizontal (`x → −x`) et s'applique **avant** la rotation.
 L'éditeur et l'import `.asc` utilisent la même règle.
+
+**Rotation en diagonale** (`45`, `135`, `225`, `315`, #163) : la position d'une broche doit rester
+sur la grille pour qu'un fil s'y accroche. Pour une broche `(x, y)` (rotation 0, unités de grille) :
+
+1. miroir d'abord (`x → −x`), puis rotation horaire exacte d'un angle θ (axe y vers le bas) :
+   `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ` ; pour 45° : `x' = (x − y)/√2`,
+   `y' = (x + y)/√2` ;
+2. en diagonale, **chaque coordonnée est arrondie en s'éloignant de zéro**
+   (`signe(v) · ⌈|v|⌉`), pas à l'entier le plus proche ; les quarts de tour restent exacts ;
+3. puis translation à `position`.
+
+| Rotation | Broche `(0, −2)` | Broche `(0, 2)` |
+|---|---|---|
+| 0 | (0, −2) | (0, 2) |
+| 45 | (2, −2) | (−2, 2) |
+| 90 | (2, 0) | (−2, 0) |
+| 135 | (2, 2) | (−2, −2) |
+
+Les pattes s'allongent un peu, le corps du symbole tient toujours entre les broches. Avec des
+broches entières, `(x ± y)/√2` n'est jamais un demi-entier : Python et TypeScript arrondissent
+donc pareil. L'import `.asc` ne produit que des quarts de tour. La netlist n'utilise pas les
+positions (les fils sont liés par `comp` + `pin`).
 
 **Position des textes d'un composant** (`name_offset`, `value_offset`) : `{ "x": 1.5, "y": -0.5 }`,
 en unités de grille (**nombres décimaux**, l'éditeur aimante sur une demi-case). C'est la position
