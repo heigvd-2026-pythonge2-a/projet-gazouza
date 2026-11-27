@@ -84,6 +84,16 @@ afficher cette liste à tout moment.
 | <kbd>F</kbd>                    | Ajuster la vue au circuit |
 | Clic droit ou molette maintenus | Déplacer la vue           |
 
+## Aide
+
+| Raccourci             | Action                          |
+| --------------------- | ------------------------------- |
+| <kbd>?</kbd>          | Afficher ou masquer cette liste |
+| <kbd>Ctrl+Maj+E</kbd> | Invoquer l'équipe               |
+
+Le bouton **À propos** de la barre d'état ouvre la même fenêtre sans l'animation : version,
+auteurs, licence et lien du dépôt. <kbd>Échap</kbd> ou un clic la ferme.
+
 :::tip[Pour les développeurs]
 Cette liste est la copie de `frontend/src/editor/shortcuts.ts`, qui alimente le panneau
 <kbd>?</kbd> de l'application. Si tu ajoutes un raccourci, mets les deux à jour.
