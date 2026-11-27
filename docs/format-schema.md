@@ -93,11 +93,22 @@ L'éditeur et l'import `.asc` utilisent la même règle.
 **Rotation en diagonale** (`45`, `135`, `225`, `315`, #163) : la position d'une broche doit rester
 sur la grille pour qu'un fil s'y accroche. Pour une broche `(x, y)` (rotation 0, unités de grille) :
 
-1. miroir d'abord (`x → −x`), puis rotation horaire exacte d'un angle θ (axe y vers le bas) :
-   `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ` ; pour 45° : `x' = (x − y)/√2`,
-   `y' = (x + y)/√2` ;
+1. miroir d'abord (`x → −x`), puis rotation horaire (axe y vers le bas). En diagonale, on
+   n'utilise **pas** `cos` / `sin` (en flottants, un 0 exact sort comme ±2·10⁻¹⁶ et deviendrait
+   ±1 à l'arrondi) : on calcule d'abord les **entiers** `s = x + y` et `d = x − y`, puis :
+
+   | Rotation | `x'` | `y'` |
+   |---|---|---|
+   | 45 | `d / √2` | `s / √2` |
+   | 135 | `−s / √2` | `d / √2` |
+   | 225 | `−d / √2` | `−s / √2` |
+   | 315 | `s / √2` | `−d / √2` |
+
+   (c'est la rotation horaire `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`, écrite
+   exactement) ;
 2. en diagonale, **chaque coordonnée est arrondie en s'éloignant de zéro**
-   (`signe(v) · ⌈|v|⌉`), pas à l'entier le plus proche ; les quarts de tour restent exacts ;
+   (`signe(v) · ⌈|v|⌉`, et `0` reste `0`), pas à l'entier le plus proche ; les quarts de tour
+   restent exacts ;
 3. puis translation à `position`.
 
 | Rotation | Broche `(0, −2)` | Broche `(0, 2)` |
@@ -108,9 +119,11 @@ sur la grille pour qu'un fil s'y accroche. Pour une broche `(x, y)` (rotation 0,
 | 135 | (2, 2) | (−2, −2) |
 
 Les pattes s'allongent un peu, le corps du symbole tient toujours entre les broches. Avec des
-broches entières, `(x ± y)/√2` n'est jamais un demi-entier : Python et TypeScript arrondissent
-donc pareil. L'import `.asc` ne produit que des quarts de tour. La netlist n'utilise pas les
-positions (les fils sont liés par `comp` + `pin`).
+broches entières, `s` et `d` sont entiers : `0` donne exactement `0`, et `k/√2` (k ≠ 0) n'est
+jamais entier, donc `⌈|v|⌉` ne tombe jamais sur un cas limite. Python et TypeScript arrondissent
+donc pareil. Exemple : `(2, 2)` à 135° donne `(−4/√2, 0)`, soit `(−3, 0)`.
+L'import `.asc` ne produit que des quarts de tour. La netlist n'utilise pas les positions (les
+fils sont liés par `comp` + `pin`).
 
 **Position des textes d'un composant** (`name_offset`, `value_offset`) : `{ "x": 1.5, "y": -0.5 }`,
 en unités de grille (**nombres décimaux**, l'éditeur aimante sur une demi-case). C'est la position
