@@ -56,6 +56,20 @@ def test_infinite_analysis_value_is_not_a_server_error() -> None:
         assert [e["code"] for e in response.json()["errors"]] == ["BAD_VALUE"]
 
 
+def test_value_with_a_huge_exponent_is_not_a_server_error() -> None:
+    # "1e" + 5000 digits: more than int() converts, it was an HTTP 500 (#314).
+    request = fixture_request("divider_op")
+    resistor = next(c for c in request["schematic"]["components"] if c["type"] == "resistor")
+    resistor["params"]["resistance"] = "1e" + "9" * 5000
+    client_500 = TestClient(app, raise_server_exceptions=False)
+    for route in ("/api/netlist", "/api/simulate"):
+        response = client_500.post(route, json=request)
+        assert response.status_code == 200
+        errors = response.json()["errors"]
+        assert [e["code"] for e in errors] == ["BAD_VALUE"]
+        assert errors[0]["targets"] == [{"comp": resistor["id"]}]
+
+
 def test_netlist_rejects_malformed_json() -> None:
     response = client.post("/api/netlist", json={"schematic": {"version": 1}})
     assert response.status_code == 422

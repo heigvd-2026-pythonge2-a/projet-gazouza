@@ -30,6 +30,9 @@ VALUE = re.compile(
     re.IGNORECASE,
 )
 
+# Digits of an exponent once its leading zeros are removed: 1e999999 already overflows.
+MAX_EXPONENT_DIGITS = 6
+
 # Suffix used to write a value, by power of ten (engineering notation).
 _WRITE_SUFFIX = {12: "T", 9: "G", 6: "Meg", 3: "k", 0: "", -3: "m", -6: "u", -9: "n", -12: "p"}
 _WRITE_SUFFIX[-15] = "f"
@@ -47,7 +50,13 @@ def parse_value(text: str) -> float:
     # The suffix becomes a power of ten in the text itself ("10u" -> "10e-6"), so the value is
     # exact: 10 * 1e-6 would give 9.999999999999999e-06.
     mantissa, _, exponent = match["number"].lower().partition("e")
-    power = int(exponent or 0)
+    # An exponent of thousands of digits ("1e999...9") would make int() fail (Python limits
+    # the conversion to 4300 digits, #314): beyond 6 significant digits no float can hold it.
+    sign = "-" if exponent.startswith("-") else ""
+    digits = exponent.lstrip("+-").lstrip("0") or "0"  # int() counts leading zeros too
+    if len(digits) > MAX_EXPONENT_DIGITS:
+        raise InvalidValueError(f"{text!r} has a too long exponent")
+    power = int(sign + digits)
     if match["suffix"]:
         power += round(math.log10(SUFFIXES[match["suffix"].lower()]))
     value = float(f"{mantissa}e{power}")
