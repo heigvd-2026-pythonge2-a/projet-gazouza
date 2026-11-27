@@ -370,6 +370,18 @@
           {
             "value": "D_LED_GREEN",
             "label": "Verte"
+          },
+          {
+            "value": "D_LED_YELLOW",
+            "label": "Jaune"
+          },
+          {
+            "value": "D_LED_BLUE",
+            "label": "Bleue"
+          },
+          {
+            "value": "D_LED_WHITE",
+            "label": "Blanche"
           }
         ],
         "waveforms": []
