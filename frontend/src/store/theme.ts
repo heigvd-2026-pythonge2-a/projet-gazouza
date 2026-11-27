@@ -28,6 +28,17 @@ export interface ThemePalette {
   currentDot: string;
   /** The "unsaved" badge. */
   highlight: string;
+  /**
+   * Glow under the wires and pins of the node hovered or selected (#278): a magenta that the
+   * wires, the selection, the errors and the current do not use. Drawn half transparent.
+   */
+  nodeGlow: string;
+  /**
+   * Flag of a node label (#324): a pink fill, so it is not taken for the outline of a resistor,
+   * and a stronger pink outline.
+   */
+  labelFill: string;
+  labelStroke: string;
 
   /** Panels and controls around the canvas. */
   surface: string;
@@ -71,6 +82,9 @@ export const PALETTES: Record<ThemeName, ThemePalette> = {
     bandTouchFill: "rgba(22, 163, 74, 0.08)",
     currentDot: "#0284c7",
     highlight: "#f59e0b",
+    nodeGlow: "#c026d3",
+    labelFill: "#fce7f3",
+    labelStroke: "#be185d",
 
     surface: "#ffffff",
     surfaceTranslucent: "rgba(255, 255, 255, 0.92)",
@@ -113,6 +127,9 @@ export const PALETTES: Record<ThemeName, ThemePalette> = {
     // Lighter than the light theme's, so the dots stand out on the night blue.
     currentDot: "#38bdf8",
     highlight: "#fbbf24",
+    nodeGlow: "#e879f9",
+    labelFill: "#500724",
+    labelStroke: "#f472b6",
 
     surface: "#1e293b",
     surfaceTranslucent: "rgba(30, 41, 59, 0.92)",
@@ -164,6 +181,8 @@ export const COLORS = {
   pin: v("pin"),
   text: v("text"),
   highlight: v("highlight"),
+  labelFill: v("labelFill"),
+  labelStroke: v("labelStroke"),
 } as const;
 
 /** Colors and styles of the panels around the canvas (palette, inspector, bars). */

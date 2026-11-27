@@ -14,12 +14,13 @@ essayer chaque route depuis le navigateur.
 
 ## Routes
 
-| Méthode | Route | Reçoit | Renvoie |
-|---|---|---|---|
-| `GET` | `/api/health` | — | `{ "status": "ok" }` |
-| `GET` | `/api/library` | — | Liste de `LibraryComponent` |
-| `POST` | `/api/netlist` | `SimulationRequest` | `NetlistResult` |
-| `POST` | `/api/simulate` | `SimulationRequest` | `SimulationResult` |
+| Méthode | Route             | Reçoit                                                | Renvoie                     |
+| ------- | ----------------- | ----------------------------------------------------- | --------------------------- |
+| `GET`   | `/api/health`     | —                                                     | `{ "status": "ok" }`        |
+| `GET`   | `/api/library`    | —                                                     | Liste de `LibraryComponent` |
+| `POST`  | `/api/netlist`    | `SimulationRequest`                                   | `NetlistResult`             |
+| `POST`  | `/api/simulate`   | `SimulationRequest`                                   | `SimulationResult`          |
+| `POST`  | `/api/import/asc` | `{ "text": "...", "title": "..." }` (texte du `.asc`) | `ImportResult`              |
 
 ### `GET /api/library`
 
@@ -27,6 +28,14 @@ La partie **publique** de la bibliothèque : pour chaque type, `type`, `label`, 
 `params`. Les modèles de ligne SPICE et le texte des modèles restent dans le backend. La réponse
 exacte est figée dans
 [`shared/fixtures/library.json`](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/blob/main/shared/fixtures/library.json).
+
+### `POST /api/import/asc`
+
+Importe un schéma LTspice. Le client envoie le **texte** du fichier (déjà décodé) et, s'il le
+veut, un titre. La réponse `ImportResult` contient le `schematic` (ou `null` si le fichier est
+illisible), la première `analysis` du fichier (ou `null`), et des diagnostics : `errors`
+(`IMPORT_UNREADABLE`) et `warnings` (`IMPORT_SKIPPED` pour une partie laissée de côté,
+`IMPORT_CHANGED` pour une partie adaptée). L'import est partiel : toujours HTTP 200.
 
 ### `SimulationRequest`
 
@@ -39,12 +48,12 @@ Le corps de `POST /api/netlist` et `POST /api/simulate` :
 }
 ```
 
-| `kind` | Champs (unités SI) |
-|---|---|
-| `op` | aucun |
-| `tran` | `stop_time`, `max_step` (facultatif) |
-| `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (20 par défaut) |
-| `dc` | `source_id`, `start`, `stop`, `step` |
+| `kind` | Champs (unités SI)                                                                          |
+| ------ | ------------------------------------------------------------------------------------------- |
+| `op`   | aucun                                                                                       |
+| `tran` | `stop_time`, `points` (au moins N points, facultatif), `max_step` (facultatif)              |
+| `ac`   | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (20 par défaut) |
+| `dc`   | `source_id`, `start`, `stop`, `step`                                                        |
 
 ### `NetlistResult`
 
@@ -95,10 +104,10 @@ Chaque erreur est un `Diagnostic` :
 }
 ```
 
-| Champ | Rôle |
-|---|---|
-| `code` | Valeur d'une liste fermée, stable (c'est ce que les tests vérifient) |
-| `message` | En français, pour l'étudiant ; peut changer |
+| Champ     | Rôle                                                                           |
+| --------- | ------------------------------------------------------------------------------ |
+| `code`    | Valeur d'une liste fermée, stable (c'est ce que les tests vérifient)           |
+| `message` | En français, pour l'étudiant ; peut changer                                    |
 | `targets` | Les éléments à surligner : `comp`, `comp` + `pin`, `wire`, `junction` ou `net` |
 
 Un JSON mal formé donne **422** (validation Pydantic), un bug du serveur **500**. La liste des

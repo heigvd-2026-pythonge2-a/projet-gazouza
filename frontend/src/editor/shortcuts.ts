@@ -45,6 +45,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Ctrl + glisser", action: "Déplacer sans que les fils suivent" },
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
+      { keys: "Maj+R", action: "Tourner de 45° (composants à deux broches)" },
       { keys: "M", action: "Miroir" },
       {
         keys: "Glisser un nom ou une valeur",
@@ -67,6 +68,9 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: "Composants",
     items: [
       { keys: "1 à 9", action: "Choisir l'un des neuf premiers outils de la palette" },
+      { keys: "Ctrl+F", action: "Rechercher un composant dans la palette" },
+      { keys: "Entrée (recherche)", action: "Choisir le premier composant trouvé" },
+      { keys: "Échap (recherche)", action: "Effacer la recherche" },
       { keys: "Clic (outil composant)", action: "Poser le composant" },
       { keys: "Échap ou clic droit", action: "Arrêter de poser" },
     ],
@@ -107,6 +111,9 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   },
   {
     title: "Aide",
-    items: [{ keys: "?", action: "Afficher ou masquer cette liste" }],
+    items: [
+      { keys: "?", action: "Afficher ou masquer cette liste" },
+      { keys: "Ctrl+Maj+E", action: "Invoquer l'équipe" },
+    ],
   },
 ];

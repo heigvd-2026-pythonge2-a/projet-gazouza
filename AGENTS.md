@@ -152,6 +152,9 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   `10u`) ne servent que pour les paramètres saisis par l'utilisateur.
 - **Formatage** : ruff (Python) et Prettier (TS). Ne discute pas le style, lance l'outil.
 - **Fins de ligne** : LF partout (géré par `.gitattributes`), sauf `.ps1` / `.bat`.
+- **Actions GitHub** : dans `.github/workflows/`, toute action est épinglée par SHA de commit,
+  avec la version en commentaire (`uses: actions/checkout@<sha> # v7.0.1`), jamais par tag
+  seul. Dependabot (`github-actions`, mensuel) met à jour le SHA et le commentaire.
 
 ## Commandes
 
@@ -167,6 +170,7 @@ uv run python scripts/export_openapi.py       # régénérer shared/openapi.json
 pnpm install
 pnpm dev                                      # http://localhost:5173 (proxy /api -> 8000)
 pnpm test                                     # tests unitaires (vitest)
+pnpm test:coverage                            # tests + couverture (rapport dans coverage/)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
 pnpm build:demo                               # démo en ligne du site (website/public/demo/)
@@ -176,6 +180,7 @@ pnpm gen:api                                  # régénérer les types depuis sh
 pnpm install
 pnpm dev                                      # http://localhost:4321/projet-gazouza/
 pnpm build                                    # build du site statique (Astro)
+pnpm format                                   # formatage (Prettier, sauf les pages .mdx)
 ```
 
 Avant de considérer une tâche terminée : tests, lint et formatage doivent passer pour la partie

@@ -10,8 +10,8 @@ décrites dans [`docs/logo.md`](../../docs/logo.md).
 | Fichier | Contenu | Usage prévu |
 |---|---|---|
 | `psice-logo.svg` | Logo complet « Psice », vectoriel, fond transparent | Écran de démarrage, documents |
-| `psice-icon.svg` | Icône carrée : le P seul, avec point et borne, sur une tuile blanche arrondie | Icône à partir de 48 px, favicon |
-| `psice-icon-small.svg` | Icône simplifiée : trait plus épais, sans point central, borne pleine | Icône en 16, 24 et 32 px |
+| `psice-icon.svg` | Icône carrée : le P seul, avec point et borne, sur une tuile blanche arrondie | Icône à partir de 48 px |
+| `psice-icon-small.svg` | Icône simplifiée : trait plus épais, sans point central, borne pleine | Icône en 16, 24 et 32 px, favicon (site et application) |
 | `psice.ico` | Icône Windows multi-tailles (16, 24, 32, 48, 64, 128, 256 px) | `--icon` de PyInstaller, fenêtre pywebview |
 | `psice-icon-16.png`, `psice-icon-32.png`, `psice-icon-256.png` | Aperçus PNG de l'icône | Vérifier la lisibilité, favicon PNG |
 | `make_brand.py` | Script qui génère tous ces fichiers, ainsi que `docs/images/psice-logo.png` et `docs/images/psice-logo-animation.gif` | Modifier ou régénérer le logo |

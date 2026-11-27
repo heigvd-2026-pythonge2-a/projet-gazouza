@@ -188,6 +188,7 @@ cd backend
 uv run pytest                     # tests + fixtures du contrat
 cd ../frontend
 pnpm test                         # tests unitaires (vitest)
+pnpm test:coverage                # tests + taux de couverture
 pnpm lint ; pnpm build            # lint + vérification de types
 ```
 

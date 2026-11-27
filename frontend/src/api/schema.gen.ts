@@ -26,6 +26,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/import/asc": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Import Ltspice
+     * @description Partial import: a part Psice does not know is left out with a warning, never an HTTP
+     *     error. Only an unreadable file gives an error (and no schematic).
+     */
+    post: operations["import_ltspice_api_import_asc_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -109,6 +130,19 @@ export interface components {
        */
       points_per_decade: number;
     };
+    /** AscImportRequest */
+    AscImportRequest: {
+      /**
+       * Text
+       * @description Content of the `.asc` file, decoded by the client.
+       */
+      text: string;
+      /**
+       * Title
+       * @description Title of the schematic (file name).
+       */
+      title?: string | null;
+    };
     /**
      * Axis
      * @description Independent variable (time, frequency or swept value). Absent for `.op`.
@@ -150,11 +184,11 @@ export interface components {
       position: components["schemas"]["Point"];
       /**
        * Rotation
-       * @description Clockwise, in degrees.
+       * @description Clockwise, in degrees. On a diagonal (45, 135, 225, 315) each pin coordinate is rotated exactly, then rounded away from zero, so wires still attach to grid points (docs/format-schema.md, section 2).
        * @default 0
        * @enum {integer}
        */
-      rotation: 0 | 90 | 180 | 270;
+      rotation: 0 | 45 | 90 | 135 | 180 | 225 | 270 | 315;
       /**
        * Mirror
        * @description Horizontal mirror (x -> -x), applied before the rotation.
@@ -226,11 +260,18 @@ export interface components {
         | "WIRE_DANGLING"
         | "JUNCTION_DANGLING"
         | "MILLI_SUFFIX"
+        | "SHORTED_COMPONENT"
+        | "TRAN_STEP_TOO_LARGE"
+        | "LED_OVERCURRENT"
+        | "LED_REVERSE_VOLTAGE"
         | "SINGULAR_MATRIX"
         | "VOLTAGE_SOURCE_LOOP"
         | "NO_CONVERGENCE"
         | "SIMULATION_TIMEOUT"
-        | "SIMULATION_FAILED";
+        | "SIMULATION_FAILED"
+        | "IMPORT_UNREADABLE"
+        | "IMPORT_SKIPPED"
+        | "IMPORT_CHANGED";
       /**
        * Message
        * @description French message for the student. May change.
@@ -262,6 +303,36 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /**
+     * ImportResult
+     * @description A partial import is allowed: what could not be imported is listed in `warnings`.
+     */
+    ImportResult: {
+      /** @description The imported schematic. None if the file is unreadable. */
+      schematic?: components["schemas"]["Schematic"] | null;
+      /**
+       * Analysis
+       * @description The first analysis of the file, if it has one.
+       */
+      analysis?:
+        | (
+            | components["schemas"]["OpAnalysis"]
+            | components["schemas"]["TranAnalysis"]
+            | components["schemas"]["AcAnalysis"]
+            | components["schemas"]["DcAnalysis"]
+          )
+        | null;
+      /**
+       * Errors
+       * @description IMPORT_UNREADABLE: nothing could be imported.
+       */
+      errors?: components["schemas"]["Diagnostic"][];
+      /**
+       * Warnings
+       * @description IMPORT_SKIPPED (a part left out) and IMPORT_CHANGED (a part adapted).
+       */
+      warnings?: components["schemas"]["Diagnostic"][];
     };
     /**
      * Junction
@@ -600,8 +671,13 @@ export interface components {
        */
       stop_time: number;
       /**
+       * Points
+       * @description Optional: at least this many time points (#334); the maximum step is stop_time / points. ngspice may give more points (adaptive step), never fewer. None: about 1000.
+       */
+      points?: number | null;
+      /**
        * Max Step
-       * @description Optional, in seconds.
+       * @description Optional advanced setting, in seconds. With `points` too, the smaller step of the two is used.
        */
       max_step?: number | null;
     };
@@ -671,6 +747,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LibraryComponent"][];
+        };
+      };
+    };
+  };
+  import_ltspice_api_import_asc_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AscImportRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ImportResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

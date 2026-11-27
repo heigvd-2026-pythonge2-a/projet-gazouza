@@ -5,61 +5,70 @@
  * room at all. There, the iframe is not loaded and a short notice with a screenshot replaces it,
  * plus a link to open the demo anyway.
  */
-import { Image } from 'astro:assets';
-import screenshot from '../assets/psice-app.png';
+import AppScreenshot from "./AppScreenshot.astro";
 
-const base = '/projet-gazouza/demo/index.html';
+const base = "/projet-gazouza/demo/index.html";
 const examples = [
-	['divider_op', 'Diviseur de tension'],
-	['loaded_divider_dc', 'Diviseur chargé'],
-	['rc_tran', 'Circuit RC'],
-	['lowpass_ac', 'Filtre passe-bas'],
+  ["divider_op", "Diviseur de tension"],
+  ["loaded_divider_dc", "Diviseur chargé"],
+  ["rc_tran", "Circuit RC"],
+  ["lowpass_ac", "Filtre passe-bas"],
 ];
 const first = `${base}?demo=divider_op`;
 ---
 
 <div class="psice-demo-wide">
-	<div class="psice-demo-links">
-		Ouvrir un exemple :
-		{examples.map(([id, label]) => <a href={`${base}?demo=${id}`} target="psice-demo">{label}</a>)}
-		<a href={base} target="psice-demo">Schéma vide</a>
-	</div>
+  <div class="psice-demo-links">
+    Ouvrir un exemple :
+    {examples.map(([id, label]) => (
+      <a href={`${base}?demo=${id}`} target="psice-demo">
+        {label}
+      </a>
+    ))}
+    <a href={base} target="psice-demo">
+      Schéma vide
+    </a>
+  </div>
 
-	<iframe
-		class="psice-demo"
-		name="psice-demo"
-		data-src={first}
-		title="Démo de l'éditeur de Psice"
-	></iframe>
+  <iframe
+    class="psice-demo"
+    name="psice-demo"
+    data-src={first}
+    title="Démo de l'éditeur de Psice"
+  ></iframe>
 
-	<p class="psice-demo-fullscreen">
-		<a href={first} target="_blank">Ouvrir la démo en plein écran ↗</a>
-	</p>
+  <p class="psice-demo-fullscreen">
+    <a href={first} target="_blank">
+      Ouvrir la démo en plein écran ↗
+    </a>
+  </p>
 </div>
 
 <div class="psice-demo-narrow">
-	<p>
-		<strong>La démo s'utilise sur un écran d'ordinateur.</strong> L'éditeur a besoin de place
-		pour la palette, le schéma et les propriétés : sur un téléphone, le schéma n'a plus la place
-		de s'afficher. Voici à quoi ressemble l'interface :
-	</p>
-	<Image src={screenshot} alt="L'interface de Psice : palette, schéma d'un circuit RC et courbes" />
-	<p class="psice-demo-fullscreen">
-		<a href={first} target="_blank">Ouvrir quand même ↗</a>
-	</p>
+  <p>
+    <strong>La démo s'utilise sur un écran d'ordinateur.</strong> L'éditeur a besoin de place pour
+    la palette, le schéma et les propriétés : sur un téléphone, le schéma n'a plus la place de
+    s'afficher. Voici à quoi ressemble l'interface :
+  </p>
+  <AppScreenshot alt="L'interface de Psice : un diviseur de tension simulé, avec les tensions et les courants sur le schéma et le panneau Résultats" />
+  <p class="psice-demo-fullscreen">
+    <a href={first} target="_blank">
+      Ouvrir quand même ↗
+    </a>
+  </p>
 </div>
 
 <script>
-	// Same width as the media query of .psice-demo-wide in custom.css. The iframe gets its address
-	// only on a wide screen, so a phone does not download the editor for nothing; a window widened
-	// later loads it then.
-	const wide = window.matchMedia('(min-width: 56rem)');
-	const load = () => {
-		const frame = document.querySelector<HTMLIFrameElement>('iframe.psice-demo[data-src]');
-		if (!frame || !wide.matches) return;
-		frame.src = frame.dataset.src ?? '';
-		frame.removeAttribute('data-src');
-	};
-	load();
-	wide.addEventListener('change', load);
+  // Same width as the media query of .psice-demo-wide in custom.css. The iframe gets its address
+  // only on a wide screen, so a phone does not download the editor for nothing; a window widened
+  // later loads it then.
+  const wide = window.matchMedia("(min-width: 56rem)");
+  const load = () => {
+    const frame = document.querySelector<HTMLIFrameElement>("iframe.psice-demo[data-src]");
+    if (!frame || !wide.matches) return;
+    frame.src = frame.dataset.src ?? "";
+    frame.removeAttribute("data-src");
+  };
+  load();
+  wide.addEventListener("change", load);
 </script>

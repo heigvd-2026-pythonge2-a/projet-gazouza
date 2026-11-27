@@ -1,0 +1,38 @@
+{
+  "netlist": "* Résistance court-circuitée\nV1 n1 0 DC 10\nR1 n1 n2 1k\nR2 n2 0 1k\nR3 n2 n2 1k\n.op\n.end\n",
+  "nets": {
+    "n1": [
+      "w1"
+    ],
+    "n2": [
+      "w2",
+      "w5",
+      "w6"
+    ],
+    "0": [
+      "w3",
+      "w4"
+    ]
+  },
+  "components": {
+    "V1": "c1",
+    "R1": "c2",
+    "R2": "c3",
+    "R3": "c6"
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "code": "SHORTED_COMPONENT",
+      "message": "R3 est court-circuité : toutes ses broches sont reliées au même nœud (n2), il n'a aucun effet.",
+      "targets": [
+        {
+          "comp": "c6"
+        },
+        {
+          "net": "n2"
+        }
+      ]
+    }
+  ]
+}

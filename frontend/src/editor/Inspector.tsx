@@ -2,6 +2,7 @@ import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 import {
   TEXT_MAX_LENGTH,
+  choiceValue,
   getDef,
   nameProblem,
   netNameProblem,
@@ -170,8 +171,9 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           />
         )}
         {params.map((p) => {
-          // A choice missing from an older file (a label's direction) shows its default.
-          const value = c.params[p.name] ?? (p.kind === "choice" ? p.default : "");
+          // A choice missing from an older file (a label's direction) shows the value used.
+          const value =
+            p.kind === "choice" ? choiceValue(def, c.params, p) : (c.params[p.name] ?? "");
           return (
             <Field
               key={p.name}
@@ -288,7 +290,7 @@ export function Inspector() {
         ? `${selection.length} éléments sélectionnés.`
         : selection.length === 1
           ? "Un fil n'a pas de propriétés."
-          : "Sélectionne un composant ou un texte pour voir et modifier ses propriétés.";
+          : "Sélectionnez un composant ou un texte pour voir et modifier ses propriétés.";
     content = (
       <>
         <h3 style={UI.heading}>Propriétés</h3>

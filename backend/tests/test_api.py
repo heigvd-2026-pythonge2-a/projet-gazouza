@@ -56,6 +56,23 @@ def test_infinite_analysis_value_is_not_a_server_error() -> None:
         assert [e["code"] for e in response.json()["errors"]] == ["BAD_VALUE"]
 
 
+def test_value_with_a_huge_exponent_is_not_a_server_error() -> None:
+    # "1e" + 5000 digits: more than int() converts, it was an HTTP 500 (#314).
+    request = fixture_request("divider_op")
+    resistor = next(c for c in request["schematic"]["components"] if c["type"] == "resistor")
+    resistor["params"]["resistance"] = "1e" + "9" * 5000
+    client_500 = TestClient(app, raise_server_exceptions=False)
+    for route in ("/api/netlist", "/api/simulate"):
+        response = client_500.post(route, json=request)
+        assert response.status_code == 200
+        errors = response.json()["errors"]
+        assert [e["code"] for e in errors] == ["BAD_VALUE"]
+        assert errors[0]["targets"] == [{"comp": resistor["id"]}]
+        # The message quotes only the start of the value, not its 5000 digits.
+        assert "« 1e9999999999999999999999999999… »" in errors[0]["message"]
+        assert len(errors[0]["message"]) < 120
+
+
 def test_netlist_rejects_malformed_json() -> None:
     response = client.post("/api/netlist", json={"schematic": {"version": 1}})
     assert response.status_code == 422
@@ -102,7 +119,7 @@ def has_ngspice() -> bool:
 
 @pytest.mark.ngspice
 @pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
-@pytest.mark.parametrize("circuit", ["divider_op", "rc_tran"])
+@pytest.mark.parametrize("circuit", ["divider_op", "rc_tran", "half_wave_rectifier"])
 def test_simulate_with_real_ngspice_matches_the_fixture(circuit: str) -> None:
     # The whole chain: schematic -> netlist (Damien) -> ngspice (Antoine) -> results.
     response = client.post("/api/simulate", json=fixture_request(circuit))

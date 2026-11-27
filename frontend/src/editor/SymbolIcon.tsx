@@ -1,4 +1,4 @@
-import { symbolBounds, type ComponentDef, type SymbolShape } from "../store";
+import { COLORS, ledColor, symbolBounds, type ComponentDef, type SymbolShape } from "../store";
 import { arcPoints } from "./symbolGeometry";
 
 const MARGIN = 0.3;
@@ -6,7 +6,23 @@ const MARGIN = 0.3;
 function ShapeSvg({ shape }: { shape: SymbolShape }) {
   switch (shape.kind) {
     case "line":
-      return <polyline points={shape.points.join(" ")} />;
+      // The flag of a label, in its colours of the canvas (#324).
+      if (shape.filled) {
+        return (
+          <polygon
+            points={shape.points.join(" ")}
+            fill={COLORS.labelFill}
+            stroke={COLORS.labelStroke}
+          />
+        );
+      }
+      // The light of an LED in the colour of the default model (#294).
+      return (
+        <polyline
+          points={shape.points.join(" ")}
+          stroke={shape.tone === "light" ? ledColor({}) : undefined}
+        />
+      );
     case "rect":
       return <rect x={shape.x} y={shape.y} width={shape.width} height={shape.height} />;
     case "circle":

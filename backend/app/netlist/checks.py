@@ -9,6 +9,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 
+from app.engines.parser import MAX_RESULT_POINTS
 from app.models import (
     AcAnalysis,
     Analysis,
@@ -20,19 +21,24 @@ from app.models import (
     FreeEnd,
     JunctionEnd,
     JunctionTarget,
+    NetTarget,
     PinEnd,
     PinTarget,
     Schematic,
     Target,
+    TranAnalysis,
     WireTarget,
 )
 from app.netlist.connectivity import Nodes, touches
 from app.netlist.library import ComponentType
 from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, parse_value
+from app.netlist.writer import tran_max_step
 
 LABEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 AUTOMATIC_NAME = re.compile(r"n\d+", re.IGNORECASE)
 SOURCE_TYPES = ("voltage_source", "current_source")
+MAX_SHOWN = 30  # characters of a typed value quoted in a message
+GROUND_NODE = "0"
 
 # Errors after which the nodes cannot be built safely.
 BLOCKING: set[DiagnosticCode] = {
@@ -66,6 +72,12 @@ def describe(comp: Component) -> str:
     if comp.type == "label":
         return f"l'étiquette {comp.params.get('net', '')}".rstrip()
     return comp.name or f"le composant {comp.id}"
+
+
+def shown(value: str) -> str:
+    """A value typed by the student, as quoted in a message: cut after MAX_SHOWN characters, so
+    a value of thousands of characters does not fill the screen (#314)."""
+    return value if len(value) <= MAX_SHOWN else value[:MAX_SHOWN] + "…"
 
 
 def capitalize(text: str) -> str:
@@ -148,14 +160,15 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
         elif param.kind == "choice":
             if value not in {o.value for o in param.options}:
                 report.error(
-                    "BAD_VALUE", f"{who} : « {value} » n'est pas un choix possible.", target
+                    "BAD_VALUE", f"{who} : « {shown(value)} » n'est pas un choix possible.", target
                 )
         elif param.kind == "text":
             if not LABEL_NAME.fullmatch(value) or AUTOMATIC_NAME.fullmatch(value):
                 report.error(
                     "BAD_LABEL_NAME",
-                    f"« {value} » n'est pas un nom de nœud valide : lettres, chiffres et _, en "
-                    "commençant par une lettre, et pas n1, n2… (réservés aux noms automatiques).",
+                    f"« {shown(value)} » n'est pas un nom de nœud valide : lettres, chiffres et "
+                    "_, en commençant par une lettre, et pas n1, n2… (réservés aux noms "
+                    "automatiques).",
                     target,
                 )
         else:
@@ -164,7 +177,8 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
             except InvalidValueError:
                 report.error(
                     "BAD_VALUE",
-                    f"{who} : « {value} » n'est pas une valeur valide pour « {param.label} ».",
+                    f"{who} : « {shown(value)} » n'est pas une valeur valide pour "
+                    f"« {param.label} ».",
                     target,
                 )
                 continue
@@ -258,6 +272,44 @@ def _check_analysis(report: Report, analysis: Analysis, components: dict[str, Co
     numbers = [v for v in analysis.model_dump().values() if isinstance(v, float)]
     if not all(math.isfinite(v) for v in numbers):
         report.error("BAD_VALUE", "L'analyse contient une valeur infinie ou invalide.")
+        return
+    _check_points(report, analysis)
+
+
+def minimum_points(analysis: Analysis) -> float:
+    """The fewest points ngspice can give for this analysis (#241). With an adaptive step a
+    `.tran` may give more, never fewer: refusing on this number never blocks a simulation that
+    could have worked."""
+    if isinstance(analysis, TranAnalysis):
+        # Without a maximum step, ngspice takes stop_time / 1000 (writer.analysis_line).
+        max_step = tran_max_step(analysis)
+        return analysis.stop_time / max_step if max_step else 1000
+    if isinstance(analysis, DcAnalysis):
+        return abs(analysis.stop - analysis.start) / analysis.step + 1
+    if isinstance(analysis, AcAnalysis):
+        low, high = sorted((analysis.start_frequency, analysis.stop_frequency))
+        return math.log10(high / low) * analysis.points_per_decade + 1
+    return 1
+
+
+def _thousands(value: float) -> str:
+    """10000000 -> '10 000 000', with the narrow no-break space of French."""
+    return f"{value:,.0f}".replace(",", " ")
+
+
+def _check_points(report: Report, analysis: Analysis) -> None:
+    points = minimum_points(analysis)
+    if points > MAX_RESULT_POINTS:
+        advice = {
+            "tran": "augmente le pas maximal ou réduis la durée",
+            "dc": "augmente le pas du balayage",
+            "ac": "réduis le nombre de points par décade ou la plage de fréquences",
+        }.get(analysis.kind, "réduis la taille de l'analyse")
+        report.error(
+            "SIMULATION_FAILED",
+            f"La simulation produirait au moins {_thousands(points)} points, la limite est "
+            f"{_thousands(MAX_RESULT_POINTS)} : {advice}.",
+        )
 
 
 def check_nodes(
@@ -291,3 +343,30 @@ def check_nodes(
             f"{capitalize(describe(components[label_id]))} est reliée à la masse.",
             ComponentTarget(comp=label_id),
         )
+    for comp in schematic.components:
+        _check_shorted(report, comp, nodes, library[comp.type])
+
+
+def _check_shorted(report: Report, comp: Component, nodes: Nodes, ctype: ComponentType) -> None:
+    """SHORTED_COMPONENT (#262): every pin of a component on one node, so it has no effect.
+
+    Not for a voltage source (ngspice already fails with VOLTAGE_SOURCE_LOOP), nor for a
+    component with one pin (ground, label), nor for one whose pins are only partly shorted (a
+    transistor wired as a diode is on purpose).
+    """
+    if ctype.spice is None or comp.type == "voltage_source" or len(ctype.pins) < 2:
+        return
+    if not all(touches(nodes, comp, pin.name) for pin in ctype.pins):
+        return  # PIN_NOT_CONNECTED already says what is wrong
+    shared = {nodes.pin_node.get((comp.id, pin.name)) for pin in ctype.pins}
+    if len(shared) != 1 or None in shared:
+        return
+    node = shared.pop()
+    where = "à la masse" if node == GROUND_NODE else f"au même nœud ({node})"
+    report.warning(
+        "SHORTED_COMPONENT",
+        f"{capitalize(describe(comp))} est court-circuité : toutes ses broches sont reliées "
+        f"{where}, il n'a aucun effet.",
+        ComponentTarget(comp=comp.id),
+        NetTarget(net=node),
+    )

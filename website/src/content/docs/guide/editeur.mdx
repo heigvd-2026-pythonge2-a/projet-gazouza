@@ -32,11 +32,26 @@ poignée au bord, par exemple « ◀ Propriétés » : un clic dessus (ou la tir
 taille d'avant. Un panneau fermé avec son bouton × ou depuis la barre d'outils laisse la même
 poignée.
 
+Sur un schéma vide (au lancement ou après **Nouveau**), une aide s'affiche au milieu de la
+feuille : comment poser un composant, tracer un fil, voir les raccourcis, et un bouton **Ouvrir un
+exemple** qui propose les circuits du menu **Exemples**. Elle disparaît dès que tu poses quelque
+chose et revient si tu effaces tout. Elle ne gêne rien : tu peux cliquer ou déposer un composant
+à travers.
+
 ## Poser des composants
 
 - **Glisse** un composant de la palette sur le schéma, ou **clique** dessus puis clique sur le
   schéma. Tu peux en poser plusieurs à la suite.
 - Les touches <kbd>1</kbd> à <kbd>9</kbd> choisissent directement les neuf premiers outils de la palette.
+- Pour trouver un composant sans parcourir les catégories, tape son nom dans le champ
+  **Rechercher** en haut de la palette (<kbd>Ctrl+F</kbd> pour y aller) : « zen » ne garde que la
+  diode Zener, « resist » trouve la résistance (majuscules et accents ne comptent pas). Le
+  désignateur (`R`, `C`, `Q`…) et la catégorie marchent aussi. <kbd>Entrée</kbd> choisit le
+  premier composant trouvé, prêt à poser ; <kbd>Échap</kbd> efface la recherche.
+- Un clic sur le titre d'une catégorie (Passifs, Sources…) la **replie** ou la déplie ; Psice
+  s'en souvient au prochain lancement. Une recherche montre ses résultats même dans une catégorie
+  repliée, et les touches <kbd>1</kbd> à <kbd>9</kbd> gardent leurs outils.
+- Élargis le panneau des composants pour voir **plus de colonnes** de tuiles.
 - <kbd>Échap</kbd> ou un clic droit arrête de poser.
 - Chaque composant reçoit un nom unique (`R1`, `R2`, `C1`…) et ses **valeurs par défaut** :
   il est simulable tout de suite.
@@ -74,10 +89,18 @@ le nouvel ordre, sans fil en double. Avec <kbd>Ctrl</kbd> enfoncé pendant le
 glisser, les fils restent sur place et se détachent du composant. Deux composants reliés broche
 contre broche le restent aussi : un fil apparaît entre eux quand tu les écartes.
 
+Pour voir **tout ce qui est relié** à un fil, survole-le : tous les fils et toutes les broches de
+son nœud s'entourent d'un halo rose, même à travers les points de connexion et les broches qui se
+touchent sans fil. Survoler une broche fait de même. Toutes les masses forment un seul nœud, comme
+les étiquettes qui portent le même nom. Un fil **sélectionné** garde son nœud en évidence, avec un
+halo plus marqué. Deux fils qui se croisent sans point de connexion ne sont pas reliés : le halo
+ne passe pas de l'un à l'autre, ce qui aide à repérer un fil qui ne touche pas la broche prévue.
+
 **Tout ce qui se touche est relié**, pour l'éditeur comme pour la simulation : deux broches
 l'une contre l'autre (une masse ou une étiquette posée directement sur la broche d'un composant,
-par exemple), une broche posée sur un point de connexion, ou le bout libre d'un fil posé sur une
-broche. Un carré rouge de broche non connectée disparaît dès que la broche touche quelque chose,
+par exemple), une broche posée sur un point de connexion, le bout libre d'un fil posé sur une
+broche, ou deux bouts libres de fils posés l'un contre l'autre (les deux fils n'en forment alors
+plus qu'un ; à trois bouts ou plus, ils se rejoignent sur un point de connexion). Un carré rouge de broche non connectée disparaît dès que la broche touche quelque chose,
 avant même que tu lâches le composant : c'est exactement ce que la simulation verra.
 
 Une broche posée **sur un fil** (ou un fil tracé ou glissé sur une broche) y est reliée. Un
@@ -107,12 +130,14 @@ décoratif** : la simulation l'ignore complètement.
 | Geste | Effet |
 |---|---|
 | Clic | Sélectionner un composant, un fil ou un texte |
+| Clic sur un interrupteur | L'ouvrir ou le fermer (bouton-poussoir : fermé tant que le clic est appuyé) |
 | <kbd>Maj</kbd> + clic | Ajouter ou retirer de la sélection |
 | Glisser dans le vide | Sélection par zone : ce qui est entièrement dedans, y compris les **tronçons** d'un fil qui dépasse (à supprimer avec <kbd>Suppr</kbd>) |
 | <kbd>Maj</kbd> + glisser dans le vide | Zone verte en pointillés : ajoute ce qui **touche** la zone, retire ce qui était déjà sélectionné |
 | Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser pour le déplacer (un tronçon glisse aussi dans sa longueur : ses voisins le suivent) |
 | Double-clic sur un fil | Sélectionner le fil entier |
 | <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
+| <kbd>Maj+R</kbd> | Tourner de 45° (composants à deux broches : pont de Graetz…) |
 | Flèches | Déplacer la sélection d'un pas de grille |
 | <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) : la copie suit la souris, <kbd>R</kbd> / <kbd>M</kbd> la tournent / la retournent, un clic la pose |
@@ -120,6 +145,15 @@ décoratif** : la simulation l'ignore complètement.
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
+
+### Composants en diagonale
+
+Pour dessiner un schéma comme dans le cours, par exemple un **pont de Graetz** avec ses quatre
+diodes en losange, <kbd>Maj+R</kbd> tourne les composants à deux broches (résistance, diode,
+condensateur, source…) de **45°** à chaque appui. En diagonale, les broches restent sur la grille
+pour que les fils s'y accrochent : le corps du symbole ne change pas, ce sont ses pattes qui
+s'allongent un peu. Les fils, eux, restent horizontaux et verticaux. <kbd>R</kbd> continue
+ensuite par quarts de tour, et l'orientation est gardée dans le fichier enregistré.
 
 ### Ranger le nom et la valeur d'un composant
 
@@ -185,17 +219,34 @@ passe-bas (`.ac`) et un diviseur chargé (`.dc`). L'exemple s'ouvre comme un nou
 Les schémas sont enregistrés dans des fichiers **`.psice.json`** : du JSON lisible, décrit dans
 [Format de schéma](/projet-gazouza/developpeurs/format-schema/).
 
+Pour ouvrir un schéma plus vite qu'avec **Ouvrir** (<kbd>Ctrl+O</kbd>), fais glisser son fichier
+`.psice.json` depuis l'Explorateur Windows et dépose-le sur le schéma : un cadre « Déposer pour
+ouvrir le schéma » montre où le lâcher. Comme avec **Ouvrir**, Psice te demande quoi faire des
+modifications non enregistrées. Un schéma LTspice `.asc` déposé est
+importé, comme avec le bouton **Importer** (voir [Import LTspice](/projet-gazouza/guide/import-ltspice/)).
+Un autre type de fichier est refusé avec un message.
+
 <kbd>Ctrl+S</kbd> enregistre toujours, même sans modification. Si le fichier a été supprimé ou
 déplacé entre-temps, Psice te demande où l'enregistrer.
 
 Pour mettre le schéma dans un rapport, le bouton **Exporter** de la barre d'outils l'enregistre en
-image **PNG** : tout le circuit, sans la grille ni la sélection. Le fond est blanc par défaut ;
-coche **Fond transparent** pour poser l'image sur n'importe quel fond. Psice retient ton choix
-pour les exports suivants.
+image : tout le circuit, sans la grille ni la sélection, cadré sur le circuit. Choisis le format :
 
-Psice te demande confirmation avant de fermer ou d'ouvrir un autre schéma si tu as des
-modifications non enregistrées : à la fermeture de la fenêtre, tu peux annuler, fermer sans
-enregistrer, ou **Enregistrer et fermer** en un seul clic. Et si un panneau rencontre une erreur
+- **PNG** : une image à coller partout ;
+- **SVG** : une image vectorielle, qui reste nette à toutes les tailles (agrandie ou imprimée) et
+  se modifie dans Inkscape ou Word. Les textes y restent du vrai texte, dans une police courante
+  (Arial).
+
+Le fond est blanc par défaut ; coche **Fond transparent** pour poser l'image sur n'importe quel
+fond (pour les deux formats). Psice retient tes choix pour les exports suivants.
+
+Si tu as des modifications non enregistrées, Psice te pose la question avant de les perdre : en
+fermant la fenêtre, avec **Nouveau**, **Ouvrir**, **Exemples**, **Importer** ou en déposant un
+fichier. Tu peux **annuler**, continuer **sans enregistrer** (« Ouvrir sans enregistrer »…), ou
+**enregistrer puis continuer** en un seul clic (« Enregistrer et ouvrir », « Enregistrer et
+fermer »…). Si l'enregistrement n'a pas lieu (tu fermes la fenêtre « Enregistrer sous »), rien
+n'est perdu : la question reste affichée. Pour **Ouvrir** et **Importer**, tu choisis d'abord le
+fichier, puis Psice pose la question. Et si un panneau rencontre une erreur
 inattendue, il te propose d'enregistrer une **copie de secours** (`schema-recupere.psice.json`)
 pour ne rien perdre.
 
@@ -212,3 +263,8 @@ Après une simulation `.op` ou `.tran`, le bouton **Animer** de la barre d'outil
 des points le long des fils, dans le sens du courant et d'autant plus vite que le courant est
 fort. Tu peux choisir le sens conventionnel du courant ou le sens des électrons. C'est une
 manière visuelle de vérifier où passe le courant dans le circuit.
+
+En `.tran`, les points ralentissent quand le courant diminue et **s'arrêtent sans disparaître**
+quand il s'annule, puis repartent quand il revient : dans un redresseur, on voit la diode
+**bloquer** le courant pendant l'alternance négative. Un fil où aucun courant ne passe pendant
+toute la simulation n'a pas de points.

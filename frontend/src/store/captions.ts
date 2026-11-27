@@ -7,8 +7,12 @@
 // is not measured here).
 
 import {
+  isDiagonalRotation,
   textBounds,
   toWorld,
+  toWorldExact,
+  turnPoint,
+  turnedRect,
   wirePath,
   type EditorDoc,
   type GridPoint,
@@ -94,12 +98,13 @@ export function captionRect(text: string, centre: GridPoint): GridRect {
 
 /** Box of the symbol (pins included), turned like the component, in grid coordinates. */
 export function symbolRect(c: PlacedComponent, def: ComponentDef = getDef(c.type)): GridRect {
-  const bounds = symbolBounds(def);
-  const a = toWorld(bounds.min, c);
-  const b = toWorld(bounds.max, c);
+  const box = turnedRect(symbolBounds(def), c);
+  if (!isDiagonalRotation(c.rotation)) return box;
+  // On a diagonal the pins are put a little further out, back on the grid (`toWorld`).
+  const points = [box.min, box.max, ...def.pins.map((pin) => toWorld(pin, c))];
   return {
-    min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
-    max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
+    min: { x: Math.min(...points.map((p) => p.x)), y: Math.min(...points.map((p) => p.y)) },
+    max: { x: Math.max(...points.map((p) => p.x)), y: Math.max(...points.map((p) => p.y)) },
   };
 }
 
@@ -108,23 +113,9 @@ export function toLocal(
   world: GridPoint,
   c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
 ): GridPoint {
-  const dx = world.x - c.position.x;
-  const dy = world.y - c.position.y;
-  let r: GridPoint;
-  switch (c.rotation) {
-    case 0:
-      r = { x: dx, y: dy };
-      break;
-    case 90:
-      r = { x: dy, y: -dx };
-      break;
-    case 180:
-      r = { x: -dx, y: -dy };
-      break;
-    case 270:
-      r = { x: -dy, y: dx };
-      break;
-  }
+  // The turn back (counterclockwise), then the mirror: `toWorld` in reverse.
+  const back = ((360 - c.rotation) % 360) as PlacedComponent["rotation"];
+  const r = turnPoint({ x: world.x - c.position.x, y: world.y - c.position.y }, back, false);
   // `+ 0` turns a -0 into 0, so a saved offset never reads "-0".
   return { x: (c.mirror ? -r.x : r.x) + 0, y: r.y + 0 };
 }
@@ -194,7 +185,7 @@ function autoCandidates(
 ): GridPoint[][] {
   if (c.type === "label") {
     const bounds = symbolBounds(def);
-    const tip = toWorld({ x: bounds.max.x + CAPTION_GAP, y: 0 }, c);
+    const tip = toWorldExact({ x: bounds.max.x + CAPTION_GAP, y: 0 }, c);
     const right = tip.x >= c.position.x - 0.01;
     return [
       texts.map(({ text }) => {
@@ -251,7 +242,7 @@ export function layoutCaptions(doc: EditorDoc): Map<string, Caption[]> {
     for (const { kind, text } of texts) {
       const offset = captionOffset(c, kind);
       if (!offset) continue;
-      const centre = toWorld(offset, c);
+      const centre = toWorldExact(offset, c);
       captions.push({ kind, text, centre, manual: true, overlapping: false });
     }
     out.set(c.id, captions);

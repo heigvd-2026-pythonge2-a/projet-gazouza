@@ -107,8 +107,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -157,7 +156,7 @@
       },
       {
         "name": "offset",
-        "label": "Décalage",
+        "label": "Offset",
         "unit": "A",
         "default": "0",
         "kind": "value",
@@ -189,6 +188,17 @@
         ]
       },
       {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
         "name": "damping",
         "label": "Amortissement",
         "unit": "1/s",
@@ -209,6 +219,43 @@
         "waveforms": [
           "sin"
         ]
+      }
+    ]
+  },
+  {
+    "type": "diode",
+    "label": "Diode",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "D_SIGNAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_SIGNAL",
+            "label": "Signal (type 1N4148)"
+          },
+          {
+            "value": "D_RECT",
+            "label": "Redressement (type 1N4007)"
+          }
+        ],
+        "waveforms": []
       }
     ]
   },
@@ -278,9 +325,13 @@
         "name": "direction",
         "label": "Direction",
         "unit": "",
-        "default": "none",
+        "default": "auto",
         "kind": "choice",
         "options": [
+          {
+            "value": "auto",
+            "label": "Automatique"
+          },
           {
             "value": "none",
             "label": "Aucune"
@@ -296,6 +347,292 @@
           {
             "value": "bidir",
             "label": "Bidirectionnelle"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "led",
+    "label": "LED",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Couleur",
+        "unit": "",
+        "default": "D_LED_RED",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_LED_RED",
+            "label": "Rouge"
+          },
+          {
+            "value": "D_LED_GREEN",
+            "label": "Verte"
+          },
+          {
+            "value": "D_LED_YELLOW",
+            "label": "Jaune"
+          },
+          {
+            "value": "D_LED_BLUE",
+            "label": "Bleue"
+          },
+          {
+            "value": "D_LED_WHITE",
+            "label": "Blanche"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "nmos",
+    "label": "MOSFET canal N",
+    "prefix": "M",
+    "pins": [
+      {
+        "name": "D",
+        "x": 1,
+        "y": -2
+      },
+      {
+        "name": "G",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "S",
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "M_NMOS_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "M_NMOS_GP",
+            "label": "Usage général (type 2N7000, seuil 2 V)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "npn",
+    "label": "Transistor NPN",
+    "prefix": "Q",
+    "pins": [
+      {
+        "name": "C",
+        "x": 1,
+        "y": -2
+      },
+      {
+        "name": "B",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "E",
+        "x": 1,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "Q_NPN_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "Q_NPN_GP",
+            "label": "Usage général (type 2N3904)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "opamp",
+    "label": "Ampli-op idéal",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_IDEAL",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_IDEAL",
+            "label": "Idéal (gain 10⁶, sans limite)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "opamp_real",
+    "label": "Ampli-op réel",
+    "prefix": "X",
+    "pins": [
+      {
+        "name": "+",
+        "x": -2,
+        "y": 1
+      },
+      {
+        "name": "-",
+        "x": -2,
+        "y": -1
+      },
+      {
+        "name": "out",
+        "x": 2,
+        "y": 0
+      },
+      {
+        "name": "V+",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "V-",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "OA_GENERIC",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "OA_GENERIC",
+            "label": "Générique (type 741 : gain 10⁵, 1 MHz)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "pnp",
+    "label": "Transistor PNP",
+    "prefix": "Q",
+    "pins": [
+      {
+        "name": "C",
+        "x": 1,
+        "y": 2
+      },
+      {
+        "name": "B",
+        "x": -2,
+        "y": 0
+      },
+      {
+        "name": "E",
+        "x": 1,
+        "y": -2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Modèle",
+        "unit": "",
+        "default": "Q_PNP_GP",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "Q_PNP_GP",
+            "label": "Usage général (type 2N3906)"
+          }
+        ],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "push_button",
+    "label": "Bouton-poussoir",
+    "prefix": "S",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "state",
+        "label": "État",
+        "unit": "",
+        "default": "SW_OPEN",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "SW_OPEN",
+            "label": "Ouvert"
+          },
+          {
+            "value": "SW_CLOSED",
+            "label": "Fermé"
           }
         ],
         "waveforms": []
@@ -326,6 +663,43 @@
         "default": "1k",
         "kind": "value",
         "options": [],
+        "waveforms": []
+      }
+    ]
+  },
+  {
+    "type": "switch",
+    "label": "Interrupteur",
+    "prefix": "S",
+    "pins": [
+      {
+        "name": "1",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "2",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "state",
+        "label": "État",
+        "unit": "",
+        "default": "SW_OPEN",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "SW_OPEN",
+            "label": "Ouvert"
+          },
+          {
+            "value": "SW_CLOSED",
+            "label": "Fermé"
+          }
+        ],
         "waveforms": []
       }
     ]
@@ -410,8 +784,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -460,7 +833,7 @@
       },
       {
         "name": "offset",
-        "label": "Décalage",
+        "label": "Offset",
         "unit": "V",
         "default": "0",
         "kind": "value",
@@ -492,6 +865,17 @@
         ]
       },
       {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
         "name": "damping",
         "label": "Amortissement",
         "unit": "1/s",
@@ -512,6 +896,47 @@
         "waveforms": [
           "sin"
         ]
+      }
+    ]
+  },
+  {
+    "type": "zener",
+    "label": "Diode Zener",
+    "prefix": "D",
+    "pins": [
+      {
+        "name": "A",
+        "x": 0,
+        "y": -2
+      },
+      {
+        "name": "K",
+        "x": 0,
+        "y": 2
+      }
+    ],
+    "params": [
+      {
+        "name": "model",
+        "label": "Tension Zener",
+        "unit": "",
+        "default": "D_Z5V1",
+        "kind": "choice",
+        "options": [
+          {
+            "value": "D_Z3V3",
+            "label": "3,3 V"
+          },
+          {
+            "value": "D_Z5V1",
+            "label": "5,1 V"
+          },
+          {
+            "value": "D_Z12",
+            "label": "12 V"
+          }
+        ],
+        "waveforms": []
       }
     ]
   }

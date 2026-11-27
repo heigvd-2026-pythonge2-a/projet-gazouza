@@ -1,51 +1,48 @@
 ---
 /**
- * Screenshot of the real Psice window: the voltage divider of shared/fixtures/ just simulated,
- * with the values on the schematic and the results panel. Taken from the online demo (how to
- * take it again: developpeurs/environnement.mdx, "La démo en ligne").
+ * Screenshot of the real Psice window, in the theme of the site: the voltage divider of
+ * shared/fixtures/ just simulated, with the values on the schematic and the results panel. Taken
+ * from the online demo (how to take it again: developpeurs/environnement.mdx, "La démo en ligne").
  */
-import { Image } from 'astro:assets';
-import screenshot from '../assets/psice-app.png';
+import AppScreenshot from "./AppScreenshot.astro";
 ---
 
 <figure class="showcase not-content">
-	<a href="/projet-gazouza/demarrer/essayer/" title="Essayer l'interface en ligne">
-		<Image
-			src={screenshot}
-			alt="La fenêtre de Psice : un diviseur de tension (source de 10 V, deux résistances de 1 kΩ) dans l'éditeur, simulé. Les tensions (10 V, 5 V) et les courants (5 mA) sont affichés sur le schéma et listés dans le panneau Résultats."
-			widths={[640, 1280, 1920, 2560]}
-			sizes="(min-width: 72rem) 72rem, 100vw"
-			loading="eager"
-		/>
-	</a>
-	<figcaption>
-		L'application telle qu'elle est aujourd'hui.
-		<a href="/projet-gazouza/demarrer/essayer/">Essaie-la en ligne</a>, sans rien installer.
-	</figcaption>
+  <a href="/projet-gazouza/demarrer/essayer/" title="Essayer l'interface en ligne">
+    <AppScreenshot
+      alt="La fenêtre de Psice : un diviseur de tension (source de 10 V, deux résistances de 1 kΩ) dans l'éditeur, simulé. Les tensions (10 V, 5 V) et les courants (5 mA) sont affichés sur le schéma et listés dans le panneau Résultats."
+      widths={[640, 1280, 1920, 2560]}
+      sizes="(min-width: 72rem) 72rem, 100vw"
+    />
+  </a>
+  <figcaption>
+    L'application telle qu'elle est aujourd'hui.
+    <a href="/projet-gazouza/demarrer/essayer/">Essaie-la en ligne</a>, sans rien installer.
+  </figcaption>
 </figure>
 
 <style>
-	.showcase {
-		margin: 0;
-	}
-	a:has(img) {
-		display: block;
-		overflow: hidden;
-		border: 1px solid var(--psice-card-border);
-		border-radius: 12px;
-		box-shadow:
-			0 30px 80px -30px var(--psice-glow),
-			0 10px 30px -12px rgba(2, 6, 23, 0.45);
-	}
-	img {
-		display: block;
-		width: 100%;
-		height: auto;
-	}
-	figcaption {
-		margin-top: 0.75rem;
-		text-align: center;
-		font-size: var(--sl-text-sm);
-		color: var(--sl-color-gray-3);
-	}
+  .showcase {
+    margin: 0;
+  }
+  a:has(img) {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--psice-card-border);
+    border-radius: 12px;
+    box-shadow:
+      0 30px 80px -30px var(--psice-glow),
+      0 10px 30px -12px rgba(2, 6, 23, 0.45);
+  }
+  a :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  figcaption {
+    margin-top: 0.75rem;
+    text-align: center;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
 </style>

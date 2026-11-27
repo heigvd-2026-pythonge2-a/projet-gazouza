@@ -10,25 +10,25 @@ sa partie contre ces fichiers, sans attendre les autres.
 
 ## Les quatre circuits
 
-| Dossier | Circuit | Analyse | Ce qu'il montre |
-|---|---|---|---|
-| `divider_op` | Diviseur 10 V, R1 = R2 = 1 kΩ | `.op` | Étiquettes `in` / `out`, deux masses |
-| `rc_tran` | Échelon 0 → 5 V sur un RC (1 kΩ, 1 µF, τ = 1 ms), sur 5 ms | `.tran` | Source `pulse`, `max_step` |
-| `lowpass_ac` | Passe-bas RC (1 kΩ, 159,15 nF, f<sub>c</sub> = 1 kHz) | `.ac` | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
-| `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V | `.dc` | Jonction en « T », noms automatiques `n1`, `n2` |
+| Dossier             | Circuit                                                    | Analyse | Ce qu'il montre                                        |
+| ------------------- | ---------------------------------------------------------- | ------- | ------------------------------------------------------ |
+| `divider_op`        | Diviseur 10 V, R1 = R2 = 1 kΩ                              | `.op`   | Étiquettes `in` / `out`, deux masses                   |
+| `rc_tran`           | Échelon 0 → 5 V sur un RC (1 kΩ, 1 µF, τ = 1 ms), sur 5 ms | `.tran` | Source `pulse`, `max_step`                             |
+| `lowpass_ac`        | Passe-bas RC (1 kΩ, 159,15 nF, f<sub>c</sub> = 1 kHz)      | `.ac`   | Source d'entrée désignée par l'analyse (`AC 1` ajouté) |
+| `loaded_divider_dc` | R1 = R2 = R3 = 1 kΩ, V1 balayée de 0 à 10 V                | `.dc`   | Jonction en « T », noms automatiques `n1`, `n2`        |
 
 Les fichiers `result.json` sont les **vraies sorties** de ngspice-47.
 
 ## Les fichiers d'un circuit
 
-| Fichier | Format | Produit par | Utilisé par |
-|---|---|---|---|
-| `schematic.json` | `Schematic` | Éditeur (Noé) | Netlist (Damien) |
-| `analysis.json` | `Analysis` | Éditeur / panneau de simulation | API (Damien), moteur (Antoine) |
-| `netlist.cir` | texte SPICE | Netlist (Damien) | ngspice (Antoine) |
-| `netlist.json` | `NetlistResult` | Netlist (Damien) | Moteur (Antoine), sondes (Noémi) |
-| `result.json` | `SimulationResult` | Moteur (Antoine) | Courbes et sondes (Noémi) |
-| `circuit.asc` | schéma LTspice | Import (Damien) | Import `.asc` (Damien) |
+| Fichier          | Format             | Produit par                     | Utilisé par                      |
+| ---------------- | ------------------ | ------------------------------- | -------------------------------- |
+| `schematic.json` | `Schematic`        | Éditeur (Noé)                   | Netlist (Damien)                 |
+| `analysis.json`  | `Analysis`         | Éditeur / panneau de simulation | API (Damien), moteur (Antoine)   |
+| `netlist.cir`    | texte SPICE        | Netlist (Damien)                | ngspice (Antoine)                |
+| `netlist.json`   | `NetlistResult`    | Netlist (Damien)                | Moteur (Antoine), sondes (Noémi) |
+| `result.json`    | `SimulationResult` | Moteur (Antoine)                | Courbes et sondes (Noémi)        |
+| `circuit.asc`    | schéma LTspice     | Import (Damien)                 | Import `.asc` (Damien)           |
 
 À la racine, `library.json` est la réponse exacte de `GET /api/library`, utilisée par les tests
 de l'éditeur à la place du backend.

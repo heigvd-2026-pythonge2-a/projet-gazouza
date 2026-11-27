@@ -21,14 +21,15 @@
     { "name": "dc", "label": "Courant continu", "unit": "A", "default": "1m", "waveforms": ["dc"] },
     { "name": "i1", "label": "Courant bas", "unit": "A", "default": "0", "waveforms": ["pulse"] },
     { "name": "i2", "label": "Courant haut", "unit": "A", "default": "1m", "waveforms": ["pulse"] },
-    { "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse", "sin"] },
+    { "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse"] },
     { "name": "rise", "label": "Temps de montée", "unit": "s", "default": "1n", "waveforms": ["pulse"] },
     { "name": "fall", "label": "Temps de descente", "unit": "s", "default": "1n", "waveforms": ["pulse"] },
     { "name": "width", "label": "Durée haute", "unit": "s", "default": "1m", "waveforms": ["pulse"] },
     { "name": "period", "label": "Période", "unit": "s", "default": "2m", "waveforms": ["pulse"] },
-    { "name": "offset", "label": "Décalage", "unit": "A", "default": "0", "waveforms": ["sin"] },
+    { "name": "offset", "label": "Offset", "unit": "A", "default": "0", "waveforms": ["sin"] },
     { "name": "amplitude", "label": "Amplitude", "unit": "A", "default": "1m", "waveforms": ["sin"] },
     { "name": "frequency", "label": "Fréquence", "unit": "Hz", "default": "1k", "waveforms": ["sin"] },
+    { "name": "sin_delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["sin"] },
     { "name": "damping", "label": "Amortissement", "unit": "1/s", "default": "0", "waveforms": ["sin"] },
     { "name": "phase", "label": "Phase", "unit": "°", "default": "0", "waveforms": ["sin"] }
   ],
@@ -36,6 +37,6 @@
   "waveforms": {
     "dc": "DC {dc}",
     "pulse": "PULSE({i1} {i2} {delay} {rise} {fall} {width} {period})",
-    "sin": "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
+    "sin": "SIN({offset} {amplitude} {frequency} {sin_delay} {damping} {phase})"
   }
 }

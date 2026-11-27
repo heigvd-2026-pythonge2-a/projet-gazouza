@@ -122,7 +122,8 @@ _LOGO_GLYPH_PATHS: tuple[tuple[str, str, str], ...] = (
 
 _closing_lock = threading.Lock()
 _closing_windows: set[int] = set()
-_pending_async_close_windows: set[int] = set()
+_pending_async_close_windows: dict[int, int] = {}
+_next_close_request_token = 0
 _bypass_close_guard_windows: set[int] = set()
 
 
@@ -983,18 +984,24 @@ def _request_page_close(window: Any, *, timeout: float | None = None) -> bool:
     Returns False when the frontend handler is unavailable or failed, so the caller
     can fall back to the native two-button confirmation dialog.
     """
-    if not _has_close_request_handler(window, timeout=timeout):
-        return False
+    global _next_close_request_token
 
     window_key = id(window)
+    if not _has_close_request_handler(window, timeout=timeout):
+        with _closing_lock:
+            _pending_async_close_windows.pop(window_key, None)
+        return False
+
     with _closing_lock:
-        if window_key in _pending_async_close_windows:
-            return True
-        _pending_async_close_windows.add(window_key)
+        _next_close_request_token += 1
+        token = _next_close_request_token
+        _pending_async_close_windows[window_key] = token
 
     def _on_close_decision(decision: Any) -> None:
         with _closing_lock:
-            _pending_async_close_windows.discard(window_key)
+            if _pending_async_close_windows.get(window_key) != token:
+                return
+            _pending_async_close_windows.pop(window_key, None)
         if decision is True:
             _force_close_window(window)
 
@@ -1012,7 +1019,8 @@ def _request_page_close(window: Any, *, timeout: float | None = None) -> bool:
         return True
 
     with _closing_lock:
-        _pending_async_close_windows.discard(window_key)
+        if _pending_async_close_windows.get(window_key) == token:
+            _pending_async_close_windows.pop(window_key, None)
     return False
 
 
@@ -1023,7 +1031,7 @@ def on_window_closing(window: Any) -> bool:
         if window_key in _bypass_close_guard_windows:
             _bypass_close_guard_windows.discard(window_key)
             return True
-        if window_key in _closing_windows or window_key in _pending_async_close_windows:
+        if window_key in _closing_windows:
             return False
         _closing_windows.add(window_key)
 

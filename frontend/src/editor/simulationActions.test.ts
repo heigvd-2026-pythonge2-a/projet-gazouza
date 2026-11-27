@@ -4,7 +4,7 @@ import { freshSimulation, useEditorStore } from "../store";
 import { fixtureDoc, fixtureResult } from "../store/testFixtures";
 import netlist from "../../../shared/fixtures/divider_op/netlist.json";
 import { editorState, resetEditorStore } from "../test/editorStore";
-import { exportNetlist, runSimulation } from "./simulationActions";
+import { exportNetlist, resimulateOperatingPoint, runSimulation } from "./simulationActions";
 
 /** Answers the backend routes like the real one would for the divider fixture. */
 function stubBackend(simulate: () => Response = () => Response.json(fixtureResult("divider_op"))) {
@@ -47,7 +47,11 @@ describe("runSimulation (#100)", () => {
     editorState().setAnalysis({ kind: "tran", stopTime: "5m", maxStep: "10u" });
     await runSimulation();
     const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
-    expect(body.analysis).toEqual({ kind: "tran", stop_time: 0.005, max_step: 1e-5 });
+    expect(body.analysis).toEqual({
+      kind: "tran",
+      stop_time: 0.005,
+      max_step: 1e-5,
+    });
     // Only an operating point needs the nodes.
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -161,5 +165,74 @@ describe("exportNetlist (#114)", () => {
     editorState().openDocument(fixtureDoc("divider_op"));
     await exportNetlist();
     expect(alert).toHaveBeenCalledWith(expect.stringMatching(/Pas de masse/));
+  });
+});
+
+describe("switches and push buttons on an operating point (#43)", () => {
+  /** The divider fixture with a push button `pb` in it (not wired: only its state matters). */
+  function withButton() {
+    const doc = fixtureDoc("divider_op");
+    editorState().openDocument(doc);
+    editorState().dropComponent("push_button", { x: 40, y: 0 });
+    return editorState().doc.components.at(-1)!.id;
+  }
+
+  const sentState = (fetch: ReturnType<typeof stubBackend>, call: number, id: string) => {
+    const body = JSON.parse(fetch.mock.calls[call]![1]!.body as string);
+    return body.schematic.components.find((c: { id: string }) => c.id === id).params.state;
+  };
+
+  it("simulates a push button held down closed, without changing the document", async () => {
+    const fetch = stubBackend();
+    const id = withButton();
+    const doc = editorState().doc;
+    editorState().pressButton(id);
+    await runSimulation();
+    expect(sentState(fetch, 0, id)).toBe("SW_CLOSED");
+    expect(editorState().doc).toBe(doc);
+  });
+
+  it("runs the operating point again, only after one", async () => {
+    const fetch = stubBackend(() => Response.json(fixtureResult("rc_tran")));
+    const id = withButton();
+    editorState().setAnalysis({ kind: "tran", stopTime: "5m" });
+    await runSimulation();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    resimulateOperatingPoint();
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    stubBackend();
+    editorState().setAnalysis({ kind: "op" });
+    await runSimulation();
+    const again = stubBackend();
+    editorState().toggleSwitch(id);
+    resimulateOperatingPoint();
+    await vi.waitFor(() => expect(editorState().simulating).toBe(false));
+    expect(sentState(again, 0, id)).toBe("SW_CLOSED");
+    expect(freshSimulation(editorState())?.analysis).toBe("op");
+  });
+
+  it("stops a run still going and keeps showing the new one as running", async () => {
+    let answer: (r: Response) => void = () => {};
+    stubBackend(() => Response.json(fixtureResult("divider_op")));
+    const id = withButton();
+    await runSimulation();
+    const slow = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          answer = resolve;
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", slow);
+    editorState().pressButton(id);
+    resimulateOperatingPoint();
+    editorState().pressButton(null);
+    resimulateOperatingPoint();
+    await Promise.resolve();
+    expect(editorState().simulating).toBe(true);
+    answer(Response.json(fixtureResult("divider_op")));
   });
 });

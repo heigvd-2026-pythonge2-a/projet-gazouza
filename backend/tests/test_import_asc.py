@@ -112,12 +112,36 @@ def test_file_too_large() -> None:
         ("R180", (-16, -96)),
         ("R270", (96, -16)),
         ("M0", (-16, 96)),  # mirror x -> -x
-        ("M90", (-96, -16)),  # mirror first, then rotate
+        # LTspice rotates first, then mirrors (checked with `LTspice.exe -netlist`).
+        ("M90", (96, 16)),
+        ("M180", (16, -96)),
+        ("M270", (-96, -16)),
     ],
 )
 def test_place_a_pin(orientation: str, expected: tuple[int, int]) -> None:
     rotation, mirror = parse_orientation(orientation)
     assert place(16, 96, rotation, mirror) == expected
+
+
+@pytest.mark.parametrize(
+    ("orientation", "psice"),
+    [("R0", (0, False)), ("R270", (270, False)), ("M0", (0, True)), ("M90", (270, True)),
+     ("M180", (180, True)), ("M270", (90, True))],
+)  # fmt: skip
+def test_orientation_in_the_psice_convention(orientation: str, psice: tuple[int, bool]) -> None:
+    """Psice mirrors first, then turns clockwise: an LTspice Mn is a mirror then -n degrees."""
+    assert parse_orientation(orientation) == psice
+
+
+def test_mirrored_and_turned_resistor_is_connected() -> None:
+    # R1 in M90 lies horizontally, its pins at (16, 16) and (96, 16) (as LTspice netlists it).
+    result = import_asc(asc("SYMBOL res 0 0 M90", "SYMATTR InstName R1",
+                            "FLAG 16 16 a", "FLAG 96 16 b"))  # fmt: skip
+    assert sorted(sorted(ends(w)) for w in result.schematic.wires) == [
+        [("c1", "1"), ("c2", "1")],
+        [("c1", "2"), ("c3", "1")],
+    ]
+    assert result.schematic.components[0].rotation == 270
 
 
 @pytest.mark.parametrize("orientation", ["R45", "X0", ""])
@@ -186,6 +210,30 @@ def test_flags() -> None:
     assert [c.type for c in components] == ["ground", "ground", "label", "label", "label", "label"]
     assert [c.params["net"] for c in components[2:]] == ["out", "V_out", "N_2x", "N_n3"]
     assert len(result.warnings) == 3  # the 3 renamed nodes
+
+
+def test_iopin_gives_the_label_direction() -> None:
+    # IOPIN In / Out / BiDir (#234); unknown, lonely or incomplete ones are ignored.
+    result = import_asc(asc("FLAG 0 0 a", "IOPIN 0 0 In", "FLAG 0 16 b", "IOPIN 0 16 Out",
+                            "FLAG 0 32 c", "IOPIN 0 32 BiDir", "FLAG 0 48 d", "IOPIN 0 48 Up",
+                            "FLAG 0 64 e", "IOPIN 99 99 In", "IOPIN 0 80", "IOPIN a b In",
+                            "FLAG 0 80 0", "IOPIN 0 80 In"))  # fmt: skip
+    components = result.schematic.components
+    assert [c.params.get("direction") for c in components[:5]] == [
+        "input", "output", "bidir", None, None,
+    ]  # fmt: skip
+    assert components[5].type == "ground" and components[5].params == {}
+    assert result.errors == [] and result.warnings == []
+
+
+def test_iopin_does_not_change_the_netlist() -> None:
+    lines = ["SYMBOL voltage 0 0 R0", "SYMATTR InstName V1", "SYMATTR Value 5", "FLAG 0 96 0",
+             "FLAG 0 16 out"]  # fmt: skip
+    netlists = [
+        generate_netlist(import_asc(asc(*extra)).schematic, OpAnalysis()).netlist
+        for extra in (lines, [*lines, "IOPIN 0 16 Out"])
+    ]
+    assert netlists[0] == netlists[1]
 
 
 # --- 20d. Values, sources and directives -------------------------------------------------------
@@ -511,3 +559,93 @@ def test_renamed_component_stays_unique() -> None:
              opamp, "SYMATTR InstName XU1", opamp, "SYMATTR InstName U1"]  # fmt: skip
     names = [c.name for c in import_asc(asc(*lines)).schematic.components]
     assert names == ["RXU1", "XU1_2", "XU1", "XU1_3"]  # never the name of another one
+
+
+# --- Transistors and LED colours ---------------------------------------------------------------
+
+
+def test_transistors_are_imported_with_the_generic_models() -> None:
+    lines = [
+        "SYMBOL npn 0 0 R0", "SYMATTR InstName Q1", "SYMATTR Value 2N3904",
+        "SYMBOL pnp 200 0 R0", "SYMATTR InstName Q2", "SYMATTR Value Q_PNP_GP",
+        "SYMBOL nmos 400 0 R0", "SYMATTR InstName M1", "SYMATTR Value BSS123",
+        "SYMBOL npn2 600 0 R0", "SYMATTR InstName T1",
+    ]  # fmt: skip
+    result = import_asc(asc(*lines))
+    parts = [(c.type, c.name, c.params["model"]) for c in result.schematic.components]
+    assert parts == [
+        ("npn", "Q1", "Q_NPN_GP"),
+        ("pnp", "Q2", "Q_PNP_GP"),
+        ("nmos", "M1", "M_NMOS_GP"),
+        ("npn", "QT1", "Q_NPN_GP"),
+    ]
+    assert result.errors == []
+    assert "Q1 : le modèle LTspice « 2N3904 » est remplacé" in result.warnings[0]
+    assert not any(w.startswith("Q2") for w in result.warnings)  # already the Psice model
+
+
+def test_pnp_is_turned_over() -> None:
+    # Collector at the top in LTspice, at the bottom in Psice: drawn upside down.
+    result = import_asc(asc("SYMBOL pnp 0 0 R0", "SYMATTR InstName Q1",
+                            "SYMBOL pnp 200 0 M90", "SYMATTR InstName Q2"))  # fmt: skip
+    turns = [(c.rotation, c.mirror) for c in result.schematic.components]
+    assert turns == [(180, True), (90, False)]
+
+
+@pytest.mark.parametrize(
+    ("symbol", "flags"),
+    [
+        # Pin positions as `LTspice.exe -netlist` connects them (M90: turned, then mirrored).
+        ("npn 0 0 M90", {"c": (0, 64), "b": (48, 0), "e": (96, 64)}),
+        ("pnp 0 0 R90", {"c": (0, 64), "b": (-48, 0), "e": (-96, 64)}),
+        ("nmos 0 0 M270", {"d": (0, -48), "g": (-80, 0), "s": (-96, -48)}),
+    ],
+)
+def test_transistor_pins_are_where_ltspice_puts_them(
+    symbol: str, flags: dict[str, tuple[int, int]]
+) -> None:
+    lines = [f"SYMBOL {symbol}", "SYMATTR InstName X1"]
+    lines += [f"FLAG {x} {y} {net}" for net, (x, y) in flags.items()]
+    result = import_asc(asc(*lines))
+    comps = {c.id: c for c in result.schematic.components}
+    nets = {}
+    for wire in result.schematic.wires:
+        pin, label = sorted(ends(wire), key=lambda e: comps[e[0]].type == "label")
+        nets[pin[1].lower()] = comps[label[0]].params["net"]
+    assert nets == {net: net for net in flags}
+
+
+def test_led_colours() -> None:
+    values = ["LXHL-YELLOW", "QTLP690C-BLUE", "NSPW500BS (white)", "LXHL-RED", "LED-VERT"]
+    lines = [f"SYMBOL led {i * 100} 0 R0\nSYMATTR InstName D{i}\nSYMATTR Value {v}"
+             for i, v in enumerate(values)]  # fmt: skip
+    models = [c.params["model"] for c in import_asc(asc(*lines)).schematic.components]
+    assert models == ["D_LED_YELLOW", "D_LED_BLUE", "D_LED_WHITE", "D_LED_RED", "D_LED_GREEN"]
+
+
+COMMON_EMITTER = [
+    # V1 = 12 V; RB = 470k from vcc to the base; RC = 1k from vcc to the collector.
+    "SYMBOL voltage 0 0 R0", "SYMATTR InstName V1", "SYMATTR Value 12",
+    "FLAG 0 16 vcc", "FLAG 0 96 0",
+    "SYMBOL res 200 0 R0", "SYMATTR InstName RB", "SYMATTR Value 470k",
+    "FLAG 216 16 vcc", "FLAG 216 96 b",
+    "SYMBOL res 600 0 R0", "SYMATTR InstName RC", "SYMATTR Value 1k",
+    "FLAG 616 16 vcc", "FLAG 616 96 c",
+    "SYMBOL npn 400 0 R0", "SYMATTR InstName Q1", "SYMATTR Value 2N3904",
+    "FLAG 464 0 c", "FLAG 400 48 b", "FLAG 464 96 0",
+    "TEXT 0 200 Left 2 !.op",
+]  # fmt: skip
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+def test_imported_common_emitter_simulates() -> None:
+    result = import_asc(asc(*COMMON_EMITTER))
+    assert result.errors == [] and result.analysis is not None
+    netlist = generate_netlist(result.schematic, result.analysis)
+    assert netlist.errors == []
+    simulation = run_simulation(netlist, result.analysis)
+    assert simulation.errors == []
+    voltages = {t.net: t.values[0] for t in simulation.traces if t.kind == "voltage"}
+    assert voltages["b"] == pytest.approx(0.7, abs=0.15)  # base-emitter junction
+    assert 1 < voltages["c"] < 11.5  # the transistor conducts, not saturated

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import rcAnalysis from "../../../shared/fixtures/rc_tran/analysis.json";
+import rcSchematic from "../../../shared/fixtures/rc_tran/schematic.json";
 import { fixtureDoc, fixtureLibrary } from "../store/testFixtures";
 
 // fileActions remembers the current file in its module: each test loads it (and the store it
@@ -7,9 +9,19 @@ import { fixtureDoc, fixtureLibrary } from "../store/testFixtures";
 async function load() {
   vi.resetModules();
   const actions = await import("./fileActions");
+  const dialog = await import("./unsavedDialog");
+  // As in the app, where CloseDialog shows the question (it is not rendered here).
+  dialog.registerUnsavedDialog();
   const store = await import("../store");
   store.setLibrary(fixtureLibrary()); // the fresh store has an empty library
-  return { ...actions, ...store, state: () => store.useEditorStore.getState() };
+  return {
+    ...actions,
+    ...dialog,
+    ...store,
+    state: () => store.useEditorStore.getState(),
+    /** The question about unsaved changes shown to the user, if any. */
+    question: () => dialog.useUnsavedDialog.getState().pending?.question ?? null,
+  };
 }
 
 /** A file handle of the File System Access API that keeps what is written to it. */
@@ -111,7 +123,7 @@ describe("saving with the system file dialogs", () => {
     const image = new Blob(["png"], { type: "image/png" });
     const exportImage = vi.fn(async () => image);
     views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, show() {}, exportImage });
-    const handle = fakeHandle(f.IMAGE_FILE_NAME);
+    const handle = fakeHandle(f.IMAGE_FILE_NAMES.png);
     const written: unknown[] = [];
     handle.createWritable = async () => ({
       write: async (data: unknown) => void written.push(data),
@@ -133,6 +145,24 @@ describe("saving with the system file dialogs", () => {
 
     await f.exportImage({ transparent: true });
     expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+
+    // SVG: its own name and file type.
+    await f.exportImage({ transparent: false, format: "svg" });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false, format: "svg" });
+    expect(showSaveFilePicker).toHaveBeenLastCalledWith({
+      suggestedName: "schema.svg",
+      types: [{ description: "Image SVG", accept: { "image/svg+xml": [".svg"] } }],
+    });
+  });
+
+  it("remembers the image format, PNG by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.EXPORT_FORMAT_KEY);
+    expect(f.exportFormat()).toBe("png");
+    f.setExportFormat("svg");
+    expect(f.exportFormat()).toBe("svg");
+    f.setExportFormat("png");
+    expect(f.exportFormat()).toBe("png");
   });
 
   it("remembers the transparent background choice, white by default", async () => {
@@ -236,16 +266,28 @@ describe("opening with the system file dialogs", () => {
     expect(f.state().doc.components).toHaveLength(1);
   });
 
-  it("does not open anything if the user keeps unsaved changes", async () => {
+  it("picks the file first, then asks about unsaved changes, and keeps them on Annuler (#332)", async () => {
     const f = await load();
-    const { showOpenFilePicker } = stubPickers(fakeHandle("x"), fakeHandle("y", "{}"));
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false),
-    );
+    const file = fakeHandle("pont.psice.json", f.serializeDoc(fixtureDoc("divider_op")));
+    const { showOpenFilePicker } = stubPickers(fakeHandle("x"), file);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const before = f.state().doc;
+
+    f.openFile();
+    expect(showOpenFilePicker).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(f.question()).toMatchObject({ title: "Ouvrir un schéma" }));
+    f.answerUnsavedQuestion(false);
+    await Promise.resolve();
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("does not ask about a file it cannot open", async () => {
+    const f = await load();
+    stubPickers(fakeHandle("x"), fakeHandle("y", "{}"));
     f.state().dropComponent("resistor", { x: 0, y: 0 });
     f.openFile();
-    expect(showOpenFilePicker).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(alert).toHaveBeenCalled());
+    expect(f.question()).toBeNull();
   });
 });
 
@@ -268,5 +310,239 @@ describe("without the file dialogs (other browsers)", () => {
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe(f.DEFAULT_FILE_NAME);
     expect(f.isUnsaved(f.state())).toBe(false);
+  });
+});
+
+describe("opening a dropped file (#277)", () => {
+  it("opens a schematic, and saves back to its file when the drop gave its handle", async () => {
+    const f = await load();
+    const handle = fakeHandle("pont.psice.json");
+    const file = new File([f.serializeDoc(fixtureDoc("divider_op"))], "pont.psice.json");
+    await f.openDroppedFile(file, handle as unknown as FileSystemFileHandle);
+    expect(f.state().doc.components.length).toBeGreaterThan(0);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    const { showSaveFilePicker } = stubPickers(fakeHandle("other"));
+    await f.saveFile();
+    expect(handle.written).toHaveLength(1);
+    expect(showSaveFilePicker).not.toHaveBeenCalled();
+  });
+
+  it("asks before dropping unsaved changes", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const before = f.state().doc;
+    const content = f.serializeDoc(fixtureDoc("divider_op"));
+    const opening = f.openDroppedFile(new File([content], "x.psice.json"));
+    await vi.waitFor(() => expect(f.question()).toMatchObject({ title: "Ouvrir un schéma" }));
+    f.answerUnsavedQuestion(false);
+    await opening;
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("imports an LTspice schematic (#225)", async () => {
+    const f = await load();
+    const fetch = stubImport({ schematic: rcSchematic, analysis: rcAnalysis });
+    await f.openDroppedFile(new File(["Version 4"], "filtre.ASC"));
+    expect(fetch).toHaveBeenCalledWith("/api/import/asc", expect.anything());
+    expect(f.state().doc.components).toHaveLength(rcSchematic.components.length);
+  });
+
+  it("refuses any other file, with a message", async () => {
+    const f = await load();
+    const before = f.state().doc;
+    await f.openDroppedFile(new File(["x"], "photo.png"));
+    expect(alert).toHaveBeenLastCalledWith(
+      expect.stringMatching(/« photo\.png » n'est pas un schéma/),
+    );
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("tells why a broken schematic cannot be opened", async () => {
+    const f = await load();
+    await f.openDroppedFile(new File(["not json"], "cassé.json"));
+    expect(alert).toHaveBeenCalledOnce();
+  });
+});
+
+/** Answers POST /api/import/asc with `result`, and keeps the requests. */
+function stubImport(result: unknown, status = 200) {
+  const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(JSON.stringify(result), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
+/** The bytes of `text` in UTF-16 LE, with the byte order mark or not. */
+function utf16le(text: string, bom: boolean): Uint8Array<ArrayBuffer> {
+  const start = bom ? 2 : 0;
+  const bytes = new Uint8Array(start + text.length * 2);
+  if (bom) bytes.set([0xff, 0xfe]);
+  for (let i = 0; i < text.length; i++) {
+    bytes[start + i * 2] = text.charCodeAt(i) & 0xff;
+    bytes[start + i * 2 + 1] = text.charCodeAt(i) >> 8;
+  }
+  return bytes;
+}
+
+describe("reading an LTspice file (#225)", () => {
+  const text = "Version 4\nSYMBOL res 16 0 R0\nSYMATTR Value 4,7kΩ é\n";
+
+  it("reads UTF-16 LE with or without its byte order mark, and UTF-8", async () => {
+    const f = await load();
+    expect(await f.decodeAsc(new Blob([utf16le(text, true)]))).toBe(text);
+    expect(await f.decodeAsc(new Blob([utf16le(text, false)]))).toBe(text);
+    expect(await f.decodeAsc(new Blob([text]))).toBe(text);
+  });
+
+  it("reads Windows-1252 text that is not UTF-8", async () => {
+    const f = await load();
+    // "µF é" in Windows-1252: not valid UTF-8.
+    expect(await f.decodeAsc(new Blob([new Uint8Array([0xb5, 0x46, 0x20, 0xe9])]))).toBe("µF é");
+  });
+});
+
+describe("importing an LTspice schematic (#225)", () => {
+  it("opens it as a new unsaved schematic, with its analysis", async () => {
+    const f = await load();
+    const fetch = stubImport({ schematic: rcSchematic, analysis: rcAnalysis, warnings: [] });
+    stubPickers(fakeHandle("unused"), fakeHandle("filtre.asc", "Version 4\n"));
+
+    f.importLtspice();
+    await vi.waitFor(() => expect(f.state().doc.components.length).toBeGreaterThan(0));
+    const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string);
+    expect(body).toEqual({ text: "Version 4\n", title: "filtre" });
+    expect(f.state().doc).toEqual(fixtureDoc("rc_tran"));
+    expect(f.isUnsaved(f.state())).toBe(true);
+    expect(f.state().analysis).toMatchObject({ kind: "tran", stopTime: "5m" });
+    expect(alert).not.toHaveBeenCalled();
+
+    // Saving asks where: the .asc file is never written over.
+    const target = fakeHandle("filtre.psice.json");
+    const { showSaveFilePicker } = stubPickers(target);
+    await f.saveFile();
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(target.written).toHaveLength(1);
+  });
+
+  it("lists what was left out or adapted", async () => {
+    const f = await load();
+    stubImport({
+      schematic: rcSchematic,
+      warnings: [
+        { code: "IMPORT_SKIPPED", message: "U1 (LT1001) ignoré : composant hors bibliothèque." },
+      ],
+    });
+    await f.openDroppedFile(new File(["Version 4"], "ampli.asc"));
+    expect(alert).toHaveBeenCalledWith(
+      "Schéma LTspice importé, avec ces remarques :\n" +
+        "• U1 (LT1001) ignoré : composant hors bibliothèque.",
+    );
+    expect(f.state().doc.components.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the current schematic when nothing could be imported", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    f.state().markSaved(f.state().doc);
+    const before = f.state().doc;
+    stubImport({
+      schematic: null,
+      errors: [{ code: "IMPORT_UNREADABLE", message: "Ce n'est pas un fichier LTspice." }],
+    });
+    await f.openDroppedFile(new File(["x"], "faux.asc"));
+    expect(alert).toHaveBeenCalledWith(
+      "Ce fichier LTspice n'a pas pu être importé :\n• Ce n'est pas un fichier LTspice.",
+    );
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("tells when the backend fails", async () => {
+    const f = await load();
+    stubImport({ detail: "Erreur interne" }, 500);
+    await f.openDroppedFile(new File(["x"], "faux.asc"));
+    expect(alert).toHaveBeenCalledWith("Impossible d'importer ce fichier LTspice : Erreur interne");
+  });
+
+  it("asks before dropping unsaved changes, once the schematic is imported", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const before = f.state().doc;
+    stubImport({ schematic: rcSchematic });
+    const importing = f.openDroppedFile(new File(["x"], "filtre.asc"));
+    await vi.waitFor(() =>
+      expect(f.question()).toMatchObject({
+        title: "Importer un schéma LTspice",
+        save: "Enregistrer et importer",
+        discard: "Importer sans enregistrer",
+      }),
+    );
+    f.answerUnsavedQuestion(false);
+    await importing;
+    expect(f.state().doc).toBe(before);
+  });
+});
+
+describe("unsaved changes before New, Open and Examples (#332)", () => {
+  it("never uses the native confirmation", async () => {
+    const f = await load();
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    void f.newFile();
+    void f.openExample("rc_tran");
+    expect(confirm).not.toHaveBeenCalled();
+    f.answerUnsavedQuestion(false);
+  });
+
+  it("goes on without asking when everything is saved", async () => {
+    const f = await load();
+    await f.newFile();
+    expect(f.question()).toBeNull();
+  });
+
+  it("New: Créer sans enregistrer gives up the changes, Annuler keeps them", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    const cancelled = f.newFile();
+    expect(f.question()).toEqual({
+      title: "Nouveau schéma",
+      save: "Enregistrer et créer",
+      discard: "Créer sans enregistrer",
+    });
+    f.answerUnsavedQuestion(false);
+    await cancelled;
+    expect(f.state().doc.components).toHaveLength(1);
+
+    const discarded = f.newFile();
+    f.answerUnsavedQuestion(true);
+    await discarded;
+    expect(f.state().doc.components).toEqual([]);
+  });
+
+  it("Examples: opens the example once the question is answered", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const opening = f.openExample("rc_tran");
+    expect(f.question()).toMatchObject({ title: "Ouvrir un exemple" });
+    f.answerUnsavedQuestion(true);
+    await opening;
+    expect(f.state().doc).toEqual(fixtureDoc("rc_tran"));
+  });
+
+  it("a second question while one is shown gets the same answer", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const first = f.askBeforeDroppingChanges("new");
+    const second = f.askBeforeDroppingChanges("close");
+    expect(f.question()).toMatchObject({ title: "Nouveau schéma" });
+    f.answerUnsavedQuestion(true);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
   });
 });

@@ -137,6 +137,24 @@ describe("point contacts become connections (#256)", () => {
     expectEditorAgreesWithBackend(doc);
   });
 
+  it("reconnects a wire cut in two once its pieces are brought back end to end (#291)", () => {
+    dropComponent("resistor", p(0, 0));
+    dropComponent("resistor", p(10, 0));
+    // What is left of a wire whose middle was deleted: two pieces with a gap from 4 to 6…
+    wire([0, 2], [4, 2], [4, 2]);
+    wire([10, 2], [6, 2], [6, 2]);
+    // …and a loose piece, moved into the gap: its ends land on both free ends.
+    wire([6, 5], [8, 5], [8, 5]);
+    const loose = editorState().doc.wires.at(-1)!;
+    editorState().select([loose.id]);
+    editorState().moveSelection(p(-2, -3));
+    const doc = editorState().doc;
+    expect(doc.wires).toHaveLength(1);
+    expect(doc.junctions).toEqual([]);
+    expect(unconnectedPins(doc)).toHaveLength(2);
+    expectEditorAgreesWithBackend(doc);
+  });
+
   it("connects what touches in an opened file, without marking it changed", () => {
     let doc = addComponent(emptyDoc(), {
       type: "resistor",
@@ -208,6 +226,50 @@ describe("normalizeContacts", () => {
     const out = normalizeContacts(doc);
     // Its free end lies on the pin it starts from: the wire joins the pin to itself.
     expect(out.wires).toEqual([]);
+  });
+
+  it("merges two wires whose free ends meet (#291)", () => {
+    const a = resistor(emptyDoc(), 0, 0);
+    const b = resistor(a.doc, 10, 0);
+    const doc: EditorDoc = {
+      ...b.doc,
+      wires: [
+        { id: "w10", from: { comp: a.id, pin: "2" }, to: p(5, 2), points: [] },
+        { id: "w14", from: p(5, 2), to: { comp: b.id, pin: "2" }, points: [] },
+      ],
+    };
+    const out = normalizeContacts(doc);
+    expect(out.junctions).toEqual([]);
+    expect(out.wires).toEqual([
+      { id: "w10", from: { comp: a.id, pin: "2" }, to: { comp: b.id, pin: "2" }, points: [] },
+    ]);
+    expect(normalizeContacts(out)).toBe(out);
+  });
+
+  it("joins three free ends meeting at a point with a junction", () => {
+    const doc: EditorDoc = {
+      ...emptyDoc(),
+      wires: [
+        { id: "w1", from: p(0, 0), to: p(5, 0), points: [] },
+        { id: "w2", from: p(5, 0), to: p(9, 0), points: [] },
+        { id: "w3", from: p(5, 4), to: p(5, 0), points: [] },
+      ],
+    };
+    const out = normalizeContacts(doc);
+    expect(out.junctions).toEqual([{ id: "j1", position: p(5, 0) }]);
+    expect(out.wires.map((w) => [w.from, w.to])).toEqual([
+      [p(0, 0), { junction: "j1" }],
+      [{ junction: "j1" }, p(9, 0)],
+      [p(5, 4), { junction: "j1" }],
+    ]);
+  });
+
+  it("leaves a single wire closed on itself by its free ends as it is", () => {
+    const doc: EditorDoc = {
+      ...emptyDoc(),
+      wires: [{ id: "w1", from: p(0, 0), to: p(0, 0), points: [p(4, 0), p(4, 4), p(0, 4)] }],
+    };
+    expect(normalizeContacts(doc)).toBe(doc);
   });
 
   it("leaves a wire passing over a pin unconnected", () => {

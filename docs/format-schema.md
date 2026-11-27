@@ -24,7 +24,7 @@ relient deux extrémités. **Chaque fil dit explicitement à quoi il est accroch
 | Points en T | Fil qui touche le milieu d'un autre | Objet `junction` |
 | Nom d'un nœud | Non défini | Composant `label` |
 | `name` des masses et étiquettes | Obligatoire (`GND1`, `GND2`) | Absent |
-| Dessin des symboles | Non défini | Champ `symbol` dans la bibliothèque |
+| Dessin des symboles | Non défini | Dans l'éditeur (`frontend/src/store/library.ts`) |
 | Erreurs | `message`, `component_id`, `wire_id` | `code` (liste fermée), `message`, `targets` |
 | `version` | `1` | `2` |
 
@@ -81,7 +81,7 @@ garantit qu'elles n'ont qu'une seule forme.
 | `type` | Un type de la bibliothèque (`resistor`, `capacitor`, `voltage_source`, `ground`, `label`…). |
 | `name` | Nom SPICE affiché, unique, qui **commence par le préfixe** du type (`R1`, `Rcharge`). **Absent** pour `ground` et `label`. |
 | `position` | En unités de grille (entiers). L'axe y va vers le bas. |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire. |
+| `rotation` | `0`, `90`, `180` ou `270`, sens horaire ; en diagonale `45`, `135`, `225` ou `315` (voir ci-dessous). |
 | `mirror` | `true` ou `false`. |
 | `params` | Valeurs **telles que l'utilisateur les tape** : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
 | `name_offset` | Facultatif. Position du nom (ou du nom de nœud d'une étiquette) **placée à la main**. Absent : placement automatique. |
@@ -89,6 +89,41 @@ garantit qu'elles n'ont qu'une seule forme.
 
 **Miroir et rotation** : le miroir est horizontal (`x → −x`) et s'applique **avant** la rotation.
 L'éditeur et l'import `.asc` utilisent la même règle.
+
+**Rotation en diagonale** (`45`, `135`, `225`, `315`, #163) : la position d'une broche doit rester
+sur la grille pour qu'un fil s'y accroche. Pour une broche `(x, y)` (rotation 0, unités de grille) :
+
+1. miroir d'abord (`x → −x`), puis rotation horaire (axe y vers le bas). En diagonale, on
+   n'utilise **pas** `cos` / `sin` (en flottants, un 0 exact sort comme ±2·10⁻¹⁶ et deviendrait
+   ±1 à l'arrondi) : on calcule d'abord les **entiers** `s = x + y` et `d = x − y`, puis :
+
+   | Rotation | `x'` | `y'` |
+   |---|---|---|
+   | 45 | `d / √2` | `s / √2` |
+   | 135 | `−s / √2` | `d / √2` |
+   | 225 | `−d / √2` | `−s / √2` |
+   | 315 | `s / √2` | `−d / √2` |
+
+   (c'est la rotation horaire `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`, écrite
+   exactement) ;
+2. en diagonale, **chaque coordonnée est arrondie en s'éloignant de zéro**
+   (`signe(v) · ⌈|v|⌉`, et `0` reste `0`), pas à l'entier le plus proche ; les quarts de tour
+   restent exacts ;
+3. puis translation à `position`.
+
+| Rotation | Broche `(0, −2)` | Broche `(0, 2)` |
+|---|---|---|
+| 0 | (0, −2) | (0, 2) |
+| 45 | (2, −2) | (−2, 2) |
+| 90 | (2, 0) | (−2, 0) |
+| 135 | (2, 2) | (−2, −2) |
+
+Les pattes s'allongent un peu, le corps du symbole tient toujours entre les broches. Avec des
+broches entières, `s` et `d` sont entiers : `0` donne exactement `0`, et `k/√2` (k ≠ 0) n'est
+jamais entier, donc `⌈|v|⌉` ne tombe jamais sur un cas limite. Python et TypeScript arrondissent
+donc pareil. Exemple : `(2, 2)` à 135° donne `(−4/√2, 0)`, soit `(−3, 0)`.
+L'import `.asc` ne produit que des quarts de tour. La netlist n'utilise pas les positions (les
+fils sont liés par `comp` + `pin`).
 
 **Position des textes d'un composant** (`name_offset`, `value_offset`) : `{ "x": 1.5, "y": -0.5 }`,
 en unités de grille (**nombres décimaux**, l'éditeur aimante sur une demi-case). C'est la position
@@ -193,10 +228,11 @@ Un fichier JSON par type, par exemple `library/resistor.json`. Elle est servie �
   - `text` : du texte libre (le nom d'une étiquette) ;
   - `choice` : une valeur parmi `options`, chacune avec sa `value` (enregistrée) et son `label`
     (affiché), par exemple `{ "value": "pulse", "label": "Impulsion" }`.
-- `symbol` : le **dessin** du symbole, sous forme d'une liste de formes simples (`line`, `rect`,
-  `circle`, `arc`, `text`) en unités de grille, à la rotation 0. Le cahier des charges (§3) demande
-  que les symboles soient dans la bibliothèque, pour l'étendre sans toucher au code. **Format exact
-  proposé par Noé** (c'est l'éditeur qui le dessine).
+- **Pas de champ `symbol`** : le dessin du symbole est dans l'éditeur
+  (`frontend/src/store/library.ts`, liste de formes simples `line`, `rect`, `circle`, `arc`, `text`
+  en unités de grille, à la rotation 0), avec le groupe de la palette. Le backend ne fournit que
+  ce qui sert à la netlist et aux propriétés ; un nouveau type de composant demande donc aussi son
+  symbole côté éditeur.
 - `spice` : le modèle de ligne. `{name}` = nom du composant, `{pin:X}` = nœud de la broche X,
   `{param}` = valeur d'un paramètre.
 - `models` (facultatif, interne au backend) : le **texte** des modèles SPICE, par nom : une ligne
@@ -237,7 +273,7 @@ Une source a une **forme d'onde**, utilisée pour `.op`, `.tran` et `.dc` :
   "waveforms": {
     "dc":    "DC {dc}",
     "pulse": "PULSE({v1} {v2} {delay} {rise} {fall} {width} {period})",
-    "sin":   "SIN({offset} {amplitude} {frequency} {delay} {damping} {phase})"
+    "sin":   "SIN({offset} {amplitude} {frequency} {sin_delay} {damping} {phase})"
   }
 }
 ```
@@ -250,7 +286,8 @@ Dans la bibliothèque, chaque paramètre d'une source indique les formes d'onde 
 pour que l'éditeur n'affiche que les champs utiles :
 
 ```json
-{ "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse", "sin"] }
+{ "name": "delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["pulse"] }
+{ "name": "sin_delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["sin"] }
 ```
 
 Le chargeur vérifie que cette liste correspond exactement aux `{…}` des modèles de `waveforms`.
@@ -280,7 +317,7 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
 | `kind` | Champs | Exemple | Ligne SPICE |
 | --- | --- | --- | --- |
 | `op` | aucun | `{"kind": "op"}` | `.op` |
-| `tran` | `stop_time`, `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "max_step": 1e-5}` | `.tran 10u 10m 0 10u` |
+| `tran` | `stop_time`, `points` (facultatif, entier), `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "points": 500}` | `.tran 20u 10m 0 20u` |
 | `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (**20 par défaut**) | `{"kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 1e5, "points_per_decade": 100}` | `.ac dec 100 10 100k` |
 | `dc` | `source_id`, `start`, `stop`, `step` | `{"kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1}` | `.dc V1 0 10 1` |
 
@@ -288,9 +325,15 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
   renommer la source ne casse rien.
 - **Ligne `.tran`** (décidé avec Antoine). En SPICE, c'est `.tran tstep tstop [tstart [tmax]]` : le
   1er argument est le pas d'**affichage**, le vrai pas maximum est le **4e**. Donc :
-  - sans `max_step` : `.tran {stop_time / 1000} {stop_time}` (environ 1000 points, assez pour
-    les courbes) ;
-  - avec `max_step` : `.tran {max_step} {stop_time} 0 {max_step}`.
+  - sans `points` ni `max_step` : `.tran {stop_time / 1000} {stop_time}` (environ 1000 points,
+    assez pour les courbes) ;
+  - sinon, avec le pas maximal `pas` = le plus petit de `stop_time / points` et `max_step` :
+    `.tran {pas} {stop_time} 0 {pas}`.
+
+  **`points` = au moins N points** (#334, choisi en équipe) : ngspice a un pas adaptatif, il peut
+  en donner plus (autour des fronts, par exemple 508 pour 500 demandés), jamais moins. C'est le
+  réglage proposé à l'étudiant ; `max_step` reste un réglage avancé facultatif. La limite de
+  200 000 points se vérifie avec ce minimum (`minimum_points()` dans `checks.py`).
 
   La fixture `rc_tran` (`.tran 0 5m 0 10u` sur `main`) devient `.tran 10u 5m 0 10u` à la migration.
 
@@ -351,22 +394,26 @@ produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 | --- | --- | --- | --- |
 | `NO_GROUND` | erreur | « Le circuit n'a pas de masse. » | aucune |
 | `PIN_NOT_CONNECTED` | erreur | « La broche 2 de R1 n'est reliée à rien. » | la broche |
-| `MISSING_NAME` | erreur | « Un composant n'a pas de nom. » | le composant |
+| `MISSING_NAME` | erreur | « Un composant « Résistance » n'a pas de nom. » | le composant |
 | `DUPLICATE_ID` | erreur | « Deux éléments ont le même identifiant c2. » (composants, jonctions et fils partagent les mêmes ids) | les éléments |
-| `DUPLICATE_NAME` | erreur | « Deux composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
-| `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour une résistance. » | le composant |
-| `BAD_VALUE` | erreur | « R1 : la résistance « 1kk » n'est pas une valeur valide. » | le composant |
-| `MISSING_PARAM` | erreur | « R1 : la résistance n'est pas renseignée. » | le composant |
+| `DUPLICATE_NAME` | erreur | « Plusieurs composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
+| `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour « Résistance » : il doit commencer par R et ne contenir que des lettres, des chiffres et _. » | le composant |
+| `BAD_VALUE` | erreur | « R1 : « 1kk » n'est pas une valeur valide pour « Résistance ». » (pour un choix : « … n'est pas un choix possible. ») | le composant |
+| `MISSING_PARAM` | erreur | « R1 : « Résistance » n'est pas renseigné. » | le composant |
 | `UNKNOWN_TYPE` | erreur | « Le type « triode » n'existe pas dans la bibliothèque. » | le composant |
-| `UNKNOWN_ENDPOINT` | erreur | « Le fil w3 est accroché à un composant, une broche ou une jonction qui n'existe pas. » | le fil |
-| `LABEL_CONFLICT` | erreur | « Le nœud porte deux noms : in et out. » | les étiquettes |
+| `UNKNOWN_ENDPOINT` | erreur | « Le fil w3 est accroché à un composant ou une broche qui n'existe pas. » (ou « … à une jonction qui n'existe pas. ») | le fil |
+| `LABEL_CONFLICT` | erreur | « Le nœud porte plusieurs noms : in et out. » | les étiquettes |
 | `LABEL_ON_GROUND` | erreur | « L'étiquette out est reliée à la masse. » | l'étiquette |
-| `BAD_LABEL_NAME` | erreur | « « 2out » n'est pas un nom de nœud valide. » | l'étiquette |
-| `AC_SOURCE_NOT_FOUND` | erreur | « La source d'entrée de l'analyse AC n'existe pas. » | aucune |
-| `DC_SOURCE_NOT_FOUND` | erreur | « La source balayée n'existe pas. » | aucune |
+| `BAD_LABEL_NAME` | erreur | « « 2out » n'est pas un nom de nœud valide : lettres, chiffres et _, en commençant par une lettre, et pas n1, n2… (réservés aux noms automatiques). » | l'étiquette |
+| `AC_SOURCE_NOT_FOUND` | erreur | « La source d'entrée de l'analyse AC n'existe pas ou n'est pas une source. » | aucune |
+| `DC_SOURCE_NOT_FOUND` | erreur | « La source balayée n'existe pas ou n'est pas une source. » | aucune |
 | `WIRE_DANGLING` | avertissement | « Le fil w4 a un bout qui n'est relié à rien. » | le fil |
 | `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
-| `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
+| `MILLI_SUFFIX` | avertissement | « R1 : « 1M » se lit « milli » en SPICE. Pour « méga », écris « 1Meg ». » | le composant |
+| `SHORTED_COMPONENT` | avertissement | « R1 est court-circuité : toutes ses broches sont reliées au même nœud (n3), il n'a aucun effet. » | le composant et le nœud |
+| `TRAN_STEP_TOO_LARGE` | avertissement | « V1 (sinusoïde de 1 kHz) : un point toutes les 100 µs, la courbe sera mal dessinée. Demande au moins 2 000 points. » (`.tran` seulement : pas plus grand que 1/20 de la période d'une sinusoïde, ou que 1/10 de la durée haute ou basse d'une impulsion) | la source |
+| `LED_OVERCURRENT` | avertissement | « La LED D1 reçoit 120 mA : elle grillerait (max ~30 mA). Ajoute une résistance en série. » | la LED |
+| `LED_REVERSE_VOLTAGE` | avertissement | « La LED D1 est soumise à 9 V en inverse : elle grillerait (max ~5 V). » | la LED |
 
 Une broche non reliée est une **erreur** (et non un avertissement) pour une raison
 **pédagogique** : pour un débutant, c'est presque toujours un oubli de câblage. ngspice, lui,
@@ -384,7 +431,17 @@ câblé donne donc une erreur `PIN_NOT_CONNECTED` par broche.
 | `SIMULATION_TIMEOUT` | Simulation trop longue, processus arrêté | aucune |
 | `SIMULATION_FAILED` | Tout le reste ; le message brut de ngspice est ajouté à la fin du message | aucune |
 
-Les deux tableaux forment **une seule liste fermée** de codes.
+**Import d'un fichier `.asc`** (`POST /api/import/asc`, réponse `ImportResult`) :
+
+| Code | Type | Quand | Cible |
+| --- | --- | --- | --- |
+| `IMPORT_UNREADABLE` | erreur | Fichier illisible (pas un `.asc`, trop gros, ligne incomplète) : pas de schéma | aucune |
+| `IMPORT_SKIPPED` | avertissement | Une partie du fichier est laissée de côté (symbole hors périmètre, orientation inconnue…) | aucune |
+| `IMPORT_CHANGED` | avertissement | Une partie est adaptée (nœud renommé, modèle remplacé, analyse ignorée…) | aucune |
+
+L'import est **partiel** : un composant inconnu ne bloque pas le reste du schéma.
+
+Les tableaux forment **une seule liste fermée** de codes.
 
 ### Règles
 
@@ -408,13 +465,16 @@ Les deux tableaux forment **une seule liste fermée** de codes.
 - `nets` : nœud → fils qui le forment. Clic sur un fil → tension du nœud (`v(out)`).
 - `components` : nom SPICE → id. Clic sur un composant → son courant.
 
-## 10. Questions encore ouvertes
+## 10. Questions tranchées
 
-| Question | Avec qui |
+Ces questions étaient ouvertes dans la proposition ; voici ce qui a été décidé.
+
+| Question | Décision |
 | --- | --- |
-| Format exact du champ `symbol` de la bibliothèque. | Noé (il propose) |
-| Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | Antoine |
-| Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Noémi |
+| Format exact du champ `symbol` de la bibliothèque. | Pas de champ `symbol` dans le backend : les symboles sont dessinés par l'éditeur (`frontend/src/store/library.ts`, Noé), voir la section 5. |
+| Courant dans une résistance ou un condensateur : `.save @r1[i]` ou source de 0 V en série ? | `.save @r1[i]` (et `@c1[i]`, `@d1[id]`, `@i1[c]`), sans source ajoutée : la netlist reste celle de l'étudiant (`engines/runner.py`, Antoine). |
+| Signe du courant d'une source : SPICE donne `i(v1) < 0` quand elle fournit du courant. On l'inverse à l'affichage ? | Le backend renvoie la valeur de SPICE, sans changer le signe. L'éditeur écrit « V1 fournit 5 mA » dans le tableau du `.op` et dessine une flèche dans le sens réel du courant (#290). |
+| Courants des broches d'un transistor. | Proposition dans #289 (courant entrant dans la broche, traces `i(Q1:C)`, champ `pin` de `Trace`), PR #360 en attente de l'accord d'Antoine et Noémi. |
 
 Les exemples complets (ce que je reçois, ce que je renvoie) sont dans
 [`exemples-netlist.md`](exemples-netlist.md).

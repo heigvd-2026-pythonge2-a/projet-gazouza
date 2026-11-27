@@ -25,12 +25,15 @@ import {
   closesWireLoop,
   moveWirePart,
   normalizeContacts,
+  orientLabels,
+  straightenWires,
   nudgeFree,
   pasteClip,
   removeHiddenWires,
   renameComponent,
   rotateComponents,
   rotateCw,
+  canTurnDiagonally,
   samePoint,
   segmentsInRect,
   setParam,
@@ -46,7 +49,7 @@ import {
 import { moveCaption, releaseCoveredCaptions, resetCaptions, type CaptionKind } from "./captions";
 import { emptyHistory, record, redo, seal, undo, type History } from "./history";
 import { routeAround } from "./routing";
-import { DEFAULT_ANALYSIS, type AnalysisSettings } from "./simulation";
+import { DEFAULT_ANALYSIS, type AnalysisSettings, type OperatingPointRow } from "./simulation";
 
 /** Grid units a component placed on top of another one is shifted by, until it is free. */
 export const PASTE_OFFSET: GridPoint = { x: 2, y: 2 };
@@ -62,6 +65,9 @@ export type Tool =
   | { kind: "paste"; clip: Clip }
   /** Click on the schematic to write a free text there (#123). */
   | { kind: "text" };
+
+/** Why Shift+R did nothing (#161). */
+export const DIAGONAL_NOTICE = "Seuls les composants à deux broches se tournent de 45°.";
 
 /** Content of a free text just placed, selected in the properties panel to be typed over. */
 export const NEW_TEXT = "Texte";
@@ -145,6 +151,13 @@ interface EditorState {
   simulationError: string | null;
   /** Show the operating point values (.op) on the schematic. */
   showValues: boolean;
+  /** What a hovered line of the results panel points at, highlighted on the schematic (#292). */
+  reportHighlight: OperatingPointRow["highlight"];
+  /**
+   * The push button held down with the mouse (#43): closed while it is held, without changing the
+   * document (nothing to save or undo). Simulations take it into account (`simulatedDoc`).
+   */
+  pressedButton: string | null;
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
@@ -175,6 +188,10 @@ interface EditorState {
   moveSelection: (delta: GridPoint, options?: { merge?: boolean; detach?: boolean }) => void;
   renameComponent: (id: string, name: string) => void;
   setParam: (id: string, param: string, value: string) => void;
+  /** Opens a closed switch, closes an open one (#43): one undo step each time. */
+  toggleSwitch: (id: string) => void;
+  /** Holds a push button down (closed), or lets it go (null). */
+  pressButton: (id: string | null) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
   /** Starts the text tool (T). */
@@ -201,8 +218,11 @@ interface EditorState {
   removeLastBend: () => void;
   /** Drops the wire being drawn. */
   cancelDraft: () => void;
-  /** Rotates the selection, or the component or the copy about to be placed. */
-  rotate: () => void;
+  /**
+   * Rotates the selection, or the component or the copy about to be placed, by a quarter turn,
+   * or by 45 degrees (`step` 45, #161): only the components with two pins turn that way.
+   */
+  rotate: (step?: 45 | 90) => void;
   /** Mirrors the selection, or the component or the copy about to be placed. */
   mirror: () => void;
   deleteSelection: () => void;
@@ -258,16 +278,16 @@ interface EditorState {
   /** Records that a simulation started (`true`), or ended with this error (or none). */
   setSimulating: (running: boolean, error?: string | null) => void;
   setShowValues: (show: boolean) => void;
+  setReportHighlight: (highlight: OperatingPointRow["highlight"]) => void;
   setAnimation: (patch: Partial<CurrentAnimation>) => void;
   /** Replaces the document by an empty one (Ctrl+N). The undo history starts over. */
   newDocument: () => void;
-  /** Replaces the document by one read from a file (Ctrl+O). The undo history starts over. */
-  openDocument: (doc: EditorDoc) => void;
   /**
-   * Replaces the document by the copy found after a crash (#274), like `openDocument`, but marked
-   * as modified: it was never saved as it is.
+   * Replaces the document by one read from a file (Ctrl+O). The undo history starts over.
+   * `unsaved`: it is not the content of a Psice file (an imported LTspice schematic), so it counts
+   * as unsaved until it is saved.
    */
-  restoreDocument: (doc: EditorDoc) => void;
+  openDocument: (doc: EditorDoc, unsaved?: boolean) => void;
   /** Records that `doc` was saved (Ctrl+S); edits made while it was being written stay unsaved. */
   markSaved: (doc: EditorDoc) => void;
 }
@@ -286,6 +306,33 @@ export interface CurrentAnimation {
 /** Real duration of the playback of a transient simulation at speed 1, in seconds. */
 export const PLAYBACK_SECONDS = 5;
 
+/** Model names of the two states of a switch or a push button (their `state` parameter). */
+export const SWITCH_OPEN = "SW_OPEN";
+export const SWITCH_CLOSED = "SW_CLOSED";
+
+/** True for the components opened and closed with a click (#43). */
+export const isSwitch = (type: string): boolean => type === "switch" || type === "push_button";
+
+/** The other state of a switch (absent or unknown: open, so it closes). */
+export const toggledState = (state: string | undefined): string =>
+  state === SWITCH_CLOSED ? SWITCH_OPEN : SWITCH_CLOSED;
+
+/**
+ * The document as it is simulated: `doc`, with the push button held down closed (#43). The same
+ * document when no button is held.
+ */
+export function simulatedDoc(doc: EditorDoc, pressedButton: string | null): EditorDoc {
+  if (pressedButton === null) return doc;
+  return {
+    ...doc,
+    components: doc.components.map((c) =>
+      c.id === pressedButton && c.type === "push_button"
+        ? { ...c, params: { ...c.params, state: SWITCH_CLOSED } }
+        : c,
+    ),
+  };
+}
+
 /** The last simulation if it was run on the document shown now, else null. */
 export const freshSimulation = (s: Pick<EditorState, "doc" | "simulation">) =>
   s.simulation && s.simulation.doc === s.doc ? s.simulation.result : null;
@@ -303,6 +350,7 @@ function freshDocument(doc: EditorDoc) {
     draft: null,
     // A result of another document would show as stale: forget it.
     simulation: null,
+    pressedButton: null,
   };
 }
 
@@ -341,9 +389,11 @@ function turned(doc: EditorDoc, selection: string[]): EditorDoc {
 
 /**
  * The document after any edit: what touches on the schematic is connected for the simulation
- * (#256), and the duplicate wires an edit may leave under others are removed (#259).
+ * (#256), the duplicate wires an edit may leave under others are removed (#259), and the flags of
+ * the node labels point away from their wire (#295).
  */
-const tidy = (doc: EditorDoc): EditorDoc => removeHiddenWires(normalizeContacts(doc));
+const tidy = (doc: EditorDoc): EditorDoc =>
+  orientLabels(removeHiddenWires(normalizeContacts(straightenWires(doc))));
 
 /** Why a wire is not added (see `closesWireLoop`), shown in the status bar (#257). */
 export const WIRE_LOOP_NOTICE = "Fil non ajouté : ces deux points sont déjà reliés par des fils.";
@@ -363,6 +413,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   simulationError: null,
   notice: null,
   showValues: true,
+  reportHighlight: null,
+  pressedButton: null,
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [], notice: null }),
 
@@ -422,6 +474,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setParam: (id, param, value) =>
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
+
+  toggleSwitch: (id) =>
+    set((s) => {
+      const c = s.doc.components.find((x) => x.id === id);
+      if (!c || !isSwitch(c.type)) return {};
+      return change(s, setParam(s.doc, id, "state", toggledState(c.params.state)));
+    }),
+
+  pressButton: (id) => set({ pressedButton: id }),
 
   startWiring: () =>
     set({ tool: { kind: "wire" }, selection: [], wirePart: null, segments: [], draft: null }),
@@ -496,16 +557,26 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       s.draft?.returnToSelect ? { draft: null, tool: { kind: "select" } } : { draft: null },
     ),
 
-  rotate: () =>
-    set((s) =>
-      s.tool.kind === "place"
-        ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
+  rotate: (step = 90) =>
+    set((s) => {
+      if (step === 45) {
+        const diagonal =
+          s.tool.kind === "place"
+            ? [s.tool.type]
+            : s.tool.kind === "select"
+              ? s.doc.components.filter((c) => s.selection.includes(c.id)).map((c) => c.type)
+              : [];
+        if (diagonal.length === 0) return {};
+        if (!diagonal.some(canTurnDiagonally)) return { notice: DIAGONAL_NOTICE };
+      }
+      return s.tool.kind === "place"
+        ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation, step) } }
         : s.tool.kind === "paste"
           ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "rotate") } }
           : s.selection.length > 0
-            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection)), s.selection))
-            : {},
-    ),
+            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection), step), s.selection))
+            : {};
+    }),
 
   mirror: () =>
     set((s) =>
@@ -561,16 +632,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setShowValues: (show) => set({ showValues: show }),
 
+  setReportHighlight: (highlight) => set({ reportHighlight: highlight }),
+
   newDocument: () => set((s) => ({ ...freshDocument(emptyDoc()), analysis: forgetSources(s) })),
 
   // An older file may have pins touching without a wire: connect them, without marking it changed.
-  openDocument: (doc) => set((s) => ({ ...freshDocument(tidy(doc)), analysis: forgetSources(s) })),
-
-  // An empty document stands for "never saved": it is never the restored one itself.
-  restoreDocument: (doc) =>
+  openDocument: (doc, unsaved = false) =>
     set((s) => ({
       ...freshDocument(tidy(doc)),
-      savedDoc: emptyDoc(),
+      ...(unsaved ? { savedDoc: emptyDoc() } : {}),
       analysis: forgetSources(s),
     })),
 

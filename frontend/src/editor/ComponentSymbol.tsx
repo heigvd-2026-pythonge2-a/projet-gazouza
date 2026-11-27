@@ -7,11 +7,15 @@ import {
   captionSize,
   getDef,
   layoutCaptions,
+  ledColor,
   symbolBounds,
   symbolOf,
+  toLocal,
+  toWorld,
   type Caption,
   type CaptionKind,
   type GridPoint,
+  type LabelDirection,
   type PlacedComponent,
   type SymbolShape,
 } from "../store";
@@ -30,11 +34,32 @@ function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
   if (container) container.style.cursor = cursor;
 }
 
-function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }) {
-  const common = { stroke: color, strokeWidth: STROKE, listening: false } as const;
+function SymbolShapeNode({
+  shape,
+  color,
+  lightColor = color,
+  fillColor,
+}: {
+  shape: SymbolShape;
+  color: string;
+  /** Colour of the lines of `tone: "light"` (the light of an LED). */
+  lightColor?: string;
+  /** Inside of the `filled` lines (the flag of a label). */
+  fillColor?: string;
+}) {
+  const stroke = shape.kind === "line" && shape.tone === "light" ? lightColor : color;
+  const common = { stroke, strokeWidth: STROKE, listening: false } as const;
   switch (shape.kind) {
     case "line":
-      return <Line {...common} points={shape.points.map((v) => v * GRID)} lineCap="round" />;
+      return (
+        <Line
+          {...common}
+          points={shape.points.map((v) => v * GRID)}
+          lineCap="round"
+          closed={shape.filled}
+          fill={shape.filled ? fillColor : undefined}
+        />
+      );
     case "rect":
       return (
         <Rect
@@ -146,8 +171,12 @@ interface ComponentSymbolProps {
   onMove?: (position: { x: number; y: number }, detach: boolean) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
+  /** The pointer enters a clickable pin (its name) or leaves it (null). */
+  onPinHover?: (pin: string | null) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /** The pointer enters the component (`true`) or leaves it (`false`). */
+  onHover?: (over: boolean) => void;
   /**
    * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
    * ones, so a connected pin does not leave a square behind.
@@ -159,6 +188,8 @@ interface ComponentSymbolProps {
   onCaptionDrag?: (kind: CaptionKind, centre: GridPoint) => GridPoint | null;
   /** End of a text's drag: where it landed. When set, the texts can be dragged. */
   onCaptionMove?: (kind: CaptionKind, centre: GridPoint) => void;
+  /** A label on "Automatique": the direction worked out from the circuit (#295). */
+  autoDirection?: LabelDirection;
 }
 
 /**
@@ -175,19 +206,30 @@ export function ComponentSymbol({
   onDrag,
   onMove,
   onPinMouseDown,
+  onPinHover,
   onDoubleClick,
+  onHover,
   markedPins,
   captions,
   onCaptionDrag,
   onCaptionMove,
+  autoDirection,
 }: ComponentSymbolProps) {
   const colors = useCanvasColors();
   const def = getDef(c.type);
-  const color = selected ? colors.selected : colors.symbol;
+  // A label keeps its pink fill when selected; only its outline turns to the selection colour.
+  const color = selected
+    ? colors.selected
+    : c.type === "label"
+      ? colors.labelStroke
+      : colors.symbol;
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
   const texts = captions ?? standaloneCaptions(c);
+  // On a diagonal a pin is put back on the grid, a little further out (#161): where it is drawn,
+  // in the component's frame, and the extra lead from the symbol to it.
+  const pins = def.pins.map((pin) => ({ ...pin, at: toLocal(toWorld(pin, c), c) }));
 
   const snap = (v: number) => Math.round(v / GRID) * GRID;
 
@@ -205,6 +247,8 @@ export function ComponentSymbol({
       onDblClick={(e) => {
         if (e.evt.button === 0) onDoubleClick?.();
       }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: snap(node.x()), y: snap(node.y()) });
@@ -233,16 +277,34 @@ export function ComponentSymbol({
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
-        {symbolOf(def, c.params).map((shape, i) => (
-          <SymbolShapeNode key={i} shape={shape} color={color} />
+        {symbolOf(def, c.params, autoDirection).map((shape, i) => (
+          <SymbolShapeNode
+            key={i}
+            shape={shape}
+            color={color}
+            lightColor={c.type === "led" && !selected ? ledColor(c.params) : color}
+            fillColor={colors.labelFill}
+          />
         ))}
-        {def.pins
+        {pins
+          .filter((pin) => pin.at.x !== pin.x || pin.at.y !== pin.y)
+          .map((pin) => (
+            <Line
+              key={`lead-${pin.name}`}
+              points={[pin.x * GRID, pin.y * GRID, pin.at.x * GRID, pin.at.y * GRID]}
+              stroke={color}
+              strokeWidth={STROKE}
+              lineCap="round"
+              listening={false}
+            />
+          ))}
+        {pins
           .filter((pin) => !markedPins || markedPins.has(pin.name))
           .map((pin) => (
             <Rect
               key={pin.name}
-              x={(pin.x - PIN_SIZE / 2) * GRID}
-              y={(pin.y - PIN_SIZE / 2) * GRID}
+              x={(pin.at.x - PIN_SIZE / 2) * GRID}
+              y={(pin.at.y - PIN_SIZE / 2) * GRID}
               width={PIN_SIZE * GRID}
               height={PIN_SIZE * GRID}
               stroke={colors.pin}
@@ -251,16 +313,22 @@ export function ComponentSymbol({
             />
           ))}
         {onPinMouseDown &&
-          def.pins.map((pin) => (
+          pins.map((pin) => (
             <Rect
               key={`hit-${pin.name}`}
-              x={(pin.x - PIN_HIT / 2) * GRID}
-              y={(pin.y - PIN_HIT / 2) * GRID}
+              x={(pin.at.x - PIN_HIT / 2) * GRID}
+              y={(pin.at.y - PIN_HIT / 2) * GRID}
               width={PIN_HIT * GRID}
               height={PIN_HIT * GRID}
               fill="rgba(0,0,0,0)"
-              onMouseEnter={(e) => setCursor(e, "crosshair")}
-              onMouseLeave={(e) => setCursor(e, "")}
+              onMouseEnter={(e) => {
+                setCursor(e, "crosshair");
+                onPinHover?.(pin.name);
+              }}
+              onMouseLeave={(e) => {
+                setCursor(e, "");
+                onPinHover?.(null);
+              }}
               onMouseDown={(e) => {
                 if (e.evt.button !== 0) return;
                 // Keep the press from reaching the group, which would select and drag it.

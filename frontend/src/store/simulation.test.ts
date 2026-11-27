@@ -8,8 +8,10 @@ import {
   dcRangeFor,
   formatSI,
   operatingPointLabels,
+  operatingPointTable,
   parseSpiceNumber,
   toAnalysis,
+  tranStep,
   toSchematic,
   DEFAULT_ANALYSIS,
 } from "./simulation";
@@ -55,6 +57,48 @@ describe("analysis settings", () => {
     expect(toAnalysis({ ...tran, maxStep: "1" })).toEqual({
       error: expect.stringMatching(/plus petit/),
     });
+  });
+});
+
+describe("number of points of a transient analysis (#334)", () => {
+  const tran = { ...DEFAULT_ANALYSIS, kind: "tran", stopTime: "10m" } as const;
+
+  it("sends the points typed, nothing when empty (the backend takes 1000)", () => {
+    expect(toAnalysis({ ...tran, tranPoints: "20000" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 20000 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: "20 000" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 20000 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: " " })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: "50", maxStep: "1u" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 50, max_step: 1e-6 },
+    });
+  });
+
+  it("refuses a number that is not a whole number, or above the limit", () => {
+    for (const text of ["abc", "1.5", "0", "1", "-10", "1k"]) {
+      expect(toAnalysis({ ...tran, tranPoints: text })).toEqual({
+        error: expect.stringMatching(/Nombre de points invalide/),
+      });
+    }
+    expect(toAnalysis({ ...tran, tranPoints: "200000" })).toHaveProperty("analysis");
+    expect(toAnalysis({ ...tran, tranPoints: "200001" })).toEqual({
+      error: expect.stringMatching(/limite est 200.000/),
+    });
+  });
+
+  it("gives the step as the backend computes it", () => {
+    expect(tranStep(tran)).toBeCloseTo(1e-5);
+    expect(tranStep({ ...tran, tranPoints: "100" })).toBeCloseTo(1e-4);
+    expect(tranStep({ ...tran, tranPoints: "100", maxStep: "1u" })).toBeCloseTo(1e-6);
+    expect(tranStep({ ...tran, tranPoints: "100", maxStep: "1m" })).toBeCloseTo(1e-4);
+    // A maximum step alone is the step, even above duration / 1000.
+    expect(tranStep({ ...tran, maxStep: "1m" })).toBeCloseTo(1e-3);
+    expect(tranStep({ ...tran, tranPoints: "x" })).toBeNull();
+    expect(tranStep({ ...tran, stopTime: "" })).toBeNull();
   });
 });
 
@@ -121,8 +165,8 @@ describe("operating point on the schematic (#102)", () => {
   it("formats values with SI prefixes", () => {
     expect(formatSI(0.005, "A")).toBe("5 mA");
     expect(formatSI(10, "V")).toBe("10 V");
-    expect(formatSI(-1.23456e-6, "A")).toBe("-1.23 µA");
-    expect(formatSI(4700, "V")).toBe("4.7 kV");
+    expect(formatSI(-1.23456e-6, "A")).toBe("-1,23 µA");
+    expect(formatSI(4700, "V")).toBe("4,7 kV");
     expect(formatSI(0, "V")).toBe("0 V");
   });
 
@@ -133,9 +177,6 @@ describe("operating point on the schematic (#102)", () => {
     expect(byKey).toEqual({
       "v:in": "10 V",
       "v:out": "5 V",
-      "i:c1": "5 mA",
-      "i:c2": "5 mA",
-      "i:c3": "5 mA",
     });
     // A voltage is placed on one of the node's wires.
     const vin = labels.find((l) => l.key === "v:in")!;
@@ -145,5 +186,23 @@ describe("operating point on the schematic (#102)", () => {
   it("labels nothing for another analysis", () => {
     const doc = fixtureDoc("rc_tran");
     expect(operatingPointLabels(doc, fixtureResult("rc_tran"), {})).toEqual([]);
+  });
+});
+
+describe("operating point table (#292)", () => {
+  it("names the nodes after the schematic and gives the supplied current", () => {
+    const doc = fixtureDoc("divider_op");
+    const groups = operatingPointTable(doc, fixtureResult("divider_op"), netlist.nets);
+    expect(groups.map((g) => [g.title, g.rows.map((r) => `${r.label} : ${r.value}`)])).toEqual([
+      ["Potentiels des nœuds (par rapport à la masse)", ["in : 10 V", "out : 5 V"]],
+      ["Courants", ["V1 fournit : 5 mA", "Courant dans R1 : 5 mA", "Courant dans R2 : 5 mA"]],
+    ]);
+    const rows = groups.flatMap((g) => g.rows);
+    expect(rows.find((r) => r.label === "in")?.highlight).toEqual({ wire: "w1" });
+    expect(rows.find((r) => r.label === "V1 fournit")?.highlight).toEqual({ component: "c1" });
+  });
+
+  it("shows nothing for another analysis", () => {
+    expect(operatingPointTable(fixtureDoc("rc_tran"), fixtureResult("rc_tran"), {})).toEqual([]);
   });
 });

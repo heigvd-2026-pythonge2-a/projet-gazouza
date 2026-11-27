@@ -1,0 +1,26 @@
+{
+  "type": "push_button",
+  "label": "Bouton-poussoir",
+  "prefix": "S",
+  "pins": [
+    { "name": "1", "x": 0, "y": -2 },
+    { "name": "2", "x": 0, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "state",
+      "label": "État",
+      "default": "SW_OPEN",
+      "kind": "choice",
+      "options": [
+        { "value": "SW_OPEN", "label": "Ouvert" },
+        { "value": "SW_CLOSED", "label": "Fermé" }
+      ]
+    }
+  ],
+  "spice": "{name} {pin:1} {pin:2} 0 0 {state}",
+  "models": {
+    "SW_OPEN": ".model SW_OPEN SW(Vt=0.5 Ron=1m Roff=1G)",
+    "SW_CLOSED": ".model SW_CLOSED SW(Vt=-0.5 Ron=1m Roff=1G)"
+  }
+}

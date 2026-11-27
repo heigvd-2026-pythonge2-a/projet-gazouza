@@ -1,7 +1,7 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
+import { Arrow, Circle, Group, Layer, Rect, Stage, Text } from "react-konva";
 
 import {
   animatable,
@@ -11,15 +11,21 @@ import {
   docBounds,
   freshSimulation,
   getDef,
+  isSwitch,
   layoutCaptions,
   mainParam,
   moveItems,
   moveWirePart,
+  autoLabelDirections,
+  nodeIndex,
+  currentArrows,
   operatingPointLabels,
+  voltageArrows,
   resolveCaptionDrop,
   pinPosition,
   rectFrom,
   samePoint,
+  simulatedDoc,
   unconnectedPins,
   PALETTES,
   useEditorStore,
@@ -27,8 +33,11 @@ import {
   wirePartAt,
   wirePartPoints,
   type GridPoint,
+  type CircuitNode,
   type EditorText,
   type GridRect,
+  type NodeItem,
+  type OperatingPointLabel,
   type PlacedComponent,
   type WirePart,
   NEW_TEXT,
@@ -38,19 +47,25 @@ import { CloseDialog } from "./CloseDialog";
 import { ComponentSymbol } from "./ComponentSymbol";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { DiagnosticHalos } from "./DiagnosticHalos";
+import { EmptyCanvasHint } from "./EmptyCanvasHint";
 import { ErrorBubbles } from "./ErrorBubbles";
 import { Grid, type Viewport } from "./Grid";
 import { fitViewport, showViewport } from "./fitView";
 import { FreeText } from "./FreeText";
 import { newFile, openFile, saveFile, saveFileAs } from "./fileActions";
+import { useFileDrop } from "./fileDrop";
 import { CurrentLayer } from "./CurrentLayer";
+import { LedGlow } from "./LedGlow";
 import { focusInspector } from "./inspectorFocus";
+import { ComponentHighlight, NodeHighlight } from "./NodeHighlight";
 import { DRAG_TYPE } from "./Palette";
+import { resimulateOperatingPoint } from "./simulationActions";
 import { entryForKey } from "./paletteLayout";
 import { CanvasColorsContext, COLORS, GRID, MAX_SCALE, MIN_SCALE, UI } from "./theme";
 import { useUnsavedChangesGuard } from "./unsavedGuard";
 import { RecoveryPrompt } from "./RecoveryPrompt";
 import { ValuePopover } from "./ValuePopover";
+import { layerToSvg } from "./svgExport";
 import { registerViewCommands, type ImageOptions } from "./viewCommands";
 import { WireDraft, Wires } from "./Wires";
 
@@ -91,10 +106,63 @@ interface Press {
 }
 
 /** Actions of the menu opened by a right click on a component; they apply to the selection. */
+/** Width of the box of a value written on the schematic, and its font size, in pixels. */
+const VALUE_WIDTH = 90;
+const VALUE_FONT_SIZE = 11;
+
+/** A value of the operating point written on the schematic, on its side of its anchor (#102). */
+function ValueText({ label: l, color }: { label: OperatingPointLabel; color: string }) {
+  const x = l.position.x * GRID;
+  const y = l.position.y * GRID;
+  const width = VALUE_WIDTH;
+  if (l.angle !== undefined) {
+    // Slanted along a diagonal arrow, centred on its anchor.
+    return (
+      <Text
+        text={l.text}
+        x={x}
+        y={y}
+        width={width}
+        offsetX={width / 2}
+        offsetY={VALUE_FONT_SIZE / 2}
+        rotation={l.angle}
+        align="center"
+        fontSize={VALUE_FONT_SIZE}
+        fontStyle="bold"
+        fill={color}
+        listening={false}
+      />
+    );
+  }
+  const at = {
+    above: { x: x - width / 2, y: y - 16, align: "center" },
+    below: { x: x - width / 2, y: y + 4, align: "center" },
+    right: { x: x + 6, y: y - 6, align: "left" },
+    left: { x: x - width - 2, y: y - 6, align: "right" },
+  }[l.side];
+  return (
+    <Text
+      text={l.text}
+      {...at}
+      width={width}
+      fontSize={VALUE_FONT_SIZE}
+      fontStyle="bold"
+      fill={color}
+      listening={false}
+    />
+  );
+}
+
 function componentMenu(selectionSize: number): MenuItem[] {
   const s = () => useEditorStore.getState();
   return [
-    { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
+    { label: "Tourner", shortcut: "R", keys: ["r"], onSelect: () => s().rotate() },
+    {
+      label: "Tourner de 45°",
+      shortcut: "Maj+R",
+      keys: ["R"],
+      onSelect: () => s().rotate(45),
+    },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
     {
       label: "Replacer les textes automatiquement",
@@ -157,7 +225,7 @@ function useKeyboardShortcuts() {
         else if (key === "v") s.paste();
         else if (key === "d")
           s.duplicate(); // also keeps the browser from adding a bookmark
-        else if (key === "n") newFile();
+        else if (key === "n") void newFile();
         else if (key === "o") openFile();
         else if (key === "s" && e.shiftKey) saveFileAs();
         else if (key === "s") saveFile();
@@ -185,7 +253,8 @@ function useKeyboardShortcuts() {
       switch (e.key) {
         case "r":
         case "R":
-          s.rotate();
+          // Shift+R: by 45 degrees, for the components with two pins (#161).
+          s.rotate(e.shiftKey ? 45 : 90);
           break;
         case "m":
         case "M":
@@ -238,6 +307,8 @@ export function SchematicCanvas() {
   const theme = useThemeStore((s) => s.theme);
   // An exported image goes in a report, on white: it is always drawn in the light colours.
   const canvasColors = PALETTES[exporting ? "light" : theme];
+  const valueColor = (kind: "voltage" | "current") =>
+    kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel;
   const [pointer, setPointer] = useState<GridPoint | null>(null);
   const [panning, setPanning] = useState(false);
   /** Selection rectangle being drawn (grid units), and its mode (Shift: what touches it). */
@@ -246,6 +317,11 @@ export function SchematicCanvas() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   /** Component under the right press being handled (set by the component, read by the stage). */
   const rightPressed = useRef<string | null>(null);
+  /**
+   * Switch or push button pressed with the left button (#43), and whether it has been dragged
+   * since: a press released where it started toggles the switch, a drag only moves it.
+   */
+  const switchPress = useRef<{ id: string; moved: boolean } | null>(null);
   /**
    * Items being dragged and how far (grid units): shown moved before the store changes. With
    * Ctrl (`detach`), the wires stay where they are.
@@ -267,6 +343,7 @@ export function SchematicCanvas() {
 
   const storeDoc = useEditorStore((s) => s.doc);
   const selection = useEditorStore((s) => s.selection);
+  const reportHighlight = useEditorStore((s) => s.reportHighlight);
   const wirePart = useEditorStore((s) => s.wirePart);
   const segments = useEditorStore((s) => s.segments);
   const tool = useEditorStore((s) => s.tool);
@@ -275,6 +352,9 @@ export function SchematicCanvas() {
   const pasteAt = useEditorStore((s) => s.pasteAt);
   const select = useEditorStore((s) => s.select);
   const toggleSelected = useEditorStore((s) => s.toggleSelected);
+  const toggleSwitch = useEditorStore((s) => s.toggleSwitch);
+  const pressButton = useEditorStore((s) => s.pressButton);
+  const pressedButton = useEditorStore((s) => s.pressedButton);
   const moveSelection = useEditorStore((s) => s.moveSelection);
   const moveCaption = useEditorStore((s) => s.moveCaption);
   const draft = useEditorStore((s) => s.draft);
@@ -291,6 +371,20 @@ export function SchematicCanvas() {
       showValues && simulation && nets ? operatingPointLabels(storeDoc, simulation, nets) : [],
     [showValues, simulation, nets, storeDoc],
   );
+  /** Component under the pointer: its voltage is shown in detail after a .op (#290). */
+  const [hoveredComponent, setHoveredComponent] = useState<string | null>(null);
+  // Arrows of the currents and voltages of an operating point (#290): the voltage across a
+  // component only for the hovered and selected ones (and the one of a hovered table line).
+  const valueArrows = useMemo(() => {
+    if (!showValues || !simulation || !nets) return [];
+    const detail = new Set(selection);
+    if (hoveredComponent) detail.add(hoveredComponent);
+    if (reportHighlight && "component" in reportHighlight) detail.add(reportHighlight.component);
+    return [
+      ...currentArrows(storeDoc, simulation),
+      ...voltageArrows(storeDoc, simulation, nets, detail),
+    ];
+  }, [showValues, simulation, nets, storeDoc, selection, hoveredComponent, reportHighlight]);
   // What the errors and warnings of the simulation point at (#253).
   const marks = useMemo(
     () => (simulation ? diagnosticMarks(storeDoc, simulation, nets ?? {}) : []),
@@ -299,6 +393,8 @@ export function SchematicCanvas() {
 
   useKeyboardShortcuts();
   useUnsavedChangesGuard();
+  /** A file from the Explorer is dragged over the schematic (#277). */
+  const fileOver = useFileDrop(containerRef);
 
   /** Fits the view to the whole circuit (F key, "Ajuster" button). */
   const fitView = useCallback(() => {
@@ -352,6 +448,51 @@ export function SchematicCanvas() {
   }, [freePins]);
   /** What is drawn as selected (nothing in an exported image). */
   const shownSelection = exporting ? [] : selection;
+
+  /** Wire or pin under the pointer, whose whole node is highlighted (#278). */
+  const [hovered, setHovered] = useState<NodeItem | null>(null);
+  /**
+   * Nodes to highlight: those of the selected wires (strong), then the one under the pointer.
+   * Only on the schematic as it is in the store (not while dragging) and with the select tool.
+   */
+  const highlightedNodes = useMemo((): { node: CircuitNode; strong: boolean }[] => {
+    if (exporting || doc !== storeDoc || tool.kind !== "select") return [];
+    const index = nodeIndex(storeDoc);
+    const out: { node: CircuitNode; strong: boolean }[] = [];
+    const add = (node: CircuitNode | null, strong: boolean) => {
+      if (node && !out.some((n) => n.node === node)) out.push({ node, strong });
+    };
+    const wireIds = new Set(selection.filter((id) => storeDoc.wires.some((w) => w.id === id)));
+    if (wirePart) wireIds.add(wirePart.wire);
+    for (const wire of wireIds) add(index({ wire }), true);
+    if (hovered) add(index(hovered), false);
+    // A hovered label lights its node, with the other labels of the same name (#295).
+    const hoveredLabel = storeDoc.components.find(
+      (c) => c.id === hoveredComponent && c.type === "label",
+    );
+    if (hoveredLabel) add(index({ comp: hoveredLabel.id, pin: "1" }), false);
+    if (reportHighlight && !("component" in reportHighlight)) add(index(reportHighlight), true);
+    return out;
+  }, [
+    exporting,
+    doc,
+    storeDoc,
+    tool.kind,
+    selection,
+    wirePart,
+    hovered,
+    hoveredComponent,
+    reportHighlight,
+  ]);
+
+  /** Directions of the labels on "Automatique", from the circuit as drawn (#295). */
+  const labelDirections = useMemo(() => autoLabelDirections(doc), [doc]);
+
+  /** The component of a hovered line of the results panel (#292), glowing on the schematic. */
+  const highlightedComponent =
+    !exporting && doc === storeDoc && reportHighlight && "component" in reportHighlight
+      ? storeDoc.components.find((c) => c.id === reportHighlight.component)
+      : undefined;
 
   /** Dragging `c` moves the whole selection if `c` is part of it, else only `c`. */
   const dragIds = (c: { id: string }): ReadonlySet<string> =>
@@ -427,8 +568,11 @@ export function SchematicCanvas() {
     });
   }, [size, zoomAt, fitView]);
 
-  /** The circuit drawn on a white or transparent background, as a PNG (null: nothing to draw). */
-  const renderImage = ({ transparent }: ImageOptions): Promise<Blob | null> => {
+  /**
+   * The circuit drawn on a white or transparent background, as a PNG or an SVG (null: nothing to
+   * draw). Both show the same area: the circuit and its captions, with a margin around.
+   */
+  const renderImage = ({ transparent, format = "png" }: ImageOptions): Promise<Blob | null> => {
     const stage = stageRef.current;
     const layer = contentRef.current;
     const box = layer?.getClientRect();
@@ -436,6 +580,17 @@ export function SchematicCanvas() {
       return Promise.resolve(null);
     }
     const scale = stage.scaleX();
+    if (format === "svg") {
+      // Back from screen pixels to the units of the schematic, which the SVG keeps.
+      const frame = {
+        x: (box.x - stage.x()) / scale - EXPORT_MARGIN,
+        y: (box.y - stage.y()) / scale - EXPORT_MARGIN,
+        width: box.width / scale + 2 * EXPORT_MARGIN,
+        height: box.height / scale + 2 * EXPORT_MARGIN,
+      };
+      const svg = layerToSvg(layer, frame, transparent);
+      return Promise.resolve(new Blob([svg], { type: "image/svg+xml" }));
+    }
     const margin = EXPORT_MARGIN * scale;
     const drawn = layer.toCanvas({
       x: box.x - margin,
@@ -737,6 +892,42 @@ export function SchematicCanvas() {
     else if (!selection.includes(id)) select([id]);
   };
 
+  /**
+   * Left press on a switch or a push button (#43), with the select tool and without Shift: it is
+   * not selected (a click works it). A push button closes at once, until the button is released;
+   * a switch toggles on release, unless it was dragged meanwhile.
+   */
+  const pressSwitch = (c: PlacedComponent) => {
+    switchPress.current = { id: c.id, moved: false };
+    if (c.type === "push_button") {
+      pressButton(c.id);
+      resimulateOperatingPoint();
+    }
+    window.addEventListener(
+      "mouseup",
+      () => {
+        const press = switchPress.current;
+        switchPress.current = null;
+        if (!press || press.moved) return;
+        if (c.type === "push_button") pressButton(null);
+        else toggleSwitch(c.id);
+        resimulateOperatingPoint();
+      },
+      { once: true },
+    );
+  };
+
+  /** A pressed switch or push button that moves is dragged, not worked: it opens again. */
+  const switchDragged = (c: PlacedComponent, delta: GridPoint) => {
+    const press = switchPress.current;
+    if (!press || press.id !== c.id || press.moved || (delta.x === 0 && delta.y === 0)) return;
+    press.moved = true;
+    if (c.type === "push_button") {
+      pressButton(null);
+      resimulateOperatingPoint();
+    }
+  };
+
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
     e.preventDefault();
@@ -819,6 +1010,22 @@ export function SchematicCanvas() {
           <Layer ref={contentRef}>
             {/* Hidden while something is dragged: the marks are those of the document simulated. */}
             {doc === storeDoc && !exporting && <DiagnosticHalos doc={doc} marks={marks} />}
+            {/* Hidden while something is dragged, like the marks: they are those of the document. */}
+            {doc === storeDoc &&
+              simulation &&
+              (simulation.errors ?? []).length === 0 &&
+              (simulation.analysis === "op" ||
+                (simulation.analysis === "tran" && animation.on)) && (
+                <LedGlow
+                  doc={storeDoc}
+                  result={simulation}
+                  animated={simulation.analysis === "tran"}
+                />
+              )}
+            {highlightedComponent && <ComponentHighlight component={highlightedComponent} />}
+            {highlightedNodes.map(({ node, strong }, i) => (
+              <NodeHighlight key={i} doc={storeDoc} node={node} strong={strong} />
+            ))}
             <Wires
               doc={doc}
               selection={shownSelection}
@@ -827,11 +1034,18 @@ export function SchematicCanvas() {
               onSelect={tool.kind === "select" ? selectItem : undefined}
               onWirePress={tool.kind === "select" ? startWirePartPress : undefined}
               onWireDoubleClick={tool.kind === "select" ? (id) => select([id]) : undefined}
+              onWireHover={(id) => setHovered(id === null ? null : { wire: id })}
             />
             {doc.components.map((c) => (
               <ComponentSymbol
                 key={c.id}
-                component={c}
+                // A push button held down is drawn closed (#43).
+                component={
+                  pressedButton === c.id
+                    ? (simulatedDoc(doc, c.id).components.find((x) => x.id === c.id) ?? c)
+                    : c
+                }
+                autoDirection={labelDirections.get(c.id)}
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
                 captions={captions.get(c.id)}
@@ -841,13 +1055,19 @@ export function SchematicCanvas() {
                   moveCaption(c.id, kind, centre);
                 }}
                 draggable={tool.kind === "select"}
-                onSelect={(e) => selectItem(c.id, e)}
+                onSelect={(e) =>
+                  tool.kind === "select" && isSwitch(c.type) && !e.evt.shiftKey
+                    ? pressSwitch(c)
+                    : selectItem(c.id, e)
+                }
                 onContextPress={() => {
                   rightPressed.current = c.id;
                 }}
-                onDrag={(position, detach) =>
-                  dragTo(c, deltaFrom(storeComponent(c), position), detach)
-                }
+                onDrag={(position, detach) => {
+                  const delta = deltaFrom(storeComponent(c), position);
+                  switchDragged(c, delta);
+                  dragTo(c, delta, detach);
+                }}
                 onMove={(position, detach) =>
                   dropAt(c, deltaFrom(storeComponent(c), position), detach)
                 }
@@ -860,6 +1080,12 @@ export function SchematicCanvas() {
                         else focusInspector();
                       }
                     : undefined
+                }
+                onPinHover={(pin) => setHovered(pin === null ? null : { comp: c.id, pin })}
+                onHover={(over) =>
+                  setHoveredComponent((current) =>
+                    over ? c.id : current === c.id ? null : current,
+                  )
                 }
                 onPinMouseDown={
                   tool.kind === "select"
@@ -894,31 +1120,22 @@ export function SchematicCanvas() {
               />
             ))}
             {!drag &&
-              valueLabels.map((l) => {
-                const width = 80;
-                const x = l.position.x * GRID;
-                const y = l.position.y * GRID;
-                const at = {
-                  above: { x: x - width / 2, y: y - 16, align: "center" },
-                  below: { x: x - width / 2, y: y + 4, align: "center" },
-                  right: { x: x + 6, y: y - 6, align: "left" },
-                  left: { x: x - width - 2, y: y - 6, align: "right" },
-                }[l.side];
-                return (
-                  <Text
-                    key={l.key}
-                    text={l.text}
-                    {...at}
-                    width={width}
-                    fontSize={11}
-                    fontStyle="bold"
-                    fill={
-                      l.kind === "voltage" ? canvasColors.voltageLabel : canvasColors.currentLabel
-                    }
-                    listening={false}
-                  />
-                );
-              })}
+              valueArrows.map((a) => (
+                <Arrow
+                  key={a.key}
+                  points={[a.from.x * GRID, a.from.y * GRID, a.to.x * GRID, a.to.y * GRID]}
+                  stroke={valueColor(a.kind)}
+                  fill={valueColor(a.kind)}
+                  strokeWidth={1.5}
+                  pointerLength={6}
+                  pointerWidth={6}
+                  listening={false}
+                />
+              ))}
+            {!drag &&
+              [...valueLabels, ...valueArrows.map((a) => a.label)].map((l) => (
+                <ValueText key={l.key} label={l} color={valueColor(l.kind)} />
+              ))}
             {freePins.map((p) => (
               <Circle
                 key={`${p.comp}/${p.pin}`}
@@ -971,6 +1188,7 @@ export function SchematicCanvas() {
           )}
         </CanvasColorsContext>
       </Stage>
+      <EmptyCanvasHint />
       <ErrorBubbles
         doc={doc}
         viewport={viewport}
@@ -1021,6 +1239,26 @@ export function SchematicCanvas() {
           items={componentMenu(selection.length)}
           onClose={closeMenu}
         />
+      )}
+      {fileOver && (
+        <div
+          role="status"
+          style={{
+            position: "absolute",
+            inset: 6,
+            display: "grid",
+            placeItems: "center",
+            border: `2px dashed ${COLORS.selected}`,
+            borderRadius: 8,
+            background: UI.surfaceTranslucent,
+            color: COLORS.selected,
+            fontSize: 15,
+            fontWeight: 600,
+            pointerEvents: "none",
+          }}
+        >
+          Déposer pour ouvrir le schéma
+        </div>
       )}
       <CloseDialog />
       <RecoveryPrompt />

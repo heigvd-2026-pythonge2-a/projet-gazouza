@@ -138,10 +138,10 @@ describe("readRecovery", () => {
   });
 });
 
-describe("restoreDocument", () => {
+describe("restoring the copy", () => {
   it("opens the copy marked as modified, with nothing to undo", () => {
     const doc = fixtureDoc("divider_op");
-    editorState().restoreDocument(doc);
+    editorState().openDocument(doc, true);
     expect(editorState().doc).toEqual(doc);
     expect(isUnsaved(editorState())).toBe(true);
     expect(editorState().history.past).toHaveLength(0);

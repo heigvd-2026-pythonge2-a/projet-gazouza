@@ -1,0 +1,28 @@
+{
+  "type": "zener",
+  "label": "Diode Zener",
+  "prefix": "D",
+  "pins": [
+    { "name": "A", "x": 0, "y": -2 },
+    { "name": "K", "x": 0, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Tension Zener",
+      "default": "D_Z5V1",
+      "kind": "choice",
+      "options": [
+        { "value": "D_Z3V3", "label": "3,3 V" },
+        { "value": "D_Z5V1", "label": "5,1 V" },
+        { "value": "D_Z12", "label": "12 V" }
+      ]
+    }
+  ],
+  "spice": "{name} {pin:A} {pin:K} {model}",
+  "models": {
+    "D_Z3V3": ".model D_Z3V3 D(Is=1n N=1.5 Rs=1 Cjo=100p BV=3.3 IBV=5m)",
+    "D_Z5V1": ".model D_Z5V1 D(Is=1n N=1.5 Rs=1 Cjo=100p BV=5.1 IBV=5m)",
+    "D_Z12": ".model D_Z12 D(Is=1n N=1.5 Rs=1 Cjo=50p BV=12 IBV=5m)"
+  }
+}

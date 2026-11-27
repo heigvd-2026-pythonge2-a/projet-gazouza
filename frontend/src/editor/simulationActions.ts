@@ -2,7 +2,14 @@
 // toolbar to the backend. Errors are shown to the user in French.
 
 import { ApiError, generateNetlist, simulate, type SimulationRequest } from "../api/client";
-import { analysisSources, namesNets, toAnalysis, toSchematic, useEditorStore } from "../store";
+import {
+  analysisSources,
+  namesNets,
+  simulatedDoc,
+  toAnalysis,
+  toSchematic,
+  useEditorStore,
+} from "../store";
 import { saveNewFile } from "./fileActions";
 
 /** Cancels the simulation in progress, if any. */
@@ -16,7 +23,9 @@ function request(): { request: SimulationRequest } | { error: string } {
   }
   const analysis = toAnalysis(s.analysis, analysisSources(s.doc));
   if ("error" in analysis) return analysis;
-  return { request: { schematic: toSchematic(s.doc), analysis: analysis.analysis } };
+  // A push button held down is simulated closed (#43).
+  const schematic = toSchematic(simulatedDoc(s.doc, s.pressedButton));
+  return { request: { schematic, analysis: analysis.analysis } };
 }
 
 const message = (error: unknown) =>
@@ -56,7 +65,7 @@ export async function runSimulation(): Promise<void> {
     }
     // Stopped while the nodes were fetched (that error is swallowed above): drop the result.
     if (controller.signal.aborted) {
-      useEditorStore.getState().setSimulating(false);
+      if (stop === null || stop === controller) useEditorStore.getState().setSimulating(false);
       return;
     }
     const now = useEditorStore.getState();
@@ -69,10 +78,23 @@ export async function runSimulation(): Promise<void> {
     now.setSimulating(false);
   } catch (error: unknown) {
     const aborted = error instanceof ApiError && error.kind === "aborted";
+    // Stopped to run again (`resimulateOperatingPoint`): the new run shows its own state.
+    if (aborted && stop !== null && stop !== controller) return;
     useEditorStore.getState().setSimulating(false, aborted ? null : message(error));
   } finally {
     if (stop === controller) stop = null;
   }
+}
+
+/**
+ * Runs the operating point again after a switch or a push button changed (#43), if the last
+ * simulation was one: the values on the schematic follow the switch. A simulation still running
+ * is stopped first.
+ */
+export function resimulateOperatingPoint(): void {
+  if (useEditorStore.getState().simulation?.result.analysis !== "op") return;
+  stopSimulation();
+  void runSimulation();
 }
 
 /** Stops the simulation in progress (its result is dropped). */

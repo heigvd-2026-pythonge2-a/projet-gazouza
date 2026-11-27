@@ -9,8 +9,12 @@ import {
   type EditorWire,
   type GridPoint,
   type PlacedComponent,
+  type Rotation,
   type WireEnd,
 } from "./document";
+
+/** Rotations a file may hold: quarter turns and diagonals (#161). */
+const ROTATIONS: readonly Rotation[] = [0, 45, 90, 135, 180, 225, 270, 315];
 import { getDef } from "./library";
 
 /** Marks a Psice schematic file; `version` changes if the format changes. */
@@ -61,9 +65,7 @@ function component(v: unknown): PlacedComponent {
     }
   })();
   const rotation = v.rotation;
-  if (rotation !== 0 && rotation !== 90 && rotation !== 180 && rotation !== 270) {
-    return fail(`${v.id} : rotation invalide`);
-  }
+  if (!ROTATIONS.includes(rotation as Rotation)) return fail(`${v.id} : rotation invalide`);
   const params: Record<string, string> = {};
   if (v.params !== undefined) {
     if (!isObject(v.params)) return fail(`${v.id} : paramètres invalides`);
@@ -72,12 +74,22 @@ function component(v: unknown): PlacedComponent {
       params[k] = value;
     }
   }
+  // A sine saved before its delay was split from the pulse's (#165) kept it in `delay`: it
+  // becomes `sin_delay`, as the backend does, so the old delay is shown and kept.
+  if (
+    params.waveform === "sin" &&
+    params.delay !== undefined &&
+    params.sin_delay === undefined &&
+    def.params.some((p) => p.name === "sin_delay")
+  ) {
+    params.sin_delay = params.delay;
+  }
   return {
     id: v.id as string,
     type: def.type,
     ...(typeof v.name === "string" ? { name: v.name } : {}),
     position: point(v.position, v.id as string),
-    rotation,
+    rotation: rotation as Rotation,
     mirror: v.mirror === true,
     params,
     ...offsets(v),
@@ -118,7 +130,14 @@ export function parseDoc(text: string): EditorDoc {
   }
   if (!isObject(data) || data.format !== FORMAT) return fail("format inconnu");
   if (data.version !== VERSION) return fail(`version ${String(data.version)} non prise en charge`);
-  const raw = data.doc;
+  return readDoc(data.doc);
+}
+
+/**
+ * Checks the content of a schematic (`doc` of a file, or a schematic of the contract with all its
+ * lists) and keeps what the editor knows of it. Throws `FileFormatError` if it is not valid.
+ */
+export function readDoc(raw: unknown): EditorDoc {
   if (
     !isObject(raw) ||
     !Array.isArray(raw.components) ||

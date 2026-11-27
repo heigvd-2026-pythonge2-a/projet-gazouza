@@ -17,7 +17,50 @@ export interface GridPoint {
   y: number;
 }
 
-export type Rotation = 0 | 90 | 180 | 270;
+/**
+ * Clockwise, in degrees: quarter turns, or a diagonal (45, 135, 225, 315, #161). On a diagonal
+ * the pins are put back on the grid (`toWorld`), so their leads grow a little.
+ */
+export type Rotation = 0 | 45 | 90 | 135 | 180 | 225 | 270 | 315;
+
+/** True for 45, 135, 225 and 315. */
+export const isDiagonalRotation = (r: Rotation): boolean => r % 90 !== 0;
+
+/** Only the components with two pins turn by 45 degrees (resistor, diode, source...). */
+export const canTurnDiagonally = (type: string): boolean => getDef(type).pins.length === 2;
+
+/**
+ * A point of the component's own frame, mirrored (x -> -x) then turned clockwise, exactly: on a
+ * diagonal the result is not on the grid. Written with the integers s = x + y and d = x - y
+ * rather than cos and sin, as docs/format-schema.md asks, so that a 0 stays exactly 0.
+ */
+export function turnPoint(local: GridPoint, rotation: Rotation, mirror: boolean): GridPoint {
+  const x = mirror ? -local.x : local.x;
+  const y = local.y;
+  const s = (x + y) / Math.SQRT2;
+  const d = (x - y) / Math.SQRT2;
+  switch (rotation) {
+    case 0:
+      return { x, y };
+    case 45:
+      return { x: d, y: s };
+    case 90:
+      return { x: -y, y: x };
+    case 135:
+      return { x: -s, y: d };
+    case 180:
+      return { x: -x, y: -y };
+    case 225:
+      return { x: -d, y: -s };
+    case 270:
+      return { x: y, y: -x };
+    case 315:
+      return { x: s, y: -d };
+  }
+}
+
+/** Rounding of a diagonal pin coordinate (docs/format-schema.md): away from zero, 0 stays 0. */
+const awayFromZero = (v: number): number => (v === 0 ? 0 : Math.sign(v) * Math.ceil(Math.abs(v)));
 
 export interface PlacedComponent {
   id: string;
@@ -70,6 +113,13 @@ export interface EditorDoc {
 
 export const emptyDoc = (): EditorDoc => ({ components: [], wires: [], junctions: [], texts: [] });
 
+/** True when the schematic holds nothing at all: no component, wire, junction or text. */
+export const isEmptyDoc = (doc: EditorDoc): boolean =>
+  doc.components.length === 0 &&
+  doc.wires.length === 0 &&
+  doc.junctions.length === 0 &&
+  doc.texts.length === 0;
+
 // --- Geometry -------------------------------------------------------------------------------
 
 /** Size of the free texts, in grid units: font size, line height and (estimated) letter width. */
@@ -96,32 +146,46 @@ export function textBounds(t: EditorText): GridRect {
 }
 
 /**
- * Local symbol coordinates -> grid coordinates.
+ * Local symbol coordinates of a grid point (a pin) -> grid coordinates.
  * Convention (same as Konva): mirror (x -> -x) first, then clockwise rotation, then translate.
+ * On a diagonal, each coordinate is rounded away from zero, as the backend does
+ * (docs/format-schema.md): the pins stay on the grid, a little further from the body.
  */
 export function toWorld(
   local: GridPoint,
   c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
 ): GridPoint {
-  const x = c.mirror ? -local.x : local.x;
-  const y = local.y;
-  let r: GridPoint;
-  switch (c.rotation) {
-    case 0:
-      r = { x, y };
-      break;
-    case 90:
-      r = { x: -y, y: x };
-      break;
-    case 180:
-      r = { x: -x, y: -y };
-      break;
-    case 270:
-      r = { x: y, y: -x };
-      break;
-  }
+  const r = turnPoint(local, c.rotation, c.mirror);
+  const x = isDiagonalRotation(c.rotation) ? awayFromZero(r.x) : r.x;
+  const y = isDiagonalRotation(c.rotation) ? awayFromZero(r.y) : r.y;
   // `+ 0` turns -0 into 0, which keeps positions clean when compared or serialized.
+  return { x: x + c.position.x + 0, y: y + c.position.y + 0 };
+}
+
+/** Like `toWorld`, without the rounding of the diagonals: for drawings, boxes and texts. */
+export function toWorldExact(
+  local: GridPoint,
+  c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
+): GridPoint {
+  const r = turnPoint(local, c.rotation, c.mirror);
   return { x: r.x + c.position.x + 0, y: r.y + c.position.y + 0 };
+}
+
+/** The box `local` of the component's frame, turned like the component, on the grid. */
+export function turnedRect(
+  local: { min: GridPoint; max: GridPoint },
+  c: Pick<PlacedComponent, "position" | "rotation" | "mirror">,
+): GridRect {
+  const { min, max } = local;
+  const corners = [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }].map((p) =>
+    toWorldExact(p, c),
+  );
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  return {
+    min: { x: Math.min(...xs), y: Math.min(...ys) },
+    max: { x: Math.max(...xs), y: Math.max(...ys) },
+  };
 }
 
 export function pinPosition(c: PlacedComponent, pinName: string): GridPoint {
@@ -310,9 +374,8 @@ const inRect = (p: GridPoint, r: GridRect): boolean =>
  */
 export function itemsInRect(doc: EditorDoc, r: GridRect): string[] {
   const components = doc.components.filter((c) => {
-    const { min, max } = symbolBounds(getDef(c.type));
-    const corners = [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }];
-    return corners.every((p) => inRect(toWorld(p, c), r));
+    const box = componentBox(c);
+    return inRect(box.min, r) && inRect(box.max, r);
   });
   const wires = doc.wires.filter((w) => wirePath(doc, w).every((p) => inRect(p, r)));
   const junctions = doc.junctions.filter((j) => inRect(j.position, r));
@@ -332,10 +395,7 @@ const rectsMeet = (a: GridRect, b: GridRect): boolean =>
  * rectangle with Shift (#93).
  */
 export function itemsTouchingRect(doc: EditorDoc, r: GridRect): string[] {
-  const components = doc.components.filter((c) => {
-    const { min, max } = symbolBounds(getDef(c.type));
-    return rectsMeet(rectFrom(toWorld(min, c), toWorld(max, c)), r);
-  });
+  const components = doc.components.filter((c) => rectsMeet(componentBox(c), r));
   const wires = doc.wires.filter((w) => {
     const path = wirePath(doc, w);
     return path.some(
@@ -372,8 +432,8 @@ export function segmentsInRect(doc: EditorDoc, r: GridRect): WirePart[] {
 export function docBounds(doc: EditorDoc): GridRect | null {
   const points: GridPoint[] = [
     ...doc.components.flatMap((c) => {
-      const { min, max } = symbolBounds(getDef(c.type));
-      return [min, max, { x: min.x, y: max.y }, { x: max.x, y: min.y }].map((p) => toWorld(p, c));
+      const { min, max } = componentBox(c);
+      return [min, max];
     }),
     ...doc.wires.flatMap((w) => wirePath(doc, w)),
     ...doc.junctions.map((j) => j.position),
@@ -393,10 +453,23 @@ export function docBounds(doc: EditorDoc): GridRect | null {
 
 // --- Overlapping components -----------------------------------------------------------------
 
-/** Box of a component's symbol and pins, on the grid (rotation and mirror applied). */
-export function componentBox(c: PlacedComponent): GridRect {
-  const { min, max } = symbolBounds(getDef(c.type));
-  return rectFrom(toWorld(min, c), toWorld(max, c));
+/**
+ * Box of a component's symbol and pins, on the grid (rotation and mirror applied). On a diagonal,
+ * the turned box of the symbol, and the pins, which `toWorld` puts a little further out.
+ */
+export function componentBox(
+  c: Pick<PlacedComponent, "type" | "position" | "rotation" | "mirror">,
+): GridRect {
+  const def = getDef(c.type);
+  const box = turnedRect(symbolBounds(def), c);
+  if (!isDiagonalRotation(c.rotation)) return box;
+  const points = [box.min, box.max, ...def.pins.map((pin) => toWorld(pin, c))];
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  return {
+    min: { x: Math.min(...xs), y: Math.min(...ys) },
+    max: { x: Math.max(...xs), y: Math.max(...ys) },
+  };
 }
 
 const pinPoints = (c: PlacedComponent): GridPoint[] =>
@@ -571,6 +644,29 @@ function updateComponents(
 // --- Keeping wires orthogonal -----------------------------------------------------------------
 
 const isDiagonal = (a: GridPoint, b: GridPoint): boolean => a.x !== b.x && a.y !== b.y;
+
+/**
+ * Makes every wire orthogonal (#346): a segment that is neither horizontal nor vertical gets a
+ * bend, horizontal first. The editor never draws one, but a file written by hand or by another
+ * tool may hold one. Returns `doc` itself when every wire is already orthogonal.
+ */
+export function straightenWires(doc: EditorDoc): EditorDoc {
+  let changed = false;
+  const wires = doc.wires.map((w) => {
+    const path = wirePath(doc, w);
+    if (!path.some((p, i) => i > 0 && isDiagonal(path[i - 1] as GridPoint, p))) return w;
+    changed = true;
+    const points: GridPoint[] = [];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as GridPoint;
+      const b = path[i] as GridPoint;
+      if (isDiagonal(a, b)) points.push({ x: b.x, y: a.y });
+      if (i < path.length - 1) points.push({ ...b });
+    }
+    return { ...w, points };
+  });
+  return changed ? { ...doc, wires } : doc;
+}
 
 /**
  * Moves the bend next to a wire end that went from `oldEnd` to `newEnd`, so the segment between
@@ -982,6 +1078,8 @@ const isPoint = (doc: EditorDoc, w: EditorWire): boolean =>
  * - a junction lying on a pin: its wires are attached to the pin instead, and it goes;
  * - a junction lying on another junction: both become one;
  * - a free wire end lying on a pin or a junction: attached to it (a pin first);
+ * - free ends of different wires at the same point: two wires are merged into one, three or more
+ *   meet at a new junction (#291);
  * - a pin lying on another pin: a wire of zero length joins them, unless wires already do (the
  *   same contact wire as `moveItems` adds, #124).
  * A wire then joining a point to itself, or of zero length with a free end, connects nothing and
@@ -1027,9 +1125,38 @@ export function normalizeContacts(doc: EditorDoc): EditorDoc {
     changed = true;
     return { ...w, from, to };
   });
+  const taken = allIds(doc);
+  // 2b. Free ends of different wires meeting where there is no pin or junction (#291): joined by
+  //     a new junction, which `cleanJunctions` turns into a single wire when only two meet.
+  const isFree = (end: WireEnd): end is GridPoint => !("comp" in end) && !("junction" in end);
+  const freeWiresAt = new Map<string, Set<string>>();
+  for (const w of wires) {
+    for (const end of [w.from, w.to]) {
+      if (!isFree(end)) continue;
+      const k = key(end);
+      freeWiresAt.set(k, (freeWiresAt.get(k) ?? new Set()).add(w.id));
+    }
+  }
+  const meeting = new Map<string, string>();
+  const added: EditorJunction[] = [];
+  for (const [k, ids] of freeWiresAt) {
+    if (ids.size < 2) continue;
+    const id = nextIndexed("j", taken);
+    taken.push(id);
+    meeting.set(k, id);
+    const [x, y] = k.split(",").map(Number) as [number, number];
+    added.push({ id, position: { x, y } });
+  }
+  if (added.length > 0) {
+    const join = (end: WireEnd): WireEnd => {
+      const junction = isFree(end) ? meeting.get(key(end)) : undefined;
+      return junction ? { junction } : end;
+    };
+    wires = wires.map((w) => ({ ...w, from: join(w.from), to: join(w.to) }));
+    changed = true;
+  }
   // 3. Pins on pins: join each one to the first pin there, unless wires already join them (a
   //    contact wire would then close a loop of wires, see `removeHiddenWires`).
-  const taken = allIds(doc);
   const groups = wireGroups(wires);
   for (const [first, ...others] of pinsAt.values()) {
     for (const other of others) {
@@ -1043,26 +1170,34 @@ export function normalizeContacts(doc: EditorDoc): EditorDoc {
     }
   }
   // 4. Wires that connect nothing any more.
-  const junctions = doc.junctions.filter((j) => !replaced.has(j.id));
+  const junctions = [...doc.junctions.filter((j) => !replaced.has(j.id)), ...added];
   const attached = { ...doc, junctions, wires };
-  const free = (end: WireEnd) => !("comp" in end) && !("junction" in end);
   const useless = (w: EditorWire) =>
-    sameEnd(w.from, w.to) || (isPoint(attached, w) && (free(w.from) || free(w.to)));
+    sameEnd(w.from, w.to) || (isPoint(attached, w) && (isFree(w.from) || isFree(w.to)));
   const dropped = wires.filter(useless);
-  if (dropped.length === 0) return changed ? attached : doc;
+  if (dropped.length === 0 && added.length === 0) return changed ? attached : doc;
   return cleanJunctions(
     { ...attached, wires: wires.filter((w) => !useless(w)) },
-    junctionsOf(dropped),
+    new Set([...junctionsOf(dropped), ...added.map((j) => j.id)]),
   );
 }
 
-/** The unit steps of a wire's path, as keys that do not depend on the direction. */
+/**
+ * The unit steps of a wire's path, as keys that do not depend on the direction. A segment that is
+ * neither horizontal nor vertical (`straightenWires` adds a bend to it, #346) is one step: walking
+ * it one grid step at a time would never reach its end.
+ */
 function unitSteps(doc: EditorDoc, w: EditorWire): string[] {
   const steps: string[] = [];
   const path = wirePath(doc, w);
   for (let i = 0; i + 1 < path.length; i++) {
     const a = path[i] as GridPoint;
     const b = path[i + 1] as GridPoint;
+    if (isDiagonal(a, b)) {
+      const [u, v] = a.x < b.x || (a.x === b.x && a.y < b.y) ? [a, b] : [b, a];
+      steps.push(`${u.x},${u.y}-${v.x},${v.y}`);
+      continue;
+    }
     const dx = Math.sign(b.x - a.x);
     const dy = Math.sign(b.y - a.y);
     for (let p = a; !samePoint(p, b);) {
@@ -1325,11 +1460,124 @@ export function netNameProblem(net: string): string | null {
   return null;
 }
 
-export const rotateCw = (r: Rotation): Rotation => ((r + 90) % 360) as Rotation;
+export const rotateCw = (r: Rotation, step: 45 | 90 = 90): Rotation =>
+  ((r + step) % 360) as Rotation;
 
-export function rotateComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {
-  const rotated = updateComponents(doc, ids, (c) => ({ ...c, rotation: rotateCw(c.rotation) }));
+/**
+ * Turns the components `ids` clockwise by a quarter turn, or by 45 degrees (`step` 45, #161):
+ * then only the components with two pins turn (`canTurnDiagonally`).
+ */
+export function rotateComponents(
+  doc: EditorDoc,
+  ids: ReadonlySet<string>,
+  step: 45 | 90 = 90,
+): EditorDoc {
+  if (step === 45) {
+    const turning = new Set(
+      [...ids].filter((id) => {
+        const c = doc.components.find((x) => x.id === id);
+        return c !== undefined && canTurnDiagonally(c.type);
+      }),
+    );
+    if (turning.size === 0) return doc;
+    return realignWires(
+      doc,
+      updateComponents(doc, turning, (c) => ({ ...c, rotation: rotateCw(c.rotation, 45) })),
+    );
+  }
+  const rotated = updateComponents(doc, ids, (c) => {
+    // A node label skips the directions where its flag would lie on what it is connected to
+    // (see `orientLabels`): pressing R goes round the free ones.
+    let rotation = rotateCw(c.rotation);
+    if (c.type === "label") {
+      const taken = labelBlockedDirections(doc, c);
+      for (let i = 0; i < 3 && taken.has(dirKey(flagDirection({ ...c, rotation }))); i++) {
+        rotation = rotateCw(rotation);
+      }
+    }
+    return { ...c, rotation };
+  });
   return realignWires(doc, rotated);
+}
+
+// --- Node label flags (#295) ---------------------------------------------------------------------
+
+const ROTATIONS: readonly Rotation[] = [0, 90, 180, 270];
+const dirKey = (d: GridPoint) => `${Math.sign(d.x)},${Math.sign(d.y)}`;
+
+/** Direction the flag of a node label points to from its pin, as a unit step on the grid. */
+function flagDirection(c: Pick<PlacedComponent, "position" | "rotation" | "mirror">): GridPoint {
+  const tip = toWorld({ x: 1, y: 0 }, c);
+  return { x: tip.x - c.position.x, y: tip.y - c.position.y };
+}
+
+/**
+ * Directions (keys of unit steps) a label's flag must not point to: those its wires leave its
+ * pin by, and those of the components whose pin touches it (towards their middle).
+ */
+function labelBlockedDirections(doc: EditorDoc, label: PlacedComponent): Set<string> {
+  const pin = label.position;
+  const taken = new Set<string>();
+  const onLabel = (end: WireEnd) => "comp" in end && end.comp === label.id;
+  for (const w of doc.wires) {
+    const path = simplifyPath(wirePath(doc, w));
+    if (path.length < 2) continue;
+    if (onLabel(w.from)) {
+      taken.add(
+        dirKey({ x: (path[1] as GridPoint).x - pin.x, y: (path[1] as GridPoint).y - pin.y }),
+      );
+    }
+    if (onLabel(w.to)) {
+      const prev = path[path.length - 2] as GridPoint;
+      taken.add(dirKey({ x: prev.x - pin.x, y: prev.y - pin.y }));
+    }
+  }
+  for (const other of doc.components) {
+    if (other.id === label.id || other.type === "label") continue;
+    const touches = getDef(other.type).pins.some((p) => samePoint(toWorld(p, other), pin));
+    if (!touches) continue;
+    const box = componentBox(other);
+    const middle = { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2 };
+    const d = { x: middle.x - pin.x, y: middle.y - pin.y };
+    // Along the main axis only: a pin is at the end of its component.
+    taken.add(dirKey(Math.abs(d.x) >= Math.abs(d.y) ? { x: d.x, y: 0 } : { x: 0, y: d.y }));
+  }
+  taken.delete("0,0");
+  return taken;
+}
+
+/**
+ * Turns the node labels whose flag lies on a wire (or a component) they are connected to, so the
+ * flag points the other way and its text never covers the wire (#295). The flag goes opposite to
+ * the first blocked direction if it is free, else to the first free direction clockwise. A label
+ * turns around its pin, so nothing it is connected to moves. Labels already clear, and labels
+ * connected to nothing, are left as they are (their rotation may have been chosen by hand).
+ * Returns `doc` itself when no label turns.
+ */
+export function orientLabels(doc: EditorDoc): EditorDoc {
+  let changed = false;
+  const components = doc.components.map((c) => {
+    if (c.type !== "label") return c;
+    const taken = labelBlockedDirections(doc, c);
+    if (!taken.has(dirKey(flagDirection(c)))) return c;
+    const [blocked] = taken;
+    const opposite = blocked
+      ? blocked
+          .split(",")
+          .map((v) => String(-Number(v) || 0))
+          .join(",")
+      : "";
+    const free = (r: Rotation) => !taken.has(dirKey(flagDirection({ ...c, rotation: r })));
+    const start = ROTATIONS.indexOf(c.rotation);
+    const clockwise = [1, 2, 3].map((i) => ROTATIONS[(start + i) % 4] as Rotation);
+    const rotation =
+      ROTATIONS.find((r) => free(r) && dirKey(flagDirection({ ...c, rotation: r })) === opposite) ??
+      clockwise.find(free);
+    if (rotation === undefined) return c;
+    changed = true;
+    return { ...c, rotation };
+  });
+  return changed ? { ...doc, components } : doc;
 }
 
 export function mirrorComponents(doc: EditorDoc, ids: ReadonlySet<string>): EditorDoc {

@@ -1,16 +1,24 @@
-// Asks what to do with unsaved changes when the window is about to close (#238): cancel, close
-// without saving, or save and close once the file is written.
+// Asks what to do with unsaved changes (#238, #332): cancel, go on without saving, or save and go
+// on once the file is written. The question comes from unsavedDialog.ts: New, Open, Examples, the
+// LTspice import, a dropped file, and the desktop window about to close. While it is not mounted
+// (the schematic panel crashed), unsavedDialog.ts asks with the browser's own confirmation.
 //
 // The native confirmation of the desktop window only has two buttons, so the launcher can call
 // `window.psiceRequestClose()` instead: it shows this dialog and resolves to true when the window
 // may close (see unsavedGuard.ts for the other function the launcher reads).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { isUnsaved, useEditorStore } from "../store";
 import { saveFile } from "./fileActions";
 import { endRecovery } from "./recovery";
 import { COLORS, UI } from "./theme";
+import {
+  answerUnsavedQuestion,
+  askBeforeDroppingChanges,
+  registerUnsavedDialog,
+  useUnsavedDialog,
+} from "./unsavedDialog";
 
 const BUTTON = {
   padding: "5px 12px",
@@ -31,43 +39,33 @@ const MAIN_BUTTON = {
   fontWeight: 600,
 } as const;
 
-/** Installs `window.psiceRequestClose` and shows the dialog when it is called with changes. */
+/**
+ * Shows the question about unsaved changes when one is asked, and installs
+ * `window.psiceRequestClose` for the desktop launcher.
+ */
 export function CloseDialog() {
-  const [open, setOpen] = useState(false);
+  const pending = useUnsavedDialog((d) => d.pending);
   const [saving, setSaving] = useState(false);
-  // The request being answered: a second request while the dialog is shown gets the same answer.
-  const request = useRef<{ promise: Promise<boolean>; resolve: (close: boolean) => void } | null>(
-    null,
-  );
+  const open = pending !== null;
 
-  const answer = useCallback((close: boolean) => {
-    // The window goes: no copy to offer at the next start (#274).
-    if (close) endRecovery();
-    request.current?.resolve(close);
-    request.current = null;
-    setOpen(false);
+  const answer = useCallback((goOn: boolean) => {
     setSaving(false);
+    answerUnsavedQuestion(goOn);
   }, []);
 
   useEffect(() => {
-    window.psiceRequestClose = () => {
-      if (!isUnsaved(useEditorStore.getState())) {
-        endRecovery();
-        return Promise.resolve(true);
-      }
-      if (!request.current) {
-        let resolve: (close: boolean) => void = () => {};
-        const promise = new Promise<boolean>((r) => (resolve = r));
-        request.current = { promise, resolve };
-        setOpen(true);
-      }
-      return request.current.promise;
+    const unregister = registerUnsavedDialog();
+    window.psiceRequestClose = async () => {
+      const close = await askBeforeDroppingChanges("close");
+      // The window goes: no copy to offer at the next start (#274).
+      if (close) endRecovery();
+      return close;
     };
     return () => {
+      unregister();
       delete window.psiceRequestClose;
-      // The editor goes away: the window stays open rather than waiting for an answer forever.
-      request.current?.resolve(false);
-      request.current = null;
+      // The editor goes away: nothing is done rather than waiting for an answer forever.
+      answerUnsavedQuestion(false);
     };
   }, []);
 
@@ -83,15 +81,18 @@ export function CloseDialog() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [open, saving, answer]);
 
-  const saveAndClose = async () => {
+  const saveAndGoOn = async () => {
     setSaving(true);
     // Cancelled file dialog or write error: the dialog stays, so the user can choose again.
     if (await saveFile()) answer(true);
     else setSaving(false);
   };
 
-  if (!open) return null;
-  return (
+  if (!pending) return null;
+  const { question } = pending;
+  // In the page's body rather than in the schematic: the toolbar can ask while the schematic is
+  // hidden (results shown full screen), and a dialog hidden with it would block the keyboard.
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -101,6 +102,8 @@ export function CloseDialog() {
         alignItems: "center",
         justifyContent: "center",
         background: "rgba(0, 0, 0, 0.3)",
+        // Outside the app's root, which sets it (App.tsx).
+        fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
       <div
@@ -121,7 +124,7 @@ export function CloseDialog() {
         }}
       >
         <h2 id="psice-close-title" style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600 }}>
-          Fermer Psice
+          {question.title}
         </h2>
         <p id="psice-close-message" style={{ margin: "0 0 16px" }}>
           Le schéma contient des modifications non enregistrées.
@@ -131,19 +134,20 @@ export function CloseDialog() {
             Annuler
           </button>
           <button type="button" style={BUTTON} disabled={saving} onClick={() => answer(true)}>
-            Fermer sans enregistrer
+            {question.discard}
           </button>
           <button
             type="button"
             style={MAIN_BUTTON}
             disabled={saving}
             autoFocus
-            onClick={() => void saveAndClose()}
+            onClick={() => void saveAndGoOn()}
           >
-            Enregistrer et fermer
+            {question.save}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

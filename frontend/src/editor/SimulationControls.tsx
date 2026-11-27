@@ -1,20 +1,26 @@
-// Simulation group of the toolbar (#100): the analysis and its settings, the Simulate button; and
+// Simulation group of the toolbar (#100): the analysis, the Simulate button and, on a line below,
+// the settings of the analysis (#339); and
 // the report of the last simulation shown in the results panel (errors, values).
 
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 
 import {
   analysisSources,
   chosenSource,
   dcRangeFor,
+  DEFAULT_TRAN_POINTS,
   diagnosticMarks,
   formatSI,
   freshSimulation,
+  operatingPointTable,
+  terminalVoltageRows,
+  tranStep,
   useEditorStore,
   type AnalysisKind,
   type AnalysisSettings,
   type AnalysisSource,
   type DiagnosticMark,
+  type OperatingPointGroup,
 } from "../store";
 import { runSimulation } from "./simulationActions";
 import { COLORS, UI } from "./theme";
@@ -38,6 +44,25 @@ const ANALYSES: { kind: AnalysisKind; label: string }[] = [
 ];
 
 const LABEL: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 };
+
+/** Height of the line of the analysis settings, whatever the analysis (#339). */
+export const SETTINGS_ROW_HEIGHT = 30;
+
+/**
+ * Line of the analysis settings (#339): the whole width of the toolbar, always the last line
+ * (`order`), always as high, so that choosing another analysis only changes what is in it and
+ * moves no button of the toolbar.
+ */
+const SETTINGS_ROW: CSSProperties = {
+  order: 1,
+  flexBasis: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  height: SETTINGS_ROW_HEIGHT,
+  overflowX: "auto",
+  overflowY: "hidden",
+};
 
 /** A setting of the analysis typed as text, with its caption and unit. */
 function Field(props: {
@@ -70,6 +95,20 @@ function Field(props: {
   );
 }
 
+/** The time step that the transient settings give (#334), or nothing while one is invalid. */
+function TranStepHint() {
+  const step = useEditorStore((s) => tranStep(s.analysis));
+  if (step === null) return null;
+  return (
+    <span
+      style={{ fontSize: 12, color: UI.muted, whiteSpace: "nowrap" }}
+      title="Écart entre deux points de la courbe (ngspice en ajoute autour des changements rapides)"
+    >
+      soit un pas de {formatSI(step, "s")}
+    </span>
+  );
+}
+
 /** Choice of the source that `.ac` excites or `.dc` sweeps. */
 function SourceSelect(props: {
   caption: string;
@@ -87,7 +126,7 @@ function SourceSelect(props: {
       {props.caption}
       <select
         aria-label={props.label}
-        title={props.sources.length > 0 ? props.title : "Pose d'abord une source sur le schéma"}
+        title={props.sources.length > 0 ? props.title : "Posez d'abord une source sur le schéma"}
         value={chosen?.id ?? ""}
         disabled={simulating || props.sources.length === 0}
         onChange={(e) => {
@@ -113,7 +152,10 @@ function SourceSelect(props: {
   );
 }
 
-/** Analysis, its settings and the Simulate / Stop button. */
+/**
+ * Analysis and the Simulate / Stop button, side by side in the toolbar; the settings of the
+ * analysis on a line of their own below (#339).
+ */
 export function SimulationControls() {
   const analysis = useEditorStore((s) => s.analysis);
   const simulating = useEditorStore((s) => s.simulating);
@@ -143,93 +185,6 @@ export function SimulationControls() {
           </option>
         ))}
       </select>
-      {analysis.kind === "tran" && (
-        <>
-          <Field
-            caption="Durée"
-            label="Durée de la simulation (s)"
-            title="Fin de la simulation, en secondes (10m = 10 ms)"
-            unit="s"
-            setting="stopTime"
-          />
-          <Field
-            caption="Pas max"
-            label="Pas maximal (s)"
-            title="Plus grand pas de calcul, en secondes ; vide : automatique"
-            unit="s"
-            setting="maxStep"
-            placeholder="auto"
-          />
-        </>
-      )}
-      {analysis.kind === "ac" && (
-        <>
-          <SourceSelect
-            caption="Entrée"
-            label="Source d'entrée"
-            title="Source qui excite le circuit ; son signal alternatif est réglé automatiquement"
-            sources={sources}
-            setting="acSource"
-          />
-          <Field
-            caption="De"
-            label="Fréquence de début (Hz)"
-            title="Première fréquence, en hertz (1k = 1 kHz)"
-            unit="Hz"
-            setting="acStart"
-          />
-          <Field
-            caption="à"
-            label="Fréquence de fin (Hz)"
-            title="Dernière fréquence, en hertz (100k = 100 kHz, 1Meg = 1 MHz)"
-            unit="Hz"
-            setting="acStop"
-          />
-          <Field
-            caption="Points"
-            label="Points par décade"
-            title="Nombre de points calculés entre une fréquence et dix fois cette fréquence"
-            unit="/ déc."
-            setting="acPoints"
-            width={36}
-          />
-        </>
-      )}
-      {analysis.kind === "dc" && (
-        <>
-          <SourceSelect
-            caption="Source"
-            label="Source balayée"
-            title="Source dont la valeur continue varie pendant le balayage"
-            sources={sources}
-            setting="dcSource"
-          />
-          <Field
-            caption="De"
-            label={`Valeur de début (${dcUnit})`}
-            title="Première valeur de la source"
-            unit={dcUnit}
-            setting="dcStart"
-            width={44}
-          />
-          <Field
-            caption="à"
-            label={`Valeur de fin (${dcUnit})`}
-            title="Dernière valeur de la source"
-            unit={dcUnit}
-            setting="dcStop"
-            width={44}
-          />
-          <Field
-            caption="Pas"
-            label={`Pas du balayage (${dcUnit})`}
-            title="Écart entre deux valeurs calculées (100m = 0,1)"
-            unit={dcUnit}
-            setting="dcStep"
-            width={44}
-          />
-        </>
-      )}
       <button
         type="button"
         title={simulating ? "Arrêter la simulation en cours" : "Lancer la simulation"}
@@ -247,6 +202,109 @@ export function SimulationControls() {
       >
         {simulating ? "■ Arrêter" : "▶ Simuler"}
       </button>
+      <div role="group" aria-label="Réglages de l'analyse" style={SETTINGS_ROW}>
+        {analysis.kind === "op" && (
+          <span style={{ fontSize: 12, color: UI.muted }}>
+            Point de fonctionnement : tensions et courants continus, sans réglage.
+          </span>
+        )}
+        {analysis.kind === "tran" && (
+          <>
+            <Field
+              caption="Durée"
+              label="Durée de la simulation (s)"
+              title="Fin de la simulation, en secondes (10m = 10 ms)"
+              unit="s"
+              setting="stopTime"
+            />
+            <Field
+              caption="Points"
+              label="Nombre de points"
+              title="Finesse de la courbe : au moins ce nombre de points entre 0 et la durée (200 000 au plus)"
+              setting="tranPoints"
+              placeholder={String(DEFAULT_TRAN_POINTS)}
+              width={56}
+            />
+            <TranStepHint />
+            <Field
+              caption="Pas max"
+              label="Pas maximal (s)"
+              title="Réglage avancé : plus grand pas de calcul, en secondes ; vide : durée / points"
+              unit="s"
+              setting="maxStep"
+              placeholder="auto"
+            />
+          </>
+        )}
+        {analysis.kind === "ac" && (
+          <>
+            <SourceSelect
+              caption="Entrée"
+              label="Source d'entrée"
+              title="Source qui excite le circuit ; son signal alternatif est réglé automatiquement"
+              sources={sources}
+              setting="acSource"
+            />
+            <Field
+              caption="De"
+              label="Fréquence de début (Hz)"
+              title="Première fréquence, en hertz (1k = 1 kHz)"
+              unit="Hz"
+              setting="acStart"
+            />
+            <Field
+              caption="à"
+              label="Fréquence de fin (Hz)"
+              title="Dernière fréquence, en hertz (100k = 100 kHz, 1Meg = 1 MHz)"
+              unit="Hz"
+              setting="acStop"
+            />
+            <Field
+              caption="Points"
+              label="Points par décade"
+              title="Nombre de points calculés entre une fréquence et dix fois cette fréquence"
+              unit="/ déc."
+              setting="acPoints"
+              width={36}
+            />
+          </>
+        )}
+        {analysis.kind === "dc" && (
+          <>
+            <SourceSelect
+              caption="Source"
+              label="Source balayée"
+              title="Source dont la valeur continue varie pendant le balayage"
+              sources={sources}
+              setting="dcSource"
+            />
+            <Field
+              caption="De"
+              label={`Valeur de début (${dcUnit})`}
+              title="Première valeur de la source"
+              unit={dcUnit}
+              setting="dcStart"
+              width={44}
+            />
+            <Field
+              caption="à"
+              label={`Valeur de fin (${dcUnit})`}
+              title="Dernière valeur de la source"
+              unit={dcUnit}
+              setting="dcStop"
+              width={44}
+            />
+            <Field
+              caption="Pas"
+              label={`Pas du balayage (${dcUnit})`}
+              title="Écart entre deux valeurs calculées (100m = 0,1)"
+              unit={dcUnit}
+              setting="dcStep"
+              width={44}
+            />
+          </>
+        )}
+      </div>
     </>
   );
 }
@@ -285,6 +343,46 @@ function DiagnosticItem({ message, mark }: { message: string; mark: DiagnosticMa
   );
 }
 
+/**
+ * Values of an operating point, by group (#292). Hovering a line, or focusing it with the
+ * keyboard, highlights its node or component on the schematic.
+ */
+function OperatingPointTable({ groups }: { groups: OperatingPointGroup[] }) {
+  const setReportHighlight = useEditorStore((s) => s.setReportHighlight);
+  return (
+    <table style={{ borderCollapse: "collapse" }}>
+      {groups.map((g) => (
+        <tbody key={g.title}>
+          <tr>
+            <th
+              colSpan={2}
+              scope="colgroup"
+              style={{ padding: "6px 0 2px", textAlign: "left", fontWeight: 600 }}
+            >
+              {g.title}
+            </th>
+          </tr>
+          {g.rows.map((r) => (
+            <tr
+              key={r.key}
+              tabIndex={r.highlight ? 0 : undefined}
+              title={r.highlight ? "Survolez pour le voir sur le schéma" : undefined}
+              onMouseEnter={() => setReportHighlight(r.highlight)}
+              onMouseLeave={() => setReportHighlight(null)}
+              onFocus={() => setReportHighlight(r.highlight)}
+              onBlur={() => setReportHighlight(null)}
+              style={{ cursor: r.highlight ? "default" : undefined }}
+            >
+              <td style={{ padding: "1px 12px 1px 0" }}>{r.label}</td>
+              <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
+  );
+}
+
 /** Errors and warnings of the last simulation, and the values of an operating point. */
 export function SimulationReport() {
   const simulating = useEditorStore((s) => s.simulating);
@@ -299,6 +397,16 @@ export function SimulationReport() {
     () => new Map((result ? diagnosticMarks(doc, result, nets ?? {}) : []).map((m) => [m.key, m])),
     [doc, result, nets],
   );
+  const table = useMemo(
+    () =>
+      result
+        ? operatingPointTable(doc, result, nets ?? {}, terminalVoltageRows(doc, result, nets ?? {}))
+        : [],
+    [doc, result, nets],
+  );
+  const setReportHighlight = useEditorStore((s) => s.setReportHighlight);
+  // A line hovered when the table goes away (new simulation, edit) must not stay highlighted.
+  useEffect(() => () => setReportHighlight(null), [table, setReportHighlight]);
 
   if (simulating) return <p style={{ color: UI.muted }}>Simulation en cours…</p>;
   if (error) return <p style={{ color: UI.error }}>{error}</p>;
@@ -314,8 +422,6 @@ export function SimulationReport() {
   }
   const errors = result.errors ?? [];
   const warnings = result.warnings ?? [];
-  const name = (id: string | null | undefined) =>
-    doc.components.find((c) => c.id === id)?.name ?? id ?? "";
   return (
     <div style={{ fontSize: 12 }}>
       {errors.length > 0 && (
@@ -345,22 +451,7 @@ export function SimulationReport() {
             />
             Afficher les valeurs sur le schéma
           </label>
-          <table style={{ borderCollapse: "collapse" }}>
-            <tbody>
-              {(result.traces ?? []).map((t) => (
-                <tr key={t.name}>
-                  <td style={{ padding: "1px 12px 1px 0" }}>
-                    {t.kind === "voltage"
-                      ? `Tension du nœud ${t.net ?? t.name}`
-                      : `Courant dans ${name(t.component_id)}`}
-                  </td>
-                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                    {formatSI(t.values[0] ?? 0, t.unit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <OperatingPointTable groups={table} />
         </>
       )}
       {errors.length === 0 && result.analysis !== "op" && (

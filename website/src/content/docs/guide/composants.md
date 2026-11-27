@@ -9,15 +9,25 @@ de code. Les symboles suivent la norme **CEI 60617**.
 
 ## Disponibles
 
-| Composant | Préfixe | Broches | Paramètres (valeur par défaut) |
-|---|---|---|---|
-| Résistance | `R` | `1`, `2` | Résistance (`1k` Ω) |
-| Condensateur | `C` | `1`, `2` | Capacité (`1u` F) |
-| Bobine | `L` | `1`, `2` | Inductance (`1m` H) |
-| Source de tension | `V` | `+`, `-` | Forme d'onde (voir ci-dessous) |
-| Source de courant | `I` | `+`, `-` | Forme d'onde (voir ci-dessous) |
-| Masse | — | `1` | — |
-| Étiquette de nœud | — | `1` | Nom du nœud (`out`), direction |
+| Composant         | Préfixe | Broches                     | Paramètres (valeur par défaut) |
+| ----------------- | ------- | --------------------------- | ------------------------------ |
+| Résistance        | `R`     | `1`, `2`                    | Résistance (`1k` Ω)            |
+| Condensateur      | `C`     | `1`, `2`                    | Capacité (`1u` F)              |
+| Bobine            | `L`     | `1`, `2`                    | Inductance (`1m` H)            |
+| Source de tension | `V`     | `+`, `-`                    | Forme d'onde (voir ci-dessous) |
+| Source de courant | `I`     | `+`, `-`                    | Forme d'onde (voir ci-dessous) |
+| Masse             | —       | `1`                         | —                              |
+| Étiquette de nœud | —       | `1`                         | Nom du nœud (`out`), direction |
+| Interrupteur      | `S`     | `1`, `2`                    | État (Ouvert)                  |
+| Bouton-poussoir   | `S`     | `1`, `2`                    | État (Ouvert)                  |
+| Diode             | `D`     | `A` (anode), `K` (cathode)  | Modèle (Signal)                |
+| Diode Zener       | `D`     | `A`, `K`                    | Tension Zener (`5,1 V`)        |
+| LED               | `D`     | `A`, `K`                    | Couleur (Rouge)                |
+| Ampli-op idéal    | `X`     | `+`, `-`, `out`             | Modèle (Idéal)                 |
+| Ampli-op réel     | `X`     | `+`, `-`, `out`, `V+`, `V-` | Modèle (Générique)             |
+| Transistor NPN    | `Q`     | `C`, `B`, `E`               | Modèle (Usage général)         |
+| Transistor PNP    | `Q`     | `C`, `B`, `E`               | Modèle (Usage général)         |
+| MOSFET canal N    | `M`     | `D`, `G`, `S`               | Modèle (Usage général)         |
 
 Le **préfixe** est la première lettre du nom du composant (`R1`, `Rcharge`). Tu peux renommer
 un composant, mais son nom doit garder ce préfixe et rester unique.
@@ -36,25 +46,65 @@ même sans fil dessiné entre eux.
 Un nom d'étiquette ne contient que des lettres, des chiffres et `_`, et commence par une lettre.
 Les majuscules ne comptent pas : `Out` et `out` désignent le même nœud.
 
+L'étiquette se dessine comme un **drapeau rose**, rempli, pour qu'on ne la prenne pas pour une
+résistance (un rectangle vide). Son nom est écrit à côté de la pointe.
+
 La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
 
-| Direction | Drapeau |
-|---|---|
-| Aucune | Rectangle |
-| Entrée | Pointe vers la broche : le signal entre dans le circuit |
-| Sortie | Pointe à l'opposé de la broche : le signal sort du circuit |
-| Bidirectionnelle | Pointe des deux côtés |
+| Direction                | Drapeau                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| Automatique (par défaut) | Déduite du circuit par Psice (voir ci-dessous)             |
+| Aucune                   | Rectangle                                                  |
+| Entrée                   | Pointe vers la broche : le signal entre dans le circuit    |
+| Sortie                   | Pointe à l'opposé de la broche : le signal sort du circuit |
+| Bidirectionnelle         | Pointe des deux côtés                                      |
+
+Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) branché sur l'étiquette,
+pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
+débranche. `R` fait le tour des côtés libres seulement.
+
+En **Automatique**, Psice regarde d'où vient le signal, pas de quel côté arrive le fil. Il prend le
+morceau de circuit où chaque étiquette est branchée (sans compter les autres étiquettes du même
+nom) et cherche une broche qui **produit** le signal : une borne de source (tension ou courant)
+qui n'est pas à la masse, ou la sortie d'un ampli-op.
+
+- L'étiquette du morceau qui produit le signal est une **sortie**.
+- Les étiquettes du même nom posées ailleurs sont des **entrées** : le signal leur arrive.
+- Si plusieurs morceaux du même nom produisent le signal, leurs étiquettes sont
+  **bidirectionnelles**.
+- Une étiquette sans partenaire du même nom ailleurs, ou dont aucun morceau ne produit le
+  signal, n'a **pas de direction**.
+
+Par exemple, générateur → étiquette `in` … étiquette `in` → filtre : la première devient une
+sortie, la seconde une entrée, quelle que soit la façon de dessiner. La direction se met à jour à
+chaque modification du circuit. Une direction choisie à la main n'est jamais changée, et un
+ancien schéma s'ouvre avec ses drapeaux d'origine.
+
+Survoler une étiquette **allume tout son nœud**, avec les autres étiquettes du même nom.
+
+### Interrupteur et bouton-poussoir
+
+**Clique** sur un interrupteur pour le fermer, clique encore pour l'ouvrir : le symbole montre la
+lame posée ou levée, et l'état est enregistré avec le schéma. Un **bouton-poussoir** n'est fermé
+que tant que tu gardes le clic appuyé, et se rouvre quand tu le relâches.
+
+Le clic ne sélectionne pas le composant et ne le déplace pas. Pour le déplacer, fais-le glisser ;
+pour ses propriétés (dont l'**État**), fais un clic droit ou entoure-le d'une sélection par zone.
+
+Si tu as déjà lancé un **point de fonctionnement** (`.op`), changer l'état relance la simulation :
+les tensions et courants affichés suivent l'interrupteur. Ouvert, il vaut 1 GΩ plutôt qu'une vraie
+coupure, pour qu'un nœud laissé « en l'air » ne donne pas d'erreur.
 
 ## Formes d'onde des sources
 
 Une source de tension ou de courant a une **forme d'onde**. L'inspecteur n'affiche que les
 paramètres de celle que tu as choisie.
 
-| Forme d'onde | Paramètres | Usage typique |
-|---|---|---|
-| **Continue** | Tension (ou courant) continue | Alimentation, polarisation |
+| Forme d'onde  | Paramètres                                                                                   | Usage typique                             |
+| ------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Continue**  | Tension (ou courant) continue                                                                | Alimentation, polarisation                |
 | **Impulsion** | Valeur basse, valeur haute, retard, temps de montée, temps de descente, durée haute, période | Échelon, signal carré, réponse indicielle |
-| **Sinusoïde** | Décalage, amplitude, fréquence, retard, amortissement, phase | Signal alternatif, redressement |
+| **Sinusoïde** | Offset (décalage continu), amplitude, fréquence, retard, amortissement, phase                | Signal alternatif, redressement           |
 
 :::note[Analyse fréquentielle]
 Il n'y a pas d'amplitude « AC » à régler sur la source. Pour une analyse `.ac`, tu choisis la
@@ -68,17 +118,49 @@ Comme en SPICE, un courant positif circule **dans la source** de la broche `+` v
 `-`.
 :::
 
-## Prévus
+## Semi-conducteurs et amplis-op
 
-Le cahier des charges prévoit d'ajouter les composants suivants (jalon S6-8). Leurs broches
-sont déjà fixées dans le format de schéma.
+Ces composants n'ont pas de valeur à saisir : tu choisis leur **modèle** dans le panneau
+Propriétés. Chaque modèle est un jeu de paramètres SPICE (`.model` ou `.subckt`) stocké dans la
+bibliothèque et ajouté automatiquement à la netlist. Ce sont des modèles génériques, aux valeurs
+typiques des fiches techniques des composants cités : pas les modèles exacts des fabricants.
 
-| Famille | Composants | Broches |
-|---|---|---|
-| Diodes | Signal, redressement, Zener, LED | `A` (anode), `K` (cathode) |
-| Amplis-op | Idéal | `+`, `-`, `out` |
-| Amplis-op | Réel | `+`, `-`, `out`, `V+`, `V-` |
-| Transistors bipolaires | NPN, PNP | `C`, `B`, `E` |
-| MOSFET | Canal N | `D`, `G`, `S` |
+### Diodes
 
-Leurs modèles SPICE (`.model`, `.subckt`) sont stockés directement dans la bibliothèque.
+| Composant   | Modèles                                          | Utilisation                                                                                                   |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Diode       | Signal (type 1N4148), Redressement (type 1N4007) | Chute d'environ 0,6 à 0,7 V en direct                                                                         |
+| Diode Zener | 3,3 V, 5,1 V, 12 V                               | Montée en inverse, elle maintient sa tension Zener                                                            |
+| LED         | Rouge, Verte, Jaune, Bleue, Blanche              | Chute en direct à 15 mA : environ 1,9 V (rouge), 2,4 V (verte), 2,0 V (jaune), 3,0 V (bleue), 3,1 V (blanche) |
+
+Le courant passe de l'anode `A` vers la cathode `K`. Sur le symbole, la cathode est le côté de
+la barre.
+
+Les flèches de lumière d'une LED prennent la couleur choisie. Après une simulation, la LED
+**s'allume** sur le schéma : son triangle se remplit de sa couleur, avec un halo autour, d'autant
+plus fort que le courant est grand. L'échelle suit la façon dont l'œil perçoit la lumière : la LED
+paraît éteinte sous 0,1 mA environ, déjà bien visible à 2 mA, et à pleine luminosité vers 20 mA.
+Elle reste éteinte en inverse. Après un `.tran`, l'animation du courant fait varier la luminosité
+au fil du temps : un montage clignotant clignote sur le schéma.
+
+### Amplis-op
+
+| Composant      | Modèle                                 | Comportement                                                        |
+| -------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| Ampli-op idéal | Idéal (gain 10⁶, sans limite)          | Pas d'alimentation, la sortie peut prendre n'importe quelle tension |
+| Ampli-op réel  | Générique (type 741 : gain 10⁵, 1 MHz) | Alimenté par `V+` et `V-`, la sortie sature avant les alimentations |
+
+:::caution[Alimenter l'ampli-op réel]
+Les broches `V+` et `V-` de l'ampli-op réel doivent être reliées à des sources de tension (par
+exemple +15 V et -15 V). Si tu en oublies une, la simulation refuse de démarrer avec l'erreur
+[`PIN_NOT_CONNECTED`](/projet-gazouza/guide/erreurs/). Sa sortie sature environ 1,5 V avant les
+alimentations : entre -13,5 V et +13,5 V avec ±15 V.
+:::
+
+### Transistors
+
+| Composant      | Modèle                                 | Broches                                      |
+| -------------- | -------------------------------------- | -------------------------------------------- |
+| Transistor NPN | Usage général (type 2N3904)            | `C` (collecteur), `B` (base), `E` (émetteur) |
+| Transistor PNP | Usage général (type 2N3906)            | `C`, `B`, `E`                                |
+| MOSFET canal N | Usage général (type 2N7000, seuil 2 V) | `D` (drain), `G` (grille), `S` (source)      |

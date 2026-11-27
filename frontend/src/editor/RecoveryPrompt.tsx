@@ -58,7 +58,8 @@ export function RecoveryPrompt() {
   if (!found) return null;
 
   const restore = () => {
-    useEditorStore.getState().restoreDocument(found.doc);
+    // Never saved as it is: marked as modified (#274).
+    useEditorStore.getState().openDocument(found.doc, true);
     adoptFileName(found.fileName);
     setFound(null);
   };
