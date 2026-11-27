@@ -19,9 +19,16 @@ class SymbolDef:
     psice_type: str
     pins: tuple[tuple[str, int, int], ...]  # (Psice pin name, x, y) at R0
     value_param: str | None = None  # where `SYMATTR Value` goes ("resistance"...)
+    # The Psice symbol is the LTspice one upside down (the PNP: collector at the bottom in
+    # Psice, at the top in LTspice): turned over on import so the wires do not cross it.
+    flipped: bool = False
 
 
 _DIODE_PINS = (("A", 16, 0), ("K", 16, 64))
+# Transistors (#140): pin positions read in the npn, pnp and nmos symbols of LTspice. The
+# PNP has the same outline as the NPN in LTspice, collector at the top.
+_BJT_PINS = (("C", 64, 0), ("B", 0, 48), ("E", 64, 96))
+_MOS_PINS = (("D", 48, 0), ("G", 0, 80), ("S", 48, 96))
 
 SYMBOLS: dict[str, SymbolDef] = {
     "res": SymbolDef("resistor", (("1", 16, 16), ("2", 16, 96)), "resistance"),
@@ -36,6 +43,11 @@ SYMBOLS: dict[str, SymbolDef] = {
     "cell": SymbolDef("voltage_source", (("+", 0, 0), ("-", 0, 64))),
     # LTspice ideal op-amp: same outline as the real ones; its supply pins are not used.
     "opamp": SymbolDef("opamp", (("+", -32, 80), ("-", -32, 48), ("out", 32, 64)), "model"),
+    "npn": SymbolDef("npn", _BJT_PINS, "model"),
+    "npn2": SymbolDef("npn", _BJT_PINS, "model"),
+    "pnp": SymbolDef("pnp", _BJT_PINS, "model", flipped=True),
+    "pnp2": SymbolDef("pnp", _BJT_PINS, "model", flipped=True),
+    "nmos": SymbolDef("nmos", _MOS_PINS, "model"),
 }
 
 # Real op-amps of the LTspice library (OpAmps\LT1055, OpAmps\opamp2...) share one outline.
@@ -60,7 +72,16 @@ PREFIXES = {
     "led": "D",
     "opamp": "X",
     "opamp_real": "X",
+    "npn": "Q",
+    "pnp": "Q",
+    "nmos": "M",
 }
+
+
+def turned_over(rotation: int, mirror: bool) -> tuple[int, bool]:
+    """The orientation of a symbol drawn upside down: a vertical flip is a horizontal mirror
+    then a half turn, and a half turn commutes with everything."""
+    return (rotation + 180) % 360, not mirror
 
 
 def symbol_key(name: str) -> str:
