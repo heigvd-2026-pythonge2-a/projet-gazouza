@@ -8,10 +8,13 @@ import {
   analysisSources,
   chosenSource,
   dcRangeFor,
+  DEFAULT_TRAN_POINTS,
   diagnosticMarks,
+  formatSI,
   freshSimulation,
   operatingPointTable,
   terminalVoltageRows,
+  tranStep,
   useEditorStore,
   type AnalysisKind,
   type AnalysisSettings,
@@ -89,6 +92,20 @@ function Field(props: {
       />
       {props.unit}
     </label>
+  );
+}
+
+/** The time step that the transient settings give (#334), or nothing while one is invalid. */
+function TranStepHint() {
+  const step = useEditorStore((s) => tranStep(s.analysis));
+  if (step === null) return null;
+  return (
+    <span
+      style={{ fontSize: 12, color: UI.muted, whiteSpace: "nowrap" }}
+      title="Écart entre deux points de la courbe (ngspice en ajoute autour des changements rapides)"
+    >
+      soit un pas de {formatSI(step, "s")}
+    </span>
   );
 }
 
@@ -201,9 +218,18 @@ export function SimulationControls() {
               setting="stopTime"
             />
             <Field
+              caption="Points"
+              label="Nombre de points"
+              title="Finesse de la courbe : au moins ce nombre de points entre 0 et la durée (200 000 au plus)"
+              setting="tranPoints"
+              placeholder={String(DEFAULT_TRAN_POINTS)}
+              width={56}
+            />
+            <TranStepHint />
+            <Field
               caption="Pas max"
               label="Pas maximal (s)"
-              title="Plus grand pas de calcul, en secondes ; vide : automatique"
+              title="Réglage avancé : plus grand pas de calcul, en secondes ; vide : durée / points"
               unit="s"
               setting="maxStep"
               placeholder="auto"

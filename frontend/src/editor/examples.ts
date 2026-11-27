@@ -40,6 +40,7 @@ export function analysisSettings(analysis: Analysis): Partial<AnalysisSettings> 
       return {
         kind: "tran",
         stopTime: spiceNumber(analysis.stop_time),
+        tranPoints: analysis.points ? String(analysis.points) : "",
         maxStep: analysis.max_step ? spiceNumber(analysis.max_step) : "",
       };
     case "ac":

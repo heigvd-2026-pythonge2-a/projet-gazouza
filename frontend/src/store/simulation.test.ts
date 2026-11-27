@@ -11,6 +11,7 @@ import {
   operatingPointTable,
   parseSpiceNumber,
   toAnalysis,
+  tranStep,
   toSchematic,
   DEFAULT_ANALYSIS,
 } from "./simulation";
@@ -56,6 +57,48 @@ describe("analysis settings", () => {
     expect(toAnalysis({ ...tran, maxStep: "1" })).toEqual({
       error: expect.stringMatching(/plus petit/),
     });
+  });
+});
+
+describe("number of points of a transient analysis (#334)", () => {
+  const tran = { ...DEFAULT_ANALYSIS, kind: "tran", stopTime: "10m" } as const;
+
+  it("sends the points typed, nothing when empty (the backend takes 1000)", () => {
+    expect(toAnalysis({ ...tran, tranPoints: "20000" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 20000 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: "20 000" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 20000 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: " " })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01 },
+    });
+    expect(toAnalysis({ ...tran, tranPoints: "50", maxStep: "1u" })).toEqual({
+      analysis: { kind: "tran", stop_time: 0.01, points: 50, max_step: 1e-6 },
+    });
+  });
+
+  it("refuses a number that is not a whole number, or above the limit", () => {
+    for (const text of ["abc", "1.5", "0", "1", "-10", "1k"]) {
+      expect(toAnalysis({ ...tran, tranPoints: text })).toEqual({
+        error: expect.stringMatching(/Nombre de points invalide/),
+      });
+    }
+    expect(toAnalysis({ ...tran, tranPoints: "200000" })).toHaveProperty("analysis");
+    expect(toAnalysis({ ...tran, tranPoints: "200001" })).toEqual({
+      error: expect.stringMatching(/limite est 200.000/),
+    });
+  });
+
+  it("gives the step as the backend computes it", () => {
+    expect(tranStep(tran)).toBeCloseTo(1e-5);
+    expect(tranStep({ ...tran, tranPoints: "100" })).toBeCloseTo(1e-4);
+    expect(tranStep({ ...tran, tranPoints: "100", maxStep: "1u" })).toBeCloseTo(1e-6);
+    expect(tranStep({ ...tran, tranPoints: "100", maxStep: "1m" })).toBeCloseTo(1e-4);
+    // A maximum step alone is the step, even above duration / 1000.
+    expect(tranStep({ ...tran, maxStep: "1m" })).toBeCloseTo(1e-3);
+    expect(tranStep({ ...tran, tranPoints: "x" })).toBeNull();
+    expect(tranStep({ ...tran, stopTime: "" })).toBeNull();
   });
 });
 
