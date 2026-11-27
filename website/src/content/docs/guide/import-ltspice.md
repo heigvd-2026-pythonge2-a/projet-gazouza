@@ -19,6 +19,8 @@ d'un cours ou d'un laboratoire sans les redessiner.
   diodes et amplis-op au fur et à mesure qu'ils rejoignent la bibliothèque.
 - Les **fils**, avec leurs connexions : un fil qui touche le milieu d'un autre devient une
   jonction.
+- La **direction** des étiquettes (port `In`, `Out` ou `BiDir` de LTspice) : entrée, sortie ou
+  bidirectionnelle. Elle ne change que le dessin du drapeau.
 - Les **valeurs**, converties au format de Psice.
 - Les **formes d'onde** des sources (`PULSE`, `SIN`, continu).
 - La **première analyse** du fichier (`.op`, `.tran`, `.ac` ou `.dc`).
