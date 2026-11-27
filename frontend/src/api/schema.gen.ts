@@ -226,6 +226,8 @@ export interface components {
         | "WIRE_DANGLING"
         | "JUNCTION_DANGLING"
         | "MILLI_SUFFIX"
+        | "LED_OVERCURRENT"
+        | "LED_REVERSE_VOLTAGE"
         | "SINGULAR_MATRIX"
         | "VOLTAGE_SOURCE_LOOP"
         | "NO_CONVERGENCE"
