@@ -188,6 +188,30 @@ def test_flags() -> None:
     assert len(result.warnings) == 3  # the 3 renamed nodes
 
 
+def test_iopin_gives_the_label_direction() -> None:
+    # IOPIN In / Out / BiDir (#234); unknown, lonely or incomplete ones are ignored.
+    result = import_asc(asc("FLAG 0 0 a", "IOPIN 0 0 In", "FLAG 0 16 b", "IOPIN 0 16 Out",
+                            "FLAG 0 32 c", "IOPIN 0 32 BiDir", "FLAG 0 48 d", "IOPIN 0 48 Up",
+                            "FLAG 0 64 e", "IOPIN 99 99 In", "IOPIN 0 80", "FLAG 0 80 0",
+                            "IOPIN 0 80 In"))  # fmt: skip
+    components = result.schematic.components
+    assert [c.params.get("direction") for c in components[:5]] == [
+        "input", "output", "bidir", None, None,
+    ]  # fmt: skip
+    assert components[5].type == "ground" and components[5].params == {}
+    assert result.errors == [] and result.warnings == []
+
+
+def test_iopin_does_not_change_the_netlist() -> None:
+    lines = ["SYMBOL voltage 0 0 R0", "SYMATTR InstName V1", "SYMATTR Value 5", "FLAG 0 96 0",
+             "FLAG 0 16 out"]  # fmt: skip
+    netlists = [
+        generate_netlist(import_asc(asc(*extra)).schematic, OpAnalysis()).netlist
+        for extra in (lines, [*lines, "IOPIN 0 16 Out"])
+    ]
+    assert netlists[0] == netlists[1]
+
+
 # --- 20d. Values, sources and directives -------------------------------------------------------
 
 

@@ -149,9 +149,19 @@ def _spice_name(name: str, prefix: str, taken: set[str | None]) -> str:
     return candidate
 
 
+# LTspice port direction (IOPIN) -> direction of a Psice label. Only changes the drawing.
+IOPIN_DIRECTIONS = {"in": "input", "out": "output", "bidir": "bidir"}
+
+
 def _flags(asc: AscFile, first: int, result: AscImport) -> list[_Placed]:
-    """FLAG 0 -> ground ; any other FLAG -> label with that node name."""
+    """FLAG 0 -> ground ; any other FLAG -> label with that node name, and the direction of the
+    IOPIN at the same point, if any (#234)."""
     placed: list[_Placed] = []
+    directions = {
+        (pin.x, pin.y): IOPIN_DIRECTIONS[pin.direction.lower()]
+        for pin in asc.iopins
+        if pin.direction.lower() in IOPIN_DIRECTIONS
+    }
     names: dict[str, str] = {}  # LTspice name (lower case) -> Psice name
     for flag in asc.flags:
         comp_id = f"c{first + len(placed) + 1}"
@@ -166,7 +176,10 @@ def _flags(asc: AscFile, first: int, result: AscImport) -> list[_Placed]:
                     f"Le nœud « {flag.name} » est renommé « {net} » (lettres, chiffres et _ "
                     "seulement)."
                 )
-            component = Component(id=comp_id, type="label", position=position, params={"net": net})
+            params = {"net": net}
+            if (flag.x, flag.y) in directions:
+                params["direction"] = directions[(flag.x, flag.y)]
+            component = Component(id=comp_id, type="label", position=position, params=params)
         placed.append(_Placed(component, {"1": (flag.x, flag.y)}))
     return placed
 

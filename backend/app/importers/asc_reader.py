@@ -39,6 +39,13 @@ class AscFlag:
 
 
 @dataclass
+class AscIopin:
+    x: int
+    y: int
+    direction: str  # "In", "Out" or "BiDir", as written in the file
+
+
+@dataclass
 class AscSymbol:
     name: str  # e.g. "res", "voltage", "Misc\\EuropeanResistor"
     x: int
@@ -51,6 +58,7 @@ class AscSymbol:
 class AscFile:
     wires: list[AscWire] = field(default_factory=list)
     flags: list[AscFlag] = field(default_factory=list)
+    iopins: list[AscIopin] = field(default_factory=list)  # direction of the flag at that point
     symbols: list[AscSymbol] = field(default_factory=list)
     directives: list[str] = field(default_factory=list)  # ".tran 5m", without the "!"
 
@@ -77,7 +85,7 @@ def _ints(values: list[str], line_number: int) -> list[int]:
 
 
 def read_asc(text: str) -> AscFile:
-    """Parse the lines of an `.asc` file. Unknown lines (WINDOW, SHEET, IOPIN...) are skipped."""
+    """Parse the lines of an `.asc` file. Unknown lines (WINDOW, SHEET...) are skipped."""
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     first = next((line.strip() for line in lines if line.strip()), "")  # skip blank lines
     if not first.startswith("Version"):
@@ -100,6 +108,11 @@ def read_asc(text: str) -> AscFile:
                 raise AscFormatError(f"Ligne {number} : étiquette incomplète.")
             x, y = _ints(parts[:2], number)
             asc.flags.append(AscFlag(x, y, " ".join(parts[2:])))
+        elif keyword == "IOPIN":
+            # IOPIN x y In|Out|BiDir: an incomplete one only loses a drawing detail.
+            if len(parts) >= 3:
+                x, y = _ints(parts[:2], number)
+                asc.iopins.append(AscIopin(x, y, parts[2]))
         elif keyword == "SYMBOL":
             if len(parts) < 4:
                 raise AscFormatError(f"Ligne {number} : symbole incomplet.")
