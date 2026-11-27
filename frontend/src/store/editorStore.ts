@@ -153,6 +153,11 @@ interface EditorState {
   showValues: boolean;
   /** What a hovered line of the results panel points at, highlighted on the schematic (#292). */
   reportHighlight: OperatingPointRow["highlight"];
+  /**
+   * The push button held down with the mouse (#43): closed while it is held, without changing the
+   * document (nothing to save or undo). Simulations take it into account (`simulatedDoc`).
+   */
+  pressedButton: string | null;
   /** Current animation on the schematic (only shown while the simulation is up to date). */
   animation: CurrentAnimation;
   /** The document as last saved, opened or created: `doc` differs from it when unsaved. */
@@ -183,6 +188,10 @@ interface EditorState {
   moveSelection: (delta: GridPoint, options?: { merge?: boolean; detach?: boolean }) => void;
   renameComponent: (id: string, name: string) => void;
   setParam: (id: string, param: string, value: string) => void;
+  /** Opens a closed switch, closes an open one (#43): one undo step each time. */
+  toggleSwitch: (id: string) => void;
+  /** Holds a push button down (closed), or lets it go (null). */
+  pressButton: (id: string | null) => void;
   /** Starts the wire tool. */
   startWiring: () => void;
   /** Starts the text tool (T). */
@@ -293,6 +302,33 @@ export interface CurrentAnimation {
 /** Real duration of the playback of a transient simulation at speed 1, in seconds. */
 export const PLAYBACK_SECONDS = 5;
 
+/** Model names of the two states of a switch or a push button (their `state` parameter). */
+export const SWITCH_OPEN = "SW_OPEN";
+export const SWITCH_CLOSED = "SW_CLOSED";
+
+/** True for the components opened and closed with a click (#43). */
+export const isSwitch = (type: string): boolean => type === "switch" || type === "push_button";
+
+/** The other state of a switch (absent or unknown: open, so it closes). */
+export const toggledState = (state: string | undefined): string =>
+  state === SWITCH_CLOSED ? SWITCH_OPEN : SWITCH_CLOSED;
+
+/**
+ * The document as it is simulated: `doc`, with the push button held down closed (#43). The same
+ * document when no button is held.
+ */
+export function simulatedDoc(doc: EditorDoc, pressedButton: string | null): EditorDoc {
+  if (pressedButton === null) return doc;
+  return {
+    ...doc,
+    components: doc.components.map((c) =>
+      c.id === pressedButton && c.type === "push_button"
+        ? { ...c, params: { ...c.params, state: SWITCH_CLOSED } }
+        : c,
+    ),
+  };
+}
+
 /** The last simulation if it was run on the document shown now, else null. */
 export const freshSimulation = (s: Pick<EditorState, "doc" | "simulation">) =>
   s.simulation && s.simulation.doc === s.doc ? s.simulation.result : null;
@@ -310,6 +346,7 @@ function freshDocument(doc: EditorDoc) {
     draft: null,
     // A result of another document would show as stale: forget it.
     simulation: null,
+    pressedButton: null,
   };
 }
 
@@ -373,6 +410,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   notice: null,
   showValues: true,
   reportHighlight: null,
+  pressedButton: null,
 
   setTool: (tool) => set({ tool, draft: null, wirePart: null, segments: [], notice: null }),
 
@@ -432,6 +470,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setParam: (id, param, value) =>
     set((s) => change(s, setParam(s.doc, id, param, value), `param:${id}:${param}`)),
+
+  toggleSwitch: (id) =>
+    set((s) => {
+      const c = s.doc.components.find((x) => x.id === id);
+      if (!c || !isSwitch(c.type)) return {};
+      return change(s, setParam(s.doc, id, "state", toggledState(c.params.state)));
+    }),
+
+  pressButton: (id) => set({ pressedButton: id }),
 
   startWiring: () =>
     set({ tool: { kind: "wire" }, selection: [], wirePart: null, segments: [], draft: null }),
