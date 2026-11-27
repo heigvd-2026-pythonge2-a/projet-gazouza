@@ -21,6 +21,7 @@ from app.models import (
     FreeEnd,
     JunctionEnd,
     JunctionTarget,
+    NetTarget,
     PinEnd,
     PinTarget,
     Schematic,
@@ -35,6 +36,7 @@ from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, par
 LABEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 AUTOMATIC_NAME = re.compile(r"n\d+", re.IGNORECASE)
 SOURCE_TYPES = ("voltage_source", "current_source")
+GROUND_NODE = "0"
 
 # Errors after which the nodes cannot be built safely.
 BLOCKING: set[DiagnosticCode] = {
@@ -330,3 +332,30 @@ def check_nodes(
             f"{capitalize(describe(components[label_id]))} est reliée à la masse.",
             ComponentTarget(comp=label_id),
         )
+    for comp in schematic.components:
+        _check_shorted(report, comp, nodes, library[comp.type])
+
+
+def _check_shorted(report: Report, comp: Component, nodes: Nodes, ctype: ComponentType) -> None:
+    """SHORTED_COMPONENT (#262): every pin of a component on one node, so it has no effect.
+
+    Not for a voltage source (ngspice already fails with VOLTAGE_SOURCE_LOOP), nor for a
+    component with one pin (ground, label), nor for one whose pins are only partly shorted (a
+    transistor wired as a diode is on purpose).
+    """
+    if ctype.spice is None or comp.type == "voltage_source" or len(ctype.pins) < 2:
+        return
+    if not all(touches(nodes, comp, pin.name) for pin in ctype.pins):
+        return  # PIN_NOT_CONNECTED already says what is wrong
+    shared = {nodes.pin_node.get((comp.id, pin.name)) for pin in ctype.pins}
+    if len(shared) != 1 or None in shared:
+        return
+    node = shared.pop()
+    where = "à la masse" if node == GROUND_NODE else f"au même nœud ({node})"
+    report.warning(
+        "SHORTED_COMPONENT",
+        f"{capitalize(describe(comp))} est court-circuité : toutes ses broches sont reliées "
+        f"{where}, il n'a aucun effet.",
+        ComponentTarget(comp=comp.id),
+        NetTarget(net=node),
+    )

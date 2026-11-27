@@ -61,7 +61,7 @@ plus récente de l'éditeur s'ouvre quand même.
 | `type` | Un type de la bibliothèque (`resistor`, `voltage_source`, `ground`, `label`…) |
 | `name` | Nom SPICE unique qui commence par le préfixe du type ; absent pour `ground` et `label` |
 | `position` | En unités de grille (entiers), l'axe *y* vers le bas |
-| `rotation` | `0`, `90`, `180` ou `270`, sens horaire |
+| `rotation` | `0`, `90`, `180` ou `270`, sens horaire ; aussi `45`, `135`, `225`, `315` (broches arrondies en s'éloignant de zéro) |
 | `mirror` | Miroir horizontal, appliqué **avant** la rotation |
 | `params` | Valeurs **telles que tapées** (`"10k"`, `"1u"`) ; l'éditeur écrit tous les défauts à la pose |
 | `name_offset`, `value_offset` | Facultatifs : position du nom et de la valeur placés à la main (centre du texte, en cases, décimales permises, dans le repère du composant). Absents : placement automatique |

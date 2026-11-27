@@ -30,12 +30,20 @@ DiagnosticCode = Literal[
     "WIRE_DANGLING",
     "JUNCTION_DANGLING",
     "MILLI_SUFFIX",
+    "SHORTED_COMPONENT",
+    # After the simulation (Damien): a LED that would burn out
+    "LED_OVERCURRENT",
+    "LED_REVERSE_VOLTAGE",
     # Simulation (Antoine, ngspice)
     "SINGULAR_MATRIX",
     "VOLTAGE_SOURCE_LOOP",
     "NO_CONVERGENCE",
     "SIMULATION_TIMEOUT",
     "SIMULATION_FAILED",
+    # Import of an LTspice .asc file (Damien)
+    "IMPORT_UNREADABLE",
+    "IMPORT_SKIPPED",
+    "IMPORT_CHANGED",
 ]
 
 

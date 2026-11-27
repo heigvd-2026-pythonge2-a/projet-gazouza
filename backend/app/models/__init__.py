@@ -1,5 +1,6 @@
 """API contract (Pydantic). Single source of truth for the frontend TypeScript types."""
 
+from app.models.imports import AscImportRequest, ImportResult
 from app.models.library import LibraryComponent, ParamDef, ParamOption, PinDef
 from app.models.netlist import (
     ComponentTarget,
@@ -41,6 +42,7 @@ from app.models.simulation import (
 __all__ = [
     "SCHEMATIC_VERSION",
     "AcAnalysis",
+    "AscImportRequest",
     "Analysis",
     "Axis",
     "Component",
@@ -49,6 +51,7 @@ __all__ = [
     "Diagnostic",
     "DiagnosticCode",
     "FreeEnd",
+    "ImportResult",
     "Junction",
     "JunctionEnd",
     "JunctionTarget",
