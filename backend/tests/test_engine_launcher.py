@@ -508,16 +508,100 @@ def test_on_window_closing_delegates_to_psice_request_close_and_destroys_without
     window.create_confirmation_dialog.assert_not_called()
     assert len(captured_callbacks) == 1
 
-    # Duplicate close clicks while the page dialog is open must be ignored cleanly.
+    # Subsequent close clicks re-check and re-invoke psiceRequestClose() (CloseDialog returns the
+    # existing Promise if still open, or opens a fresh dialog after a reload).
     assert launcher.on_window_closing(window) is False
-    assert len(captured_callbacks) == 1
+    assert len(captured_callbacks) == 2
 
+    # Stale callback from the first request must be ignored once superseded.
     captured_callbacks[0](True)
+    assert destroy_results == []
+
+    captured_callbacks[1](True)
     assert destroy_results == [True]
     # Bypass flag is consumed once, so a later close check runs normally.
     assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 3
+    captured_callbacks[2](False)
+
+
+def test_on_window_closing_retries_psice_request_close_after_unanswered_request() -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    destroy_calls = 0
+
+    class _FakeWindow:
+        native = None
+        events = SimpleNamespace(_pywebviewready=SimpleNamespace(is_set=lambda: True))
+        create_confirmation_dialog = MagicMock()
+
+        def evaluate_js(
+            self, script: str, callback: Callable[[object], None] | None = None
+        ) -> object:
+            if script in (launcher.UNSAVED_CHANGES_JS, launcher.CLOSE_REQUEST_CHECK_JS):
+                return True
+            if script == launcher.CLOSE_REQUEST_JS:
+                assert callback is not None
+                captured_callbacks.append(callback)
+                return True
+            raise AssertionError(f"Unexpected JS: {script}")
+
+        def destroy(self) -> None:
+            nonlocal destroy_calls
+            destroy_calls += 1
+
+    window = _FakeWindow()
+    # First click opens dialog, then page reloads before the Promise settles (callback never runs).
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+
+    # Second click after reload re-requests close and succeeds when confirmed.
+    assert launcher.on_window_closing(window) is False
     assert len(captured_callbacks) == 2
-    captured_callbacks[1](False)
+
+    # A late callback from the superseded request must not clear or close prematurely.
+    captured_callbacks[0](False)
+    assert id(window) in launcher._pending_async_close_windows
+    assert destroy_calls == 0
+
+    captured_callbacks[1](True)
+    assert destroy_calls == 1
+    assert id(window) not in launcher._pending_async_close_windows
+    window.create_confirmation_dialog.assert_not_called()
+
+
+def test_on_window_closing_falls_back_to_native_dialog_when_handler_lost_after_pending() -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    handler_available = True
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
+    window.create_confirmation_dialog.return_value = True
+
+    def fake_eval(script: str, callback: Callable[[object], None] | None = None) -> object:
+        if script == launcher.UNSAVED_CHANGES_JS:
+            return True
+        if script == launcher.CLOSE_REQUEST_CHECK_JS:
+            return handler_available
+        if script == launcher.CLOSE_REQUEST_JS:
+            assert callback is not None
+            captured_callbacks.append(callback)
+            return True
+        raise AssertionError(f"Unexpected JS: {script}")
+
+    window.evaluate_js.side_effect = fake_eval
+
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+    assert id(window) in launcher._pending_async_close_windows
+
+    # Renderer crashes or page loses psiceRequestClose before resolving the first request.
+    handler_available = False
+    assert launcher.on_window_closing(window) is True
+    window.create_confirmation_dialog.assert_called_once_with(
+        "Psice",
+        "Le schéma contient des modifications non enregistrées. Fermer quand même ?",
+    )
+    assert id(window) not in launcher._pending_async_close_windows
 
 
 @pytest.mark.parametrize("decision", [False, None, {"message": "rejected"}])

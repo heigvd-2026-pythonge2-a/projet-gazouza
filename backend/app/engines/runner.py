@@ -37,7 +37,8 @@ MAX_RAWFILE_BYTES: int = 200 * 1024 * 1024
 _CIRCUIT_FILENAME = "circuit.cir"
 _RAWFILE_FILENAME = "output.raw"
 _SAVE_ITEMS_PER_LINE = 10
-_AC_SENSED_PREFIXES: tuple[str, ...] = ("r", "c", "d", "i")
+_AC_SENSED_PREFIXES: tuple[str, ...] = ("r", "c", "d", "i", "s")
+_ALWAYS_SENSED_PREFIXES: tuple[str, ...] = ("s",)
 _ALLOWED_DOT_DIRECTIVES: frozenset[str] = frozenset(
     {
         ".model",
@@ -149,7 +150,8 @@ def _validate_save_component_name(spice_name: str) -> None:
 def _non_vl_current_save_token(comp_lower: str) -> str | None:
     """Return the ngspice @comp[...] .save token for non-V/L 2-pin elements, or None."""
     # Only 2-pin elements with a scalar ngspice current parameter get `@comp[...]` tokens;
-    # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`.
+    # multi-terminal devices (Q*, M*, X*, ...) would produce silent 0.0 vectors for `@comp[i]`,
+    # and switches (S*) use 0V sense sources because ngspice reports V/Roff for `@s[i]` in .op.
     if comp_lower.startswith(("r", "c")):
         return f"@{comp_lower}[i]"
     if comp_lower.startswith("d"):
@@ -187,7 +189,7 @@ def _collect_save_tokens(
         _add("all")
 
     sense_by_component: dict[str, str] = {}
-    if has_explicit_nets and is_ac and current_aliases:
+    if has_explicit_nets and current_aliases:
         for sense_source, target_spice in current_aliases.items():
             _validate_save_component_name(sense_source)
             sense_by_component[target_spice.strip().lower()] = sense_source.strip().lower()
@@ -199,14 +201,12 @@ def _collect_save_tokens(
             if has_explicit_nets:
                 _add(f"i({comp_lower})")
             continue
+        if has_explicit_nets and (sense_source := sense_by_component.get(comp_lower)) is not None:
+            _add(f"i({sense_source})")
+            continue
         if is_ac:
             # In .ac, ngspice ignores/warns on @comp[i]; non-V/L elements use 0V sense sources
             # (already captured by `all` when `nets` is empty).
-            if (
-                has_explicit_nets
-                and (sense_source := sense_by_component.get(comp_lower)) is not None
-            ):
-                _add(f"i({sense_source})")
             continue
         if (token := _non_vl_current_save_token(comp_lower)) is not None:
             _add(token)
@@ -493,6 +493,11 @@ def _validate_analysis_parameters(analysis: Analysis) -> str | None:
     if isinstance(analysis, TranAnalysis):
         if not _is_positive_finite(analysis.stop_time):
             return "La durée de l'analyse transitoire doit être finie et strictement positive."
+        if analysis.points is not None and not _is_positive_int(analysis.points):
+            return (
+                "Le nombre de points de l'analyse transitoire doit être "
+                "un entier strictement positif."
+            )
         if analysis.max_step is not None and not _is_positive_finite(analysis.max_step):
             return "Le pas maximal de l'analyse transitoire doit être fini et strictement positif."
         return None
@@ -570,10 +575,14 @@ def _format_analysis_directive(
         return ".op"
     if isinstance(analysis, TranAnalysis):
         tstop = _format_spice_number(analysis.stop_time)
-        if analysis.max_step is None:
+        steps = [analysis.max_step] if analysis.max_step is not None else []
+        if analysis.points is not None:
+            steps.append(analysis.stop_time / analysis.points)
+        max_step = min(steps, default=None)
+        if max_step is None:
             tstep = _format_spice_number(analysis.stop_time / 1000.0)
             return f".tran {tstep} {tstop}"
-        step = _format_spice_number(analysis.max_step)
+        step = _format_spice_number(max_step)
         return f".tran {step} {tstop} 0 {step}"
     if isinstance(analysis, AcAnalysis):
         start = _format_spice_number(analysis.start_frequency)
@@ -720,13 +729,19 @@ def _prepare_netlist_for_execution(
         blocks = _blocks
 
     is_ac = isinstance(analysis, AcAnalysis)
+    sensed_prefixes = _AC_SENSED_PREFIXES if is_ac else _ALWAYS_SENSED_PREFIXES
+    needs_sense_lookup = is_ac or any(
+        name.strip().lower().startswith(_ALWAYS_SENSED_PREFIXES)
+        for name in netlist_result.components
+    )
     ac_source_lower: str | None = None
     used_nodes_lower: set[str] = set()
     used_components_lower: set[str] = set()
-    if is_ac:
+    if needs_sense_lookup:
         used_nodes_lower, used_components_lower = _collect_existing_identifiers(
             blocks, netlist_result
         )
+    if is_ac:
         ac_source_name = resolve_source_name(analysis.input_source_id, netlist_result)
         if ac_source_name is not None:
             ac_source_lower = ac_source_name.strip().lower()
@@ -785,12 +800,12 @@ def _prepare_netlist_for_execution(
         if ac_source_lower is not None and base_token == ac_source_lower:
             block_lines, tokens = _append_ac_excitation_to_block(block_lines, tokens)
 
-        if is_ac and len(tokens) >= 3:
+        if len(tokens) >= 3:
             resolved = _find_matching_component(tokens[0], netlist_result.components)
             if resolved is not None:
                 spice_name, _ = resolved
                 comp_lower = spice_name.strip().lower()
-                if comp_lower.startswith(_AC_SENSED_PREFIXES) and (
+                if comp_lower.startswith(sensed_prefixes) and (
                     comp_lower not in instrumented_lower
                 ):
                     instrumented_lower.add(comp_lower)
@@ -1470,7 +1485,7 @@ def run_simulation(
 
         try:
             completed = subprocess.run(
-                [str(executable), "-b", _CIRCUIT_FILENAME, "-r", _RAWFILE_FILENAME],
+                [str(executable), "-n", "-b", _CIRCUIT_FILENAME, "-r", _RAWFILE_FILENAME],
                 cwd=tmp_path,
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
