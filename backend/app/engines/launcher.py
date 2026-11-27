@@ -47,10 +47,13 @@ from app.netlist.library import load_library
 logger = logging.getLogger(__name__)
 
 LOCALHOST_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 47521
 ALLOWED_HOSTS: tuple[str, ...] = ("127.0.0.1", "localhost")
 _LOCALHOST_URL_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
 
 DEV_URL_ENV_VAR = "PSICE_DEV_URL"
+_STORAGE_APP_DIR_NAME = "Psice"
+_STORAGE_WEBVIEW_DIR_NAME = "webview"
 WINDOW_TITLE = "Psice"
 UNSAVED_CHANGES_JS = "Boolean(window.psiceHasUnsavedChanges?.())"
 CLOSE_REQUEST_CHECK_JS = "typeof window.psiceRequestClose === 'function'"
@@ -133,6 +136,63 @@ def find_free_port(host: str = LOCALHOST_HOST) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((host, 0))
         return int(sock.getsockname()[1])
+
+
+def resolve_default_port(host: str = LOCALHOST_HOST, preferred: int = DEFAULT_SERVER_PORT) -> int:
+    """Return ``preferred`` when bindable on localhost, else fall back to an ephemeral port."""
+    if host != LOCALHOST_HOST:
+        raise ValueError(f"Launcher server must bind only to {LOCALHOST_HOST}, got {host!r}.")
+    if isinstance(preferred, bool) or not (1 <= preferred <= 65535):
+        raise ValueError(f"Port must be between 1 and 65535, got {preferred!r}.")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((host, preferred))
+            return preferred
+        except OSError:
+            logger.info(
+                "Default port %d is unavailable; falling back to an ephemeral port.",
+                preferred,
+            )
+            return find_free_port(host)
+
+
+def resolve_storage_path() -> str | None:
+    """Return a writable per-user directory for persistent pywebview storage, or None."""
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        candidate = base / _STORAGE_APP_DIR_NAME / _STORAGE_WEBVIEW_DIR_NAME
+    elif sys.platform == "darwin":
+        candidate = (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / _STORAGE_APP_DIR_NAME
+            / _STORAGE_WEBVIEW_DIR_NAME
+        )
+    else:
+        xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+        base = Path(xdg_data_home) if xdg_data_home else Path.home() / ".local" / "share"
+        candidate = base / _STORAGE_APP_DIR_NAME.lower() / _STORAGE_WEBVIEW_DIR_NAME
+
+    try:
+        candidate.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning(
+            "Unable to create persistent webview storage directory %s; using pywebview default.",
+            candidate,
+            exc_info=True,
+        )
+        return None
+
+    if not os.access(candidate, os.W_OK):
+        logger.warning(
+            "Persistent webview storage directory %s is not writable; using pywebview default.",
+            candidate,
+        )
+        return None
+
+    return str(candidate)
 
 
 def validate_dev_url(raw_url: str) -> str:
@@ -1129,12 +1189,20 @@ def launch(
                 "aucun serveur backend n'est démarré dans ce mode "
                 "(lancez `uv run uvicorn app.main:app --reload` sur le port 8000)."
             )
+        storage_path = resolve_storage_path()
         _create_app_window(resolved_dev_url)
-        webview.start(debug=debug, icon=resolve_app_icon())
+        webview.start(
+            debug=debug,
+            icon=resolve_app_icon(),
+            private_mode=False,
+            storage_path=storage_path,
+        )
         return
 
+    storage_path = resolve_storage_path()
     app = create_launcher_app(frontend_dist=frontend_dist)
-    server = RunningServer(app, host=LOCALHOST_HOST, port=port)
+    server_port = resolve_default_port() if port is None else port
+    server = RunningServer(app, host=LOCALHOST_HOST, port=server_port)
     try:
         window = _create_app_window(None, html_content=build_splash_html())
     except Exception:
@@ -1196,7 +1264,13 @@ def launch(
             worker_done.set()
 
     try:
-        webview.start(func=_startup_worker, debug=debug, icon=resolve_app_icon())
+        webview.start(
+            func=_startup_worker,
+            debug=debug,
+            icon=resolve_app_icon(),
+            private_mode=False,
+            storage_path=storage_path,
+        )
     finally:
         closed_event.set()
         splash_ready_or_closed.set()
@@ -1387,7 +1461,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Localhost port for the embedded backend server "
-            "(default: ephemeral free port; cannot be combined with --dev-url)."
+            f"(default: {DEFAULT_SERVER_PORT}, falling back to an ephemeral free port if busy; "
+            "cannot be combined with --dev-url)."
         ),
     )
     parser.add_argument(

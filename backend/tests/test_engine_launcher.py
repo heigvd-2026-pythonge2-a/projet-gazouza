@@ -42,9 +42,11 @@ def _touch(path: Path, content: str = "") -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _clear_dev_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Isolate tests from any host PSICE_DEV_URL setting."""
+def _isolate_launcher_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Isolate tests from host PSICE_DEV_URL and user data directories."""
     monkeypatch.delenv(launcher.DEV_URL_ENV_VAR, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
 
 
 def test_find_free_port_returns_bindable_localhost_port() -> None:
@@ -58,6 +60,83 @@ def test_find_free_port_returns_bindable_localhost_port() -> None:
 def test_find_free_port_rejects_non_loopback_ip_host(bad_host: str) -> None:
     with pytest.raises(ValueError, match="127.0.0.1"):
         launcher.find_free_port(host=bad_host)
+
+
+def test_resolve_default_port_prefers_fixed_port_and_falls_back_when_busy(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    preferred = launcher.find_free_port()
+    assert launcher.resolve_default_port(preferred=preferred) == preferred
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
+        blocker.bind((launcher.LOCALHOST_HOST, preferred))
+        blocker.listen(1)
+        with caplog.at_level("INFO"):
+            fallback = launcher.resolve_default_port(preferred=preferred)
+
+    assert fallback != preferred
+    assert 1 <= fallback <= 65535
+    assert f"Default port {preferred} is unavailable" in caplog.text
+
+    with pytest.raises(ValueError, match="127.0.0.1"):
+        launcher.resolve_default_port(host="0.0.0.0", preferred=preferred)
+    for bad_port in (0, -1, 65536, True):
+        with pytest.raises(ValueError, match="Port"):
+            launcher.resolve_default_port(preferred=bad_port)  # type: ignore[arg-type]
+
+
+def test_resolve_storage_path_across_platforms_and_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Windows with LOCALAPPDATA.
+    local_app_data = tmp_path / "win_local"
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    win_path = launcher.resolve_storage_path()
+    assert win_path == str(local_app_data / "Psice" / "webview")
+    assert Path(win_path).is_dir()
+
+    # Windows without LOCALAPPDATA falls back to ~/AppData/Local.
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("LOCALAPPDATA", "   ")
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: fake_home))
+    assert launcher.resolve_storage_path() == str(
+        fake_home / "AppData" / "Local" / "Psice" / "webview"
+    )
+
+    # macOS uses ~/Library/Application Support/Psice/webview.
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert launcher.resolve_storage_path() == str(
+        fake_home / "Library" / "Application Support" / "Psice" / "webview"
+    )
+
+    # Linux uses XDG_DATA_HOME or ~/.local/share.
+    xdg = tmp_path / "xdg_custom"
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(xdg))
+    assert launcher.resolve_storage_path() == str(xdg / "psice" / "webview")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    assert launcher.resolve_storage_path() == str(
+        fake_home / ".local" / "share" / "psice" / "webview"
+    )
+
+    # Creation failure returns None cleanly.
+    def fail_mkdir(self: Path, *_args: object, **_kwargs: object) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+    with caplog.at_level("WARNING"):
+        assert launcher.resolve_storage_path() is None
+    assert "Unable to create persistent webview storage directory" in caplog.text
+    monkeypatch.undo()
+
+    # Unwritable directory returns None cleanly.
+    monkeypatch.setattr(launcher.os, "access", lambda *_args: False)
+    with caplog.at_level("WARNING"):
+        assert launcher.resolve_storage_path() is None
+    assert "is not writable" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -912,14 +991,25 @@ def test_launch_starts_server_creates_window_and_shuts_down(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        private_mode: bool = True,
+        storage_path: str | None = None,
     ) -> None:
-        start_calls.append({"debug": debug, "icon": icon, "has_func": func is not None})
+        start_calls.append(
+            {
+                "debug": debug,
+                "icon": icon,
+                "has_func": func is not None,
+                "private_mode": private_mode,
+                "storage_path": storage_path,
+            }
+        )
         fake_window.events.loaded.fire()
         assert func is not None
         func()
         fake_window.events.closed.fire()
 
     monkeypatch.setattr(launcher, "resolve_app_icon", lambda: r"C:\brand\psice.ico")
+    monkeypatch.setattr(launcher, "resolve_storage_path", lambda: r"C:\Users\test\Psice\webview")
     monkeypatch.setattr(
         launcher,
         "_wait_for_health_endpoint",
@@ -947,7 +1037,47 @@ def test_launch_starts_server_creates_window_and_shuts_down(
     assert health_calls[0][0] == "http://127.0.0.1:49152/"
     fake_window.load_url.assert_called_once_with("http://127.0.0.1:49152/")
     fake_window.load_html.assert_not_called()
-    assert start_calls == [{"debug": True, "icon": r"C:\brand\psice.ico", "has_func": True}]
+    assert start_calls == [
+        {
+            "debug": True,
+            "icon": r"C:\brand\psice.ico",
+            "has_func": True,
+            "private_mode": False,
+            "storage_path": r"C:\Users\test\Psice\webview",
+        }
+    ]
+
+
+def test_launch_uses_default_port_when_port_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    started_ports: list[int] = []
+
+    class _FakeServer:
+        def __init__(self, config: uvicorn.Config) -> None:
+            self.config = config
+            self.started = False
+            self.should_exit = False
+            started_ports.append(config.port)
+
+        def run(self) -> None:
+            self.started = True
+            while not self.should_exit:
+                time.sleep(0.01)
+
+    fake_window = _make_fake_window()
+
+    def fake_start(**_kwargs: object) -> None:
+        fake_window.events.closed.fire()
+
+    monkeypatch.setattr(launcher, "resolve_default_port", lambda: 47521)
+    monkeypatch.setattr(launcher.uvicorn, "Server", _FakeServer)
+    monkeypatch.setattr(launcher.webview, "create_window", lambda *_a, **_kw: fake_window)
+    monkeypatch.setattr(launcher.webview, "start", fake_start)
+
+    launcher.launch(frontend_dist=tmp_path / "missing")
+    assert started_ports == [47521]
 
 
 @pytest.mark.parametrize(
@@ -979,13 +1109,21 @@ def test_launch_dev_url_opens_directly_without_starting_backend(
         raise AssertionError("Backend server must not be created or started in --dev-url mode")
 
     monkeypatch.setattr(launcher, "resolve_app_icon", lambda: r"C:\brand\psice.ico")
+    monkeypatch.setattr(launcher, "resolve_storage_path", lambda: r"C:\Users\test\Psice\webview")
     monkeypatch.setattr(launcher, "RunningServer", fail_if_called)
     monkeypatch.setattr(launcher, "create_launcher_app", fail_if_called)
     monkeypatch.setattr(launcher.webview, "create_window", fake_create_window)
     monkeypatch.setattr(
         launcher.webview,
         "start",
-        lambda *, debug=False, icon=None: start_calls.append({"debug": debug, "icon": icon}),
+        lambda *, debug=False, icon=None, private_mode=True, storage_path=None: start_calls.append(
+            {
+                "debug": debug,
+                "icon": icon,
+                "private_mode": private_mode,
+                "storage_path": storage_path,
+            }
+        ),
     )
 
     launcher.launch(dev_url=cli_dev_url, debug=True)
@@ -994,7 +1132,14 @@ def test_launch_dev_url_opens_directly_without_starting_backend(
     assert created_windows[0]["title"] == "Psice"
     assert created_windows[0]["url"] == expected_url
     assert launcher.on_window_closing in fake_window.events.closing.handlers
-    assert start_calls == [{"debug": True, "icon": r"C:\brand\psice.ico"}]
+    assert start_calls == [
+        {
+            "debug": True,
+            "icon": r"C:\brand\psice.ico",
+            "private_mode": False,
+            "storage_path": r"C:\Users\test\Psice\webview",
+        }
+    ]
 
 
 @pytest.mark.parametrize(
@@ -1083,6 +1228,7 @@ def test_launch_early_close_aborts_startup_without_error(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         fake_window.events.closed.fire()
@@ -1125,6 +1271,7 @@ def test_launch_displays_in_window_error_and_handles_load_html_failure(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         fake_window.events.loaded.fire()
@@ -1157,6 +1304,7 @@ def test_launch_displays_in_window_error_and_handles_load_html_failure(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         broken_window.events.loaded.fire()
@@ -1189,6 +1337,7 @@ def test_launch_displays_in_window_error_for_unexpected_exception(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         fake_window.events.loaded.fire()
@@ -1239,6 +1388,7 @@ def test_launch_real_server_waits_for_loaded_before_load_url_and_closed_during_w
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         assert func is not None
@@ -1271,6 +1421,7 @@ def test_launch_real_server_waits_for_loaded_before_load_url_and_closed_during_w
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         assert func is not None
@@ -1411,6 +1562,7 @@ def test_main_occupied_port_returns_error_without_traceback(
         func: Callable[[], None] | None = None,
         debug: bool = False,
         icon: str | None = None,
+        **_kwargs: object,
     ) -> None:
         del debug, icon
         fake_window.events.loaded.fire()
