@@ -78,6 +78,8 @@ c'est presque toujours un **oubli de câblage** : Psice préfère t'arrêter.
 | `JUNCTION_DANGLING` | Une jonction est reliée à moins de 2 fils. | Supprime-la, elle ne sert à rien. |
 | `MILLI_SUFFIX` | Tu as écrit `1M`, qui veut dire **1 milli** en SPICE. | Pour un méga, écris `1Meg`. Si tu voulais vraiment milli, écris `1m`. |
 | `SHORTED_COMPONENT` | Toutes les broches d'un composant sont reliées au même nœud (un fil entre ses pattes, deux étiquettes de même nom, deux masses…). Il n'a aucun effet sur le circuit. | Retire le fil ou l'étiquette qui fait le court-circuit. |
+| `LED_OVERCURRENT` | Après la simulation : une LED reçoit plus de 30 mA. Une vraie LED grillerait. | Ajoute une résistance en série (par ex. 220 Ω sous 5 V, environ 14 mA). |
+| `LED_REVERSE_VOLTAGE` | Après la simulation : une LED est soumise à 5 V ou plus en inverse. Une vraie LED grillerait. | Vérifie le sens de la LED (anode `A` vers le +). |
 
 ## Erreurs de simulation
 
