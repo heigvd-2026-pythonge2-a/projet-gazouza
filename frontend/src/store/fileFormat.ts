@@ -9,8 +9,12 @@ import {
   type EditorWire,
   type GridPoint,
   type PlacedComponent,
+  type Rotation,
   type WireEnd,
 } from "./document";
+
+/** Rotations a file may hold: quarter turns and diagonals (#161). */
+const ROTATIONS: readonly Rotation[] = [0, 45, 90, 135, 180, 225, 270, 315];
 import { getDef } from "./library";
 
 /** Marks a Psice schematic file; `version` changes if the format changes. */
@@ -61,9 +65,7 @@ function component(v: unknown): PlacedComponent {
     }
   })();
   const rotation = v.rotation;
-  if (rotation !== 0 && rotation !== 90 && rotation !== 180 && rotation !== 270) {
-    return fail(`${v.id} : rotation invalide`);
-  }
+  if (!ROTATIONS.includes(rotation as Rotation)) return fail(`${v.id} : rotation invalide`);
   const params: Record<string, string> = {};
   if (v.params !== undefined) {
     if (!isObject(v.params)) return fail(`${v.id} : paramètres invalides`);
@@ -87,7 +89,7 @@ function component(v: unknown): PlacedComponent {
     type: def.type,
     ...(typeof v.name === "string" ? { name: v.name } : {}),
     position: point(v.position, v.id as string),
-    rotation,
+    rotation: rotation as Rotation,
     mirror: v.mirror === true,
     params,
     ...offsets(v),

@@ -1,8 +1,10 @@
 // Wire routing while drawing: orthogonal paths on the grid that go around the components.
 
 import {
+  isDiagonalRotation,
   samePoint,
   toWorld,
+  turnedRect,
   type EditorDoc,
   type GridPoint,
   type PlacedComponent,
@@ -39,6 +41,8 @@ function pinPoints(doc: EditorDoc): Set<string> {
  */
 function bodyAndLeads(c: PlacedComponent): { body: GridPoint[]; leads: GridPoint[][] } {
   const def = getDef(c.type);
+  // On a diagonal the leads do not follow the grid: only the body box and the pins block.
+  const diagonal = isDiagonalRotation(c.rotation);
   const isPin = (x: number, y: number) => def.pins.some((pin) => pin.x === x && pin.y === y);
   const leads: GridPoint[][] = [];
   const body: SymbolShape[] = [];
@@ -49,6 +53,7 @@ function bodyAndLeads(c: PlacedComponent): { body: GridPoint[]; leads: GridPoint
       shape.points.length === 4 &&
       (x1 === x2 || y1 === y2) &&
       (isPin(x1 as number, y1 as number) || isPin(x2 as number, y2 as number));
+    if (isLead && diagonal) continue;
     if (isLead) {
       leads.push([
         toWorld({ x: x1 as number, y: y1 as number }, c),
@@ -59,8 +64,8 @@ function bodyAndLeads(c: PlacedComponent): { body: GridPoint[]; leads: GridPoint
     }
   }
   if (body.length === 0) return { body: [], leads };
-  const b = symbolBounds({ ...def, pins: [], symbol: body });
-  return { body: [toWorld(b.min, c), toWorld(b.max, c)], leads };
+  const b = turnedRect(symbolBounds({ ...def, pins: [], symbol: body }), c);
+  return { body: [b.min, b.max], leads };
 }
 
 /**

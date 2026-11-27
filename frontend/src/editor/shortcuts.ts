@@ -45,6 +45,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Ctrl + glisser", action: "Déplacer sans que les fils suivent" },
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
+      { keys: "Maj+R", action: "Tourner de 45° (composants à deux broches)" },
       { keys: "M", action: "Miroir" },
       {
         keys: "Glisser un nom ou une valeur",

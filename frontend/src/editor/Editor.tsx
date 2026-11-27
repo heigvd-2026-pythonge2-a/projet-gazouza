@@ -16,6 +16,7 @@ import {
   mainParam,
   moveItems,
   moveWirePart,
+  autoLabelDirections,
   nodeIndex,
   currentArrows,
   operatingPointLabels,
@@ -154,7 +155,13 @@ function ValueText({ label: l, color }: { label: OperatingPointLabel; color: str
 function componentMenu(selectionSize: number): MenuItem[] {
   const s = () => useEditorStore.getState();
   return [
-    { label: "Tourner", shortcut: "R", keys: ["r", "R"], onSelect: () => s().rotate() },
+    { label: "Tourner", shortcut: "R", keys: ["r"], onSelect: () => s().rotate() },
+    {
+      label: "Tourner de 45°",
+      shortcut: "Maj+R",
+      keys: ["R"],
+      onSelect: () => s().rotate(45),
+    },
     { label: "Miroir", shortcut: "M", keys: ["m", "M"], onSelect: () => s().mirror() },
     {
       label: "Replacer les textes automatiquement",
@@ -245,7 +252,8 @@ function useKeyboardShortcuts() {
       switch (e.key) {
         case "r":
         case "R":
-          s.rotate();
+          // Shift+R: by 45 degrees, for the components with two pins (#161).
+          s.rotate(e.shiftKey ? 45 : 90);
           break;
         case "m":
         case "M":
@@ -457,9 +465,27 @@ export function SchematicCanvas() {
     if (wirePart) wireIds.add(wirePart.wire);
     for (const wire of wireIds) add(index({ wire }), true);
     if (hovered) add(index(hovered), false);
+    // A hovered label lights its node, with the other labels of the same name (#295).
+    const hoveredLabel = storeDoc.components.find(
+      (c) => c.id === hoveredComponent && c.type === "label",
+    );
+    if (hoveredLabel) add(index({ comp: hoveredLabel.id, pin: "1" }), false);
     if (reportHighlight && !("component" in reportHighlight)) add(index(reportHighlight), true);
     return out;
-  }, [exporting, doc, storeDoc, tool.kind, selection, wirePart, hovered, reportHighlight]);
+  }, [
+    exporting,
+    doc,
+    storeDoc,
+    tool.kind,
+    selection,
+    wirePart,
+    hovered,
+    hoveredComponent,
+    reportHighlight,
+  ]);
+
+  /** Directions of the labels on "Automatique", from the circuit as drawn (#295). */
+  const labelDirections = useMemo(() => autoLabelDirections(doc), [doc]);
 
   /** The component of a hovered line of the results panel (#292), glowing on the schematic. */
   const highlightedComponent =
@@ -1018,6 +1044,7 @@ export function SchematicCanvas() {
                     ? (simulatedDoc(doc, c.id).components.find((x) => x.id === c.id) ?? c)
                     : c
                 }
+                autoDirection={labelDirections.get(c.id)}
                 selected={shownSelection.includes(c.id)}
                 markedPins={freePinsByComp.get(c.id) ?? NO_PINS}
                 captions={captions.get(c.id)}

@@ -19,7 +19,19 @@ class OpAnalysis(BaseModel):
 class TranAnalysis(BaseModel):
     kind: Literal["tran"] = "tran"
     stop_time: float = Field(gt=0, description="Simulation end, in seconds.")
-    max_step: float | None = Field(default=None, gt=0, description="Optional, in seconds.")
+    points: int | None = Field(
+        default=None,
+        gt=0,
+        description="Optional: at least this many time points (#334); the maximum step is "
+        "stop_time / points. ngspice may give more points (adaptive step), never fewer. "
+        "None: about 1000.",
+    )
+    max_step: float | None = Field(
+        default=None,
+        gt=0,
+        description="Optional advanced setting, in seconds. With `points` too, the smaller "
+        "step of the two is used.",
+    )
 
 
 class AcAnalysis(BaseModel):

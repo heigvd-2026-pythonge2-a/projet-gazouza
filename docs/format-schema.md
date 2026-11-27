@@ -316,7 +316,7 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
 | `kind` | Champs | Exemple | Ligne SPICE |
 | --- | --- | --- | --- |
 | `op` | aucun | `{"kind": "op"}` | `.op` |
-| `tran` | `stop_time`, `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "max_step": 1e-5}` | `.tran 10u 10m 0 10u` |
+| `tran` | `stop_time`, `points` (facultatif, entier), `max_step` (facultatif) | `{"kind": "tran", "stop_time": 0.01, "points": 500}` | `.tran 20u 10m 0 20u` |
 | `ac` | `input_source_id`, `start_frequency`, `stop_frequency`, `points_per_decade` (**20 par défaut**) | `{"kind": "ac", "input_source_id": "c1", "start_frequency": 10, "stop_frequency": 1e5, "points_per_decade": 100}` | `.ac dec 100 10 100k` |
 | `dc` | `source_id`, `start`, `stop`, `step` | `{"kind": "dc", "source_id": "c1", "start": 0, "stop": 10, "step": 1}` | `.dc V1 0 10 1` |
 
@@ -324,9 +324,15 @@ Les valeurs sont des **nombres en unités SI** (secondes, hertz, volts).
   renommer la source ne casse rien.
 - **Ligne `.tran`** (décidé avec Antoine). En SPICE, c'est `.tran tstep tstop [tstart [tmax]]` : le
   1er argument est le pas d'**affichage**, le vrai pas maximum est le **4e**. Donc :
-  - sans `max_step` : `.tran {stop_time / 1000} {stop_time}` (environ 1000 points, assez pour
-    les courbes) ;
-  - avec `max_step` : `.tran {max_step} {stop_time} 0 {max_step}`.
+  - sans `points` ni `max_step` : `.tran {stop_time / 1000} {stop_time}` (environ 1000 points,
+    assez pour les courbes) ;
+  - sinon, avec le pas maximal `pas` = le plus petit de `stop_time / points` et `max_step` :
+    `.tran {pas} {stop_time} 0 {pas}`.
+
+  **`points` = au moins N points** (#334, choisi en équipe) : ngspice a un pas adaptatif, il peut
+  en donner plus (autour des fronts, par exemple 508 pour 500 demandés), jamais moins. C'est le
+  réglage proposé à l'étudiant ; `max_step` reste un réglage avancé facultatif. La limite de
+  200 000 points se vérifie avec ce minimum (`minimum_points()` dans `checks.py`).
 
   La fixture `rc_tran` (`.tran 0 5m 0 10u` sur `main`) devient `.tran 10u 5m 0 10u` à la migration.
 

@@ -215,6 +215,11 @@ def test_current_source() -> None:
         (OpAnalysis(), ".op"),
         (TranAnalysis(stop_time=0.01), ".tran 10u 10m"),
         (TranAnalysis(stop_time=0.005, max_step=1e-5), ".tran 10u 5m 0 10u"),
+        # At least N points (#334): the maximum step is stop_time / points...
+        (TranAnalysis(stop_time=0.01, points=500), ".tran 20u 10m 0 20u"),
+        # ...and with max_step too, the smaller step wins.
+        (TranAnalysis(stop_time=0.01, points=500, max_step=1e-5), ".tran 10u 10m 0 10u"),
+        (TranAnalysis(stop_time=0.01, points=5000, max_step=1e-5), ".tran 2u 10m 0 2u"),
         (AcAnalysis(input_source_id="c1", start_frequency=1, stop_frequency=1e6),
          ".ac dec 20 1 1Meg"),
         (DcAnalysis(source_id="c1", start=-1, stop=1, step=0.1), ".dc V1 -1 1 100m"),
@@ -449,3 +454,13 @@ def test_duplicate_id_targets_every_kind_of_element() -> None:
     assert codes(errors) == ["DUPLICATE_ID", "DUPLICATE_ID"]
     assert [t.model_dump() for t in errors[0].targets] == [{"comp": "c2"}, {"wire": "c2"}]
     assert [t.model_dump() for t in errors[1].targets] == [{"junction": "j1"}, {"wire": "j1"}]
+
+
+@pytest.mark.parametrize(
+    ("value", "quoted"),
+    [("x" * 30, "x" * 30), ("x" * 31, "x" * 30 + "…")],
+)
+def test_long_typed_value_is_cut_in_the_message(value: str, quoted: str) -> None:
+    resistor = comp("c2", "resistor", "R1", resistance=value)
+    result = generate_netlist(schematic([SOURCE, resistor, GROUND], LOOP), OP)
+    assert result.errors[0].message.startswith(f"R1 : « {quoted} » n'est pas")

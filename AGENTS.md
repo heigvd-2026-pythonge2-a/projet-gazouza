@@ -152,6 +152,9 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   `10u`) ne servent que pour les paramètres saisis par l'utilisateur.
 - **Formatage** : ruff (Python) et Prettier (TS). Ne discute pas le style, lance l'outil.
 - **Fins de ligne** : LF partout (géré par `.gitattributes`), sauf `.ps1` / `.bat`.
+- **Actions GitHub** : dans `.github/workflows/`, toute action est épinglée par SHA de commit,
+  avec la version en commentaire (`uses: actions/checkout@<sha> # v7.0.1`), jamais par tag
+  seul. Dependabot (`github-actions`, mensuel) met à jour le SHA et le commentaire.
 
 ## Commandes
 

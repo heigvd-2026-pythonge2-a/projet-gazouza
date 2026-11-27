@@ -42,6 +42,11 @@ interface EditorPart {
   category: Category;
   /** Drawing in grid units, at rotation 0. */
   symbol: SymbolShape[];
+  /**
+   * Pins that produce a signal (the terminals of a source, the output of an op-amp): a node
+   * label on their node points out of it when the direction is automatic (#295).
+   */
+  drivers?: readonly string[];
 }
 
 export interface ComponentDef extends EditorPart {
@@ -124,6 +129,45 @@ const BIPOLAR_BODY: SymbolShape[] = [
   { kind: "line", points: [-0.5, 0.4, 1, 1.2, 1, 2] },
 ];
 
+/** Length of the head of an emitter arrow, along the emitter, and its half-width. */
+const ARROW_LENGTH = 0.4;
+const ARROW_HALF_WIDTH = 0.2;
+
+/**
+ * Head of the arrow on the emitter of a bipolar transistor, centred on the middle of the emitter
+ * line from the base bar (`bar`) to the bend (`bend`), as IEC 60617 draws it (#337). Only its
+ * direction differs between the two transistors: `out` (NPN) points towards the bend, else (PNP)
+ * towards the base. The wings come first and last, the tip in the middle.
+ */
+export function emitterArrow(
+  bar: readonly [number, number],
+  bend: readonly [number, number],
+  out: boolean,
+): SymbolShape {
+  const [bx, by] = bar;
+  const [ex, ey] = bend;
+  const length = Math.hypot(ex - bx, ey - by);
+  const sign = out ? 1 : -1;
+  const ux = (sign * (ex - bx)) / length;
+  const uy = (sign * (ey - by)) / length;
+  const cx = (bx + ex) / 2;
+  const cy = (by + ey) / 2;
+  const tip = [cx + (ux * ARROW_LENGTH) / 2, cy + (uy * ARROW_LENGTH) / 2];
+  const back = [cx - (ux * ARROW_LENGTH) / 2, cy - (uy * ARROW_LENGTH) / 2] as const;
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  return {
+    kind: "line",
+    points: [
+      back[0] - uy * ARROW_HALF_WIDTH,
+      back[1] + ux * ARROW_HALF_WIDTH,
+      tip[0] as number,
+      tip[1] as number,
+      back[0] + uy * ARROW_HALF_WIDTH,
+      back[1] - ux * ARROW_HALF_WIDTH,
+    ].map(round),
+  };
+}
+
 /**
  * Make contact (IEC 60617), pins at (0, -2) and (0, 2): the blade turns on the bottom contact.
  * Open, it is lifted away from the top contact; closed, it rests on it. Both states stay in the
@@ -188,6 +232,7 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "voltage_source",
     category: "source",
+    drivers: ["+", "-"],
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -200,6 +245,7 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "current_source",
     category: "source",
+    drivers: ["+", "-"],
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -237,13 +283,13 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
     type: "npn",
     category: "semiconductor",
     // Emitter at the bottom; its arrow points out of the transistor.
-    symbol: [...BIPOLAR_BODY, { kind: "line", points: [0.24, 1.02, 0.65, 1.01, 0.43, 0.67] }],
+    symbol: [...BIPOLAR_BODY, emitterArrow([-0.5, 0.4], [1, 1.2], true)],
   },
   {
     type: "pnp",
     category: "semiconductor",
     // Emitter at the top; its arrow points into the transistor, towards the base.
-    symbol: [...BIPOLAR_BODY, { kind: "line", points: [0.3, -0.6, -0.1, -0.61, 0.11, -0.95] }],
+    symbol: [...BIPOLAR_BODY, emitterArrow([-0.5, -0.4], [1, -1.2], false)],
   },
   {
     type: "nmos",
@@ -253,7 +299,8 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
     symbol: [
       TRANSISTOR_ENVELOPE,
       { kind: "line", points: [-2, 0, -0.7, 0] },
-      { kind: "line", points: [-0.7, -0.8, -0.7, 0.8] },
+      // Gate: kept inside the envelope (ends at 1.18 from its centre, radius 1.2, #338).
+      { kind: "line", points: [-0.7, -0.7, -0.7, 0.7] },
       { kind: "line", points: [-0.4, -0.95, -0.4, -0.45] },
       { kind: "line", points: [-0.4, -0.25, -0.4, 0.25] },
       { kind: "line", points: [-0.4, 0.45, -0.4, 0.95] },
@@ -263,10 +310,11 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
       { kind: "line", points: [0, -0.2, -0.35, 0, 0, 0.2] },
     ],
   },
-  { type: "opamp", category: "amplifier", symbol: OPAMP_BODY },
+  { type: "opamp", category: "amplifier", drivers: ["out"], symbol: OPAMP_BODY },
   {
     type: "opamp_real",
     category: "amplifier",
+    drivers: ["out"],
     // Supply pins V+ (top) and V- (bottom), drawn to the triangle's edges.
     symbol: [
       ...OPAMP_BODY,
@@ -287,7 +335,7 @@ export function setLibrary(components: readonly LibraryComponent[]): void {
     }
   }
   const defs = new Map<string, ComponentDef>();
-  for (const { type, category, symbol } of EDITOR_PARTS) {
+  for (const { type, category, symbol, drivers } of EDITOR_PARTS) {
     const c = byType.get(type);
     if (!c) continue;
     defs.set(type, {
@@ -302,6 +350,7 @@ export function setLibrary(components: readonly LibraryComponent[]): void {
       })),
       category,
       symbol,
+      ...(drivers ? { drivers } : {}),
     });
   }
   library = defs;
@@ -366,11 +415,15 @@ export function choiceValue(def: ComponentDef, params: Record<string, string>, p
 
 /**
  * Drawing of a placed component: the symbol of its type, except for a label, whose flag follows
- * its direction (absent or unknown: no direction, as in files saved before it existed; "auto" is
- * drawn as "none" until the editor works the direction out, #295), and for a switch or a push
- * button, drawn open or closed by its state (absent or unknown: open).
+ * its direction (absent or unknown: no direction, as in files saved before it existed; "auto":
+ * `autoDirection`, worked out from the circuit by `autoLabelDirections`, #295), and for a switch
+ * or a push button, drawn open or closed by its state (absent or unknown: open).
  */
-export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
+export function symbolOf(
+  def: ComponentDef,
+  params: Record<string, string>,
+  autoDirection: string = "none",
+): SymbolShape[] {
   if (def.type === "switch" || def.type === "push_button") {
     const states: Readonly<Record<string, SymbolShape[] | undefined>> = SWITCH_SYMBOLS[def.type];
     return states[params.state ?? "SW_OPEN"] ?? def.symbol;
@@ -378,7 +431,7 @@ export function symbolOf(def: ComponentDef, params: Record<string, string>): Sym
   if (def.type !== "label") return def.symbol;
   const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
   const direction = params.direction ?? "none";
-  return flags[direction === "auto" ? "none" : direction] ?? def.symbol;
+  return flags[direction === "auto" ? autoDirection : direction] ?? def.symbol;
 }
 
 export interface Bounds {
