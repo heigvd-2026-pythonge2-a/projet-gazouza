@@ -107,8 +107,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -182,6 +181,17 @@
         "label": "Fréquence",
         "unit": "Hz",
         "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
         "kind": "value",
         "options": [],
         "waveforms": [
@@ -684,8 +694,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -759,6 +768,17 @@
         "label": "Fréquence",
         "unit": "Hz",
         "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
         "kind": "value",
         "options": [],
         "waveforms": [

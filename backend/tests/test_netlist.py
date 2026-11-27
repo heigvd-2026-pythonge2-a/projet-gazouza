@@ -181,7 +181,7 @@ def test_milli_suffix_is_a_warning() -> None:
 
 def test_source_only_needs_the_params_of_its_waveform() -> None:
     source = comp("c1", "voltage_source", "V1", waveform="sin", offset="0", amplitude="1",
-                  frequency="50", delay="0", damping="0", phase="0")  # fmt: skip
+                  frequency="50", sin_delay="0", damping="0", phase="0")  # fmt: skip
     result = generate_netlist(schematic([source, RESISTOR, GROUND], LOOP), OP)
 
     assert "V1 n1 0 SIN(0 1 50 0 0 0)\n" in result.netlist
