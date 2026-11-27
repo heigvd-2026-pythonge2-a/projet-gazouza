@@ -1,6 +1,7 @@
 // The question asked before unsaved changes are dropped (#238, #332): by New, Open, Examples,
 // the LTspice import, a dropped file, and the desktop window about to close. CloseDialog.tsx
-// shows it and answers it: cancel, go on without saving, or save then go on.
+// shows it and answers it: cancel, go on without saving, or save then go on. When no CloseDialog
+// is mounted, the browser's own confirmation asks instead.
 
 import { create } from "zustand";
 
@@ -58,6 +59,27 @@ export const useUnsavedDialog = create<{ pending: PendingQuestion | null }>()(()
   pending: null,
 }));
 
+/** How many dialogs can show the question now (CloseDialog.tsx, mounted with the editor). */
+let dialogs = 0;
+
+/**
+ * Records that a dialog shows the question from now on; the function returned undoes it. Without
+ * one (the schematic panel crashed and shows its error instead), the question is asked with the
+ * browser's own confirmation, so New and Open still work.
+ */
+export function registerUnsavedDialog(): () => void {
+  dialogs++;
+  let registered = true;
+  return () => {
+    if (registered) dialogs--;
+    registered = false;
+  };
+}
+
+/** The question asked by the browser's own confirmation, when no dialog can show it. */
+export const NATIVE_QUESTION =
+  "Le schéma contient des modifications non enregistrées. Les abandonner et continuer ?";
+
 /**
  * Asks what to do with unsaved changes before `action`. Resolves to true when the action may go
  * on: nothing unsaved, "… sans enregistrer", or the schematic was saved. False: cancelled. A
@@ -65,6 +87,7 @@ export const useUnsavedDialog = create<{ pending: PendingQuestion | null }>()(()
  */
 export function askBeforeDroppingChanges(action: UnsavedAction): Promise<boolean> {
   if (!isUnsaved(useEditorStore.getState())) return Promise.resolve(true);
+  if (dialogs === 0) return Promise.resolve(window.confirm(NATIVE_QUESTION));
   const shown = useUnsavedDialog.getState().pending;
   if (shown) return shown.promise;
   let resolve: (goOn: boolean) => void = () => {};

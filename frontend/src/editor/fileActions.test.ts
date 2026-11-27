@@ -10,6 +10,8 @@ async function load() {
   vi.resetModules();
   const actions = await import("./fileActions");
   const dialog = await import("./unsavedDialog");
+  // As in the app, where CloseDialog shows the question (it is not rendered here).
+  dialog.registerUnsavedDialog();
   const store = await import("../store");
   store.setLibrary(fixtureLibrary()); // the fresh store has an empty library
   return {

@@ -1,16 +1,23 @@
 // Asks what to do with unsaved changes (#238, #332): cancel, go on without saving, or save and go
 // on once the file is written. The question comes from unsavedDialog.ts: New, Open, Examples, the
-// LTspice import, a dropped file, and the desktop window about to close.
+// LTspice import, a dropped file, and the desktop window about to close. While it is not mounted
+// (the schematic panel crashed), unsavedDialog.ts asks with the browser's own confirmation.
 //
 // The native confirmation of the desktop window only has two buttons, so the launcher can call
 // `window.psiceRequestClose()` instead: it shows this dialog and resolves to true when the window
 // may close (see unsavedGuard.ts for the other function the launcher reads).
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { saveFile } from "./fileActions";
 import { COLORS, UI } from "./theme";
-import { answerUnsavedQuestion, askBeforeDroppingChanges, useUnsavedDialog } from "./unsavedDialog";
+import {
+  answerUnsavedQuestion,
+  askBeforeDroppingChanges,
+  registerUnsavedDialog,
+  useUnsavedDialog,
+} from "./unsavedDialog";
 
 const BUTTON = {
   padding: "5px 12px",
@@ -46,8 +53,10 @@ export function CloseDialog() {
   }, []);
 
   useEffect(() => {
+    const unregister = registerUnsavedDialog();
     window.psiceRequestClose = () => askBeforeDroppingChanges("close");
     return () => {
+      unregister();
       delete window.psiceRequestClose;
       // The editor goes away: nothing is done rather than waiting for an answer forever.
       answerUnsavedQuestion(false);
@@ -75,7 +84,9 @@ export function CloseDialog() {
 
   if (!pending) return null;
   const { question } = pending;
-  return (
+  // In the page's body rather than in the schematic: the toolbar can ask while the schematic is
+  // hidden (results shown full screen), and a dialog hidden with it would block the keyboard.
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -85,6 +96,8 @@ export function CloseDialog() {
         alignItems: "center",
         justifyContent: "center",
         background: "rgba(0, 0, 0, 0.3)",
+        // Outside the app's root, which sets it (App.tsx).
+        fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
       <div
@@ -128,6 +141,7 @@ export function CloseDialog() {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
