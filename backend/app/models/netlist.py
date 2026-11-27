@@ -30,6 +30,9 @@ DiagnosticCode = Literal[
     "WIRE_DANGLING",
     "JUNCTION_DANGLING",
     "MILLI_SUFFIX",
+    # After the simulation (Damien): a LED that would burn out
+    "LED_OVERCURRENT",
+    "LED_REVERSE_VOLTAGE",
     # Simulation (Antoine, ngspice)
     "SINGULAR_MATRIX",
     "VOLTAGE_SOURCE_LOOP",
