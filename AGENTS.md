@@ -177,6 +177,7 @@ pnpm gen:api                                  # régénérer les types depuis sh
 pnpm install
 pnpm dev                                      # http://localhost:4321/projet-gazouza/
 pnpm build                                    # build du site statique (Astro)
+pnpm format                                   # formatage (Prettier, sauf les pages .mdx)
 ```
 
 Avant de considérer une tâche terminée : tests, lint et formatage doivent passer pour la partie
