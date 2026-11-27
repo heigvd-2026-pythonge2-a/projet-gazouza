@@ -192,8 +192,8 @@ def test_iopin_gives_the_label_direction() -> None:
     # IOPIN In / Out / BiDir (#234); unknown, lonely or incomplete ones are ignored.
     result = import_asc(asc("FLAG 0 0 a", "IOPIN 0 0 In", "FLAG 0 16 b", "IOPIN 0 16 Out",
                             "FLAG 0 32 c", "IOPIN 0 32 BiDir", "FLAG 0 48 d", "IOPIN 0 48 Up",
-                            "FLAG 0 64 e", "IOPIN 99 99 In", "IOPIN 0 80", "FLAG 0 80 0",
-                            "IOPIN 0 80 In"))  # fmt: skip
+                            "FLAG 0 64 e", "IOPIN 99 99 In", "IOPIN 0 80", "IOPIN a b In",
+                            "FLAG 0 80 0", "IOPIN 0 80 In"))  # fmt: skip
     components = result.schematic.components
     assert [c.params.get("direction") for c in components[:5]] == [
         "input", "output", "bidir", None, None,

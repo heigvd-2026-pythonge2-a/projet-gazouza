@@ -109,9 +109,13 @@ def read_asc(text: str) -> AscFile:
             x, y = _ints(parts[:2], number)
             asc.flags.append(AscFlag(x, y, " ".join(parts[2:])))
         elif keyword == "IOPIN":
-            # IOPIN x y In|Out|BiDir: an incomplete one only loses a drawing detail.
+            # IOPIN x y In|Out|BiDir: an incomplete or unreadable one only loses a drawing
+            # detail, never the whole import.
             if len(parts) >= 3:
-                x, y = _ints(parts[:2], number)
+                try:
+                    x, y = _ints(parts[:2], number)
+                except AscFormatError:
+                    continue
                 asc.iopins.append(AscIopin(x, y, parts[2]))
         elif keyword == "SYMBOL":
             if len(parts) < 4:
