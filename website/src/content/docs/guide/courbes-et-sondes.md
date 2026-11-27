@@ -55,11 +55,22 @@ Les valeurs s'écrivent avec la virgule décimale : `4,27 mA`.
 
 ## Lire une courbe
 
-- **Zoom** sur une zone et retour à la vue complète.
-- **Curseurs** : deux curseurs verticaux pour lire une valeur précise et l'écart entre deux
-  instants (Δt, ΔV).
-- **Échelle logarithmique** et deux graphiques (gain en dB, phase en degrés) pour les
-  diagrammes de Bode.
+Le visualiseur affiche les résultats des analyses **`.tran`**, **`.ac`** et **`.dc`** :
+
+- **Légende interactive** : coche ou décoche chaque tension (`V`) et chaque courant (`A`) pour
+  n'afficher que les signaux utiles. En **`.tran`** et **`.dc`**, les tensions utilisent l'axe
+  gauche et les courants l'axe droit ; en **`.ac`**, les courants sont masqués par défaut pour ne
+  pas tasser la courbe de gain en tension (`dB`), et peuvent être réaffichés depuis la légende.
+- **Diagramme de Bode (`.ac`)** : deux graphiques liés (**gain en dB** et **phase en degrés**)
+  sur une **échelle de fréquence logarithmique**. Le zoom et les curseurs sont synchronisés entre
+  les deux graphiques.
+- **Balayage DC (`.dc`)** : trace les tensions et courants en fonction de la valeur de la source
+  balayée (`V` ou `A`) en abscisse.
+- **Zoom** : glisse horizontalement sur le graphe ou utilise la molette de la souris ;
+  double-clique (ou clique sur *Réinitialiser le zoom*) pour revenir à la vue complète.
+- **Curseurs** : deux curseurs verticaux (`C1` et `C2`) déplaçables directement à la souris (ou
+  via les boutons *Placer C1* / *Placer C2*) pour lire chaque grandeur ainsi que leur écart
+  (`Δt`, `1/|Δt|`, `ΔV`, `ΔI`, `ΔdB`, `Δ°`).
 
 ## Mesures
 

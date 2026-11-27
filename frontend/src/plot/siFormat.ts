@@ -11,6 +11,9 @@ const PREFIXES: readonly [number, string][] = [
   [1e-12, "p"],
 ];
 
+/** Units that are never scaled with SI metric prefixes (e.g. decibels, degrees). */
+const NO_PREFIX_UNITS = new Set(["dB", "°"]);
+
 /** Pick the SI prefix and scale factor for `value` (returns `1, ""` for zero). */
 function pickPrefix(value: number): [number, string] {
   const abs = Math.abs(value);
@@ -19,11 +22,17 @@ function pickPrefix(value: number): [number, string] {
 }
 
 /**
- * Format a numeric SI value with an appropriate metric prefix, e.g. `1,25 ms` or `-5 mA`.
+ * Format a numeric value with an appropriate SI prefix (unless the unit is `dB` or `°`),
+ * e.g. `1,25 ms`, `-5 mA`, `-3,01 dB`, or `-45°`.
  * Uses `fr-CH` number formatting to match the rest of the application.
  */
 export function formatSI(value: number, unit: string, maxFractionDigits = 3): string {
   if (!Number.isFinite(value)) return "—";
+  if (NO_PREFIX_UNITS.has(unit)) {
+    const clean = Object.is(value, -0) ? 0 : value;
+    const formatted = clean.toLocaleString("fr-CH", { maximumFractionDigits: maxFractionDigits });
+    return unit === "°" ? `${formatted}°` : `${formatted} ${unit}`;
+  }
   if (value === 0) return unit ? `0 ${unit}` : "0";
   const [scale, prefix] = pickPrefix(value);
   const scaled = value / scale;

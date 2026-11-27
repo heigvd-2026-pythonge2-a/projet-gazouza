@@ -19,6 +19,12 @@ describe("formatSI", () => {
     expect(formatSI(2.5e6, "Hz")).toMatch(/^2[.,]5 MHz$/);
   });
 
+  it("does not scale decibels or degrees with SI prefixes", () => {
+    expect(formatSI(-3.01, "dB")).toMatch(/^-3[.,]01 dB$/);
+    expect(formatSI(-45, "°")).toBe("-45°");
+    expect(formatSI(1200, "°")).toMatch(/^1.?200°$/);
+  });
+
   it("handles non-finite values", () => {
     expect(formatSI(Number.NaN, "V")).toBe("—");
     expect(formatSI(Number.POSITIVE_INFINITY, "V")).toBe("—");

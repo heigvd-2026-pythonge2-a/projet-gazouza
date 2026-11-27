@@ -28,6 +28,45 @@
         }
       }
     },
+    "/api/import/asc": {
+      "post": {
+        "summary": "Import Ltspice",
+        "description": "Partial import: a part Psice does not know is left out with a warning, never an HTTP\nerror. Only an unreadable file gives an error (and no schematic).",
+        "operationId": "import_ltspice_api_import_asc_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AscImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -169,6 +208,32 @@
         ],
         "title": "AcAnalysis"
       },
+      "AscImportRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Content of the `.asc` file, decoded by the client."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Title of the schematic (file name)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "AscImportRequest"
+      },
       "Axis": {
         "properties": {
           "name": {
@@ -229,12 +294,16 @@
             "type": "integer",
             "enum": [
               0,
+              45,
               90,
+              135,
               180,
-              270
+              225,
+              270,
+              315
             ],
             "title": "Rotation",
-            "description": "Clockwise, in degrees.",
+            "description": "Clockwise, in degrees. On a diagonal (45, 135, 225, 315) each pin coordinate is rotated exactly, then rounded away from zero, so wires still attach to grid points (docs/format-schema.md, section 2).",
             "default": 0
           },
           "mirror": {
@@ -356,11 +425,17 @@
               "WIRE_DANGLING",
               "JUNCTION_DANGLING",
               "MILLI_SUFFIX",
+              "SHORTED_COMPONENT",
+              "LED_OVERCURRENT",
+              "LED_REVERSE_VOLTAGE",
               "SINGULAR_MATRIX",
               "VOLTAGE_SOURCE_LOOP",
               "NO_CONVERGENCE",
               "SIMULATION_TIMEOUT",
-              "SIMULATION_FAILED"
+              "SIMULATION_FAILED",
+              "IMPORT_UNREADABLE",
+              "IMPORT_SKIPPED",
+              "IMPORT_CHANGED"
             ],
             "title": "Code",
             "description": "Stable code, checked by the tests."
@@ -435,6 +510,74 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ImportResult": {
+        "properties": {
+          "schematic": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Schematic"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The imported schematic. None if the file is unreadable."
+          },
+          "analysis": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OpAnalysis"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TranAnalysis"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AcAnalysis"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DcAnalysis"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "kind",
+                  "mapping": {
+                    "ac": "#/components/schemas/AcAnalysis",
+                    "dc": "#/components/schemas/DcAnalysis",
+                    "op": "#/components/schemas/OpAnalysis",
+                    "tran": "#/components/schemas/TranAnalysis"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis",
+            "description": "The first analysis of the file, if it has one."
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Errors",
+            "description": "IMPORT_UNREADABLE: nothing could be imported."
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Diagnostic"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "IMPORT_SKIPPED (a part left out) and IMPORT_CHANGED (a part adapted)."
+          }
+        },
+        "type": "object",
+        "title": "ImportResult",
+        "description": "A partial import is allowed: what could not be imported is listed in `warnings`."
       },
       "Junction": {
         "properties": {

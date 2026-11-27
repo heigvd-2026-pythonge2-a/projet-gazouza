@@ -1,0 +1,169 @@
+{
+  "version": 2,
+  "title": "Résistance court-circuitée",
+  "components": [
+    {
+      "id": "c1",
+      "type": "voltage_source",
+      "name": "V1",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "waveform": "dc",
+        "dc": "10"
+      }
+    },
+    {
+      "id": "c2",
+      "type": "resistor",
+      "name": "R1",
+      "position": {
+        "x": 4,
+        "y": -2
+      },
+      "rotation": 270,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c3",
+      "type": "resistor",
+      "name": "R2",
+      "position": {
+        "x": 8,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    },
+    {
+      "id": "c4",
+      "type": "ground",
+      "position": {
+        "x": 0,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    },
+    {
+      "id": "c5",
+      "type": "ground",
+      "position": {
+        "x": 8,
+        "y": 4
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {}
+    },
+    {
+      "id": "c6",
+      "type": "resistor",
+      "name": "R3",
+      "position": {
+        "x": 12,
+        "y": 0
+      },
+      "rotation": 0,
+      "mirror": false,
+      "params": {
+        "resistance": "1k"
+      }
+    }
+  ],
+  "junctions": [],
+  "wires": [
+    {
+      "id": "w1",
+      "from": {
+        "comp": "c1",
+        "pin": "+"
+      },
+      "to": {
+        "comp": "c2",
+        "pin": "1"
+      },
+      "points": []
+    },
+    {
+      "id": "w2",
+      "from": {
+        "comp": "c2",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "points": []
+    },
+    {
+      "id": "w3",
+      "from": {
+        "comp": "c1",
+        "pin": "-"
+      },
+      "to": {
+        "comp": "c4",
+        "pin": "1"
+      },
+      "points": []
+    },
+    {
+      "id": "w4",
+      "from": {
+        "comp": "c3",
+        "pin": "2"
+      },
+      "to": {
+        "comp": "c5",
+        "pin": "1"
+      },
+      "points": []
+    },
+    {
+      "id": "w5",
+      "from": {
+        "comp": "c3",
+        "pin": "1"
+      },
+      "to": {
+        "comp": "c6",
+        "pin": "1"
+      },
+      "points": []
+    },
+    {
+      "id": "w6",
+      "from": {
+        "comp": "c6",
+        "pin": "1"
+      },
+      "to": {
+        "comp": "c6",
+        "pin": "2"
+      },
+      "points": [
+        {
+          "x": 14,
+          "y": -2
+        },
+        {
+          "x": 14,
+          "y": 2
+        }
+      ]
+    }
+  ]
+}
