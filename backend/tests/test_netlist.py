@@ -449,3 +449,13 @@ def test_duplicate_id_targets_every_kind_of_element() -> None:
     assert codes(errors) == ["DUPLICATE_ID", "DUPLICATE_ID"]
     assert [t.model_dump() for t in errors[0].targets] == [{"comp": "c2"}, {"wire": "c2"}]
     assert [t.model_dump() for t in errors[1].targets] == [{"junction": "j1"}, {"wire": "j1"}]
+
+
+@pytest.mark.parametrize(
+    ("value", "quoted"),
+    [("x" * 30, "x" * 30), ("x" * 31, "x" * 30 + "…")],
+)
+def test_long_typed_value_is_cut_in_the_message(value: str, quoted: str) -> None:
+    resistor = comp("c2", "resistor", "R1", resistance=value)
+    result = generate_netlist(schematic([SOURCE, resistor, GROUND], LOOP), OP)
+    assert result.errors[0].message.startswith(f"R1 : « {quoted} » n'est pas")

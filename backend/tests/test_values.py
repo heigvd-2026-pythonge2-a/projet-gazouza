@@ -50,6 +50,18 @@ def test_parse_value_rejects(text: str) -> None:
         parse_value(text)
 
 
+@pytest.mark.parametrize("exponent", ["9" * 5000, "-" + "9" * 5000, "+" + "1" * 7])
+def test_too_long_exponent_is_an_invalid_value(exponent: str) -> None:
+    # More digits than int() converts (4300) gave a plain ValueError: HTTP 500 (#314).
+    with pytest.raises(InvalidValueError, match="exponent"):
+        parse_value("1e" + exponent)
+
+
+def test_leading_zeros_of_an_exponent_do_not_count() -> None:
+    assert parse_value("1e" + "0" * 5000 + "3") == 1e3
+    assert parse_value("2.5e-0003") == pytest.approx(2.5e-3)
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [("1M", True), ("2.2M", True), ("1Mohm", True), ("1m", False), ("1Meg", False), ("1k", False)],
