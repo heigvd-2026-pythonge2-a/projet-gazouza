@@ -1,0 +1,5 @@
+/* Keep uPlot's zoom selection box visible in both light and dark themes (#269). */
+.uplot .u-select {
+  background: var(--psice-band-fill, rgba(37, 99, 235, 0.08));
+  outline: 1px solid var(--psice-selected, #2563eb);
+}

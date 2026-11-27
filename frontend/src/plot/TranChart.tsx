@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import "./plot.css";
 
 import { useElementSize } from "../layout";
 import { COLORS, PALETTES, UI, useThemeStore } from "../store";
@@ -256,6 +257,12 @@ export function TranChart({ plotData, visibleNames }: TranChartProps) {
 
       const instance = new UPlot(opts, plotData.data, host);
       uplotRef.current = instance;
+
+      const selectEl = instance.over.querySelector<HTMLElement>(".u-select");
+      if (selectEl) {
+        selectEl.style.background = palette.bandFill;
+        selectEl.style.outline = `1px solid ${palette.selected}`;
+      }
 
       const over = instance.over;
       let draggingCursor: "c1" | "c2" | null = null;

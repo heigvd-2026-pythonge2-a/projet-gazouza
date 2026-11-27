@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dividerOpResult from "../../../shared/fixtures/divider_op/result.json";
 import rcTranResult from "../../../shared/fixtures/rc_tran/result.json";
 import type { SimulationResult } from "../api/client";
+import { PALETTES, useThemeStore } from "../store";
 import { editorState, resetEditorStore } from "../test/editorStore";
 import { PlotPanel } from "./PlotPanel";
 
@@ -45,6 +46,9 @@ vi.mock("uplot", () => {
         x: { min: xVals[0] ?? 0, max: xVals[xVals.length - 1] ?? 1 },
       };
       this.over = document.createElement("div");
+      const selectEl = document.createElement("div");
+      selectEl.className = "u-select";
+      this.over.appendChild(selectEl);
       this.over.getBoundingClientRect = () =>
         ({ left: 0, top: 0, width: 400, height: 240, right: 400, bottom: 240 }) as DOMRect;
       host.appendChild(this.over);
@@ -224,5 +228,24 @@ describe("PlotPanel", () => {
       screen.getByText("Le schéma a été modifié depuis cette simulation."),
     ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Convergence impossible");
+  });
+
+  it("styles the uPlot zoom selection box with theme palette colors (#269)", async () => {
+    act(() => {
+      useThemeStore.setState({ theme: "dark" });
+      editorState().setSimulation(rcResult);
+    });
+    render(<PlotPanel />);
+
+    await waitFor(() => expect(mockInstances).toHaveLength(1));
+    const selectEl = mockInstances[0]!.over.querySelector<HTMLElement>(".u-select");
+    expect(selectEl).not.toBeNull();
+    expect(selectEl!.style.background).toBe(PALETTES.dark.bandFill);
+    expect(selectEl!.style.outline).toContain("1px solid");
+
+    act(() => useThemeStore.setState({ theme: "light" }));
+    await waitFor(() => expect(mockInstances).toHaveLength(2));
+    const lightSelect = mockInstances[1]!.over.querySelector<HTMLElement>(".u-select");
+    expect(lightSelect!.style.background).toBe(PALETTES.light.bandFill);
   });
 });
