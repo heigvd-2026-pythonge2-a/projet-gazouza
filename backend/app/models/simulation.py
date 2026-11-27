@@ -76,6 +76,12 @@ class Trace(BaseModel):
     unit: Literal["V", "A"]
     net: str | None = Field(default=None, description="SPICE node name, for voltages.")
     component_id: str | None = Field(default=None, description="Schematic id, for currents.")
+    pin: str | None = Field(
+        default=None,
+        description="Pin name of the component (e.g. 'C', 'B', 'E') for a current flowing INTO "
+        "that pin, named like 'i(Q1:C)' (#289). None for two-pin components, whose current keeps "
+        "its usual direction.",
+    )
     values: list[float] = Field(description="Real part; one value per axis point (1 for .op).")
     imag: list[float] | None = Field(default=None, description="Imaginary part, `.ac` only.")
 

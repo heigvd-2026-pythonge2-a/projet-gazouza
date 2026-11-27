@@ -90,6 +90,9 @@ Le corps de `POST /api/netlist` et `POST /api/simulate` :
   `.op`.
 - `traces` : une trace par tension de nœud ou courant de composant, une valeur par point de
   l'axe. Pour `.ac`, `imag` contient la partie imaginaire.
+- `pin` : pour un composant à plus de deux broches (transistor), une trace par broche, nommée
+  `i(Q1:C)`, `i(Q1:B)`, `i(Q1:E)` : le courant **entrant** dans cette broche (la somme des
+  courants d'un transistor vaut 0). Absent pour un composant à deux broches.
 
 ## Erreurs : toujours HTTP 200
 
