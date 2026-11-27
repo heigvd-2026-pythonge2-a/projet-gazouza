@@ -1,4 +1,5 @@
-// Simulation group of the toolbar (#100): the analysis and its settings, the Simulate button; and
+// Simulation group of the toolbar (#100): the analysis, the Simulate button and, on a line below,
+// the settings of the analysis (#339); and
 // the report of the last simulation shown in the results panel (errors, values).
 
 import { useEffect, useMemo, type CSSProperties } from "react";
@@ -40,6 +41,25 @@ const ANALYSES: { kind: AnalysisKind; label: string }[] = [
 ];
 
 const LABEL: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 };
+
+/** Height of the line of the analysis settings, whatever the analysis (#339). */
+export const SETTINGS_ROW_HEIGHT = 30;
+
+/**
+ * Line of the analysis settings (#339): the whole width of the toolbar, always the last line
+ * (`order`), always as high, so that choosing another analysis only changes what is in it and
+ * moves no button of the toolbar.
+ */
+const SETTINGS_ROW: CSSProperties = {
+  order: 1,
+  flexBasis: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  height: SETTINGS_ROW_HEIGHT,
+  overflowX: "auto",
+  overflowY: "hidden",
+};
 
 /** A setting of the analysis typed as text, with its caption and unit. */
 function Field(props: {
@@ -115,7 +135,10 @@ function SourceSelect(props: {
   );
 }
 
-/** Analysis, its settings and the Simulate / Stop button. */
+/**
+ * Analysis and the Simulate / Stop button, side by side in the toolbar; the settings of the
+ * analysis on a line of their own below (#339).
+ */
 export function SimulationControls() {
   const analysis = useEditorStore((s) => s.analysis);
   const simulating = useEditorStore((s) => s.simulating);
@@ -145,93 +168,6 @@ export function SimulationControls() {
           </option>
         ))}
       </select>
-      {analysis.kind === "tran" && (
-        <>
-          <Field
-            caption="Durée"
-            label="Durée de la simulation (s)"
-            title="Fin de la simulation, en secondes (10m = 10 ms)"
-            unit="s"
-            setting="stopTime"
-          />
-          <Field
-            caption="Pas max"
-            label="Pas maximal (s)"
-            title="Plus grand pas de calcul, en secondes ; vide : automatique"
-            unit="s"
-            setting="maxStep"
-            placeholder="auto"
-          />
-        </>
-      )}
-      {analysis.kind === "ac" && (
-        <>
-          <SourceSelect
-            caption="Entrée"
-            label="Source d'entrée"
-            title="Source qui excite le circuit ; son signal alternatif est réglé automatiquement"
-            sources={sources}
-            setting="acSource"
-          />
-          <Field
-            caption="De"
-            label="Fréquence de début (Hz)"
-            title="Première fréquence, en hertz (1k = 1 kHz)"
-            unit="Hz"
-            setting="acStart"
-          />
-          <Field
-            caption="à"
-            label="Fréquence de fin (Hz)"
-            title="Dernière fréquence, en hertz (100k = 100 kHz, 1Meg = 1 MHz)"
-            unit="Hz"
-            setting="acStop"
-          />
-          <Field
-            caption="Points"
-            label="Points par décade"
-            title="Nombre de points calculés entre une fréquence et dix fois cette fréquence"
-            unit="/ déc."
-            setting="acPoints"
-            width={36}
-          />
-        </>
-      )}
-      {analysis.kind === "dc" && (
-        <>
-          <SourceSelect
-            caption="Source"
-            label="Source balayée"
-            title="Source dont la valeur continue varie pendant le balayage"
-            sources={sources}
-            setting="dcSource"
-          />
-          <Field
-            caption="De"
-            label={`Valeur de début (${dcUnit})`}
-            title="Première valeur de la source"
-            unit={dcUnit}
-            setting="dcStart"
-            width={44}
-          />
-          <Field
-            caption="à"
-            label={`Valeur de fin (${dcUnit})`}
-            title="Dernière valeur de la source"
-            unit={dcUnit}
-            setting="dcStop"
-            width={44}
-          />
-          <Field
-            caption="Pas"
-            label={`Pas du balayage (${dcUnit})`}
-            title="Écart entre deux valeurs calculées (100m = 0,1)"
-            unit={dcUnit}
-            setting="dcStep"
-            width={44}
-          />
-        </>
-      )}
       <button
         type="button"
         title={simulating ? "Arrêter la simulation en cours" : "Lancer la simulation"}
@@ -249,6 +185,100 @@ export function SimulationControls() {
       >
         {simulating ? "■ Arrêter" : "▶ Simuler"}
       </button>
+      <div role="group" aria-label="Réglages de l'analyse" style={SETTINGS_ROW}>
+        {analysis.kind === "op" && (
+          <span style={{ fontSize: 12, color: UI.muted }}>
+            Point de fonctionnement : tensions et courants continus, sans réglage.
+          </span>
+        )}
+        {analysis.kind === "tran" && (
+          <>
+            <Field
+              caption="Durée"
+              label="Durée de la simulation (s)"
+              title="Fin de la simulation, en secondes (10m = 10 ms)"
+              unit="s"
+              setting="stopTime"
+            />
+            <Field
+              caption="Pas max"
+              label="Pas maximal (s)"
+              title="Plus grand pas de calcul, en secondes ; vide : automatique"
+              unit="s"
+              setting="maxStep"
+              placeholder="auto"
+            />
+          </>
+        )}
+        {analysis.kind === "ac" && (
+          <>
+            <SourceSelect
+              caption="Entrée"
+              label="Source d'entrée"
+              title="Source qui excite le circuit ; son signal alternatif est réglé automatiquement"
+              sources={sources}
+              setting="acSource"
+            />
+            <Field
+              caption="De"
+              label="Fréquence de début (Hz)"
+              title="Première fréquence, en hertz (1k = 1 kHz)"
+              unit="Hz"
+              setting="acStart"
+            />
+            <Field
+              caption="à"
+              label="Fréquence de fin (Hz)"
+              title="Dernière fréquence, en hertz (100k = 100 kHz, 1Meg = 1 MHz)"
+              unit="Hz"
+              setting="acStop"
+            />
+            <Field
+              caption="Points"
+              label="Points par décade"
+              title="Nombre de points calculés entre une fréquence et dix fois cette fréquence"
+              unit="/ déc."
+              setting="acPoints"
+              width={36}
+            />
+          </>
+        )}
+        {analysis.kind === "dc" && (
+          <>
+            <SourceSelect
+              caption="Source"
+              label="Source balayée"
+              title="Source dont la valeur continue varie pendant le balayage"
+              sources={sources}
+              setting="dcSource"
+            />
+            <Field
+              caption="De"
+              label={`Valeur de début (${dcUnit})`}
+              title="Première valeur de la source"
+              unit={dcUnit}
+              setting="dcStart"
+              width={44}
+            />
+            <Field
+              caption="à"
+              label={`Valeur de fin (${dcUnit})`}
+              title="Dernière valeur de la source"
+              unit={dcUnit}
+              setting="dcStop"
+              width={44}
+            />
+            <Field
+              caption="Pas"
+              label={`Pas du balayage (${dcUnit})`}
+              title="Écart entre deux valeurs calculées (100m = 0,1)"
+              unit={dcUnit}
+              setting="dcStep"
+              width={44}
+            />
+          </>
+        )}
+      </div>
     </>
   );
 }
