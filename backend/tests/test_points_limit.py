@@ -26,8 +26,8 @@ def test_minimum_points(analysis: Analysis, points: float) -> None:
 @pytest.mark.parametrize(
     ("analysis", "advice"),
     [
-        (TranAnalysis(stop_time=10, max_step=1e-6), "pas maximal"),
-        (DcAnalysis(source_id="c1", start=0, stop=10, step=1e-6), "pas du balayage"),
+        (TranAnalysis(stop_time=10, max_step=1e-6), "augmente le pas maximal ou réduis la durée"),
+        (DcAnalysis(source_id="c1", start=0, stop=10, step=1e-6), "augmente le pas du balayage"),
         (
             AcAnalysis(
                 input_source_id="c1",
@@ -35,7 +35,7 @@ def test_minimum_points(analysis: Analysis, points: float) -> None:
                 stop_frequency=1e9,
                 points_per_decade=100_000,
             ),
-            "points par décade",
+            "réduis le nombre de points par décade",
         ),  # fmt: skip
     ],
 )

@@ -288,10 +288,10 @@ def _check_points(report: Report, analysis: Analysis) -> None:
     points = minimum_points(analysis)
     if points > MAX_RESULT_POINTS:
         advice = {
-            "tran": "augmentez le pas maximal ou réduisez la durée",
-            "dc": "augmentez le pas du balayage",
-            "ac": "réduisez le nombre de points par décade ou la plage de fréquences",
-        }.get(analysis.kind, "réduisez la taille de l'analyse")
+            "tran": "augmente le pas maximal ou réduis la durée",
+            "dc": "augmente le pas du balayage",
+            "ac": "réduis le nombre de points par décade ou la plage de fréquences",
+        }.get(analysis.kind, "réduis la taille de l'analyse")
         report.error(
             "SIMULATION_FAILED",
             f"La simulation produirait au moins {_thousands(points)} points, la limite est "
