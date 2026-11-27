@@ -312,3 +312,26 @@ describe("emitter arrows of the bipolar transistors (#337)", () => {
     expect(arrowOf("pnp").tip.x).toBeLessThan(0.25);
   });
 });
+
+describe("the MOSFET symbol (#338)", () => {
+  it("keeps its gate and its channel inside the envelope", () => {
+    const shapes = getDef("nmos").symbol;
+    const envelope = shapes.find((s) => s.kind === "circle")!;
+    if (envelope.kind !== "circle") throw new Error("no envelope");
+    // The vertical lines inside the circle: the gate (x = -0.7) and the channel (x = -0.4).
+    const vertical = shapes.filter(
+      (s) => s.kind === "line" && s.points.length === 4 && s.points[0] === s.points[2],
+    );
+    expect(vertical.length).toBeGreaterThanOrEqual(4);
+    for (const line of vertical) {
+      if (line.kind !== "line") continue;
+      const [x1, y1, x2, y2] = line.points as number[];
+      for (const [x, y] of [
+        [x1!, y1!],
+        [x2!, y2!],
+      ]) {
+        expect(Math.hypot(x! - envelope.x, y! - envelope.y)).toBeLessThan(envelope.radius);
+      }
+    }
+  });
+});
