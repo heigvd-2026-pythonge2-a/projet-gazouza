@@ -132,6 +132,7 @@ décoratif** : la simulation l'ignore complètement.
 | Clic sur un fil | Sélectionner un coude ou un tronçon, à glisser pour le déplacer (un tronçon glisse aussi dans sa longueur : ses voisins le suivent) |
 | Double-clic sur un fil | Sélectionner le fil entier |
 | <kbd>R</kbd> / <kbd>M</kbd> | Tourner de 90° / retourner en miroir |
+| <kbd>Maj+R</kbd> | Tourner de 45° (composants à deux broches : pont de Graetz…) |
 | Flèches | Déplacer la sélection d'un pas de grille |
 | <kbd>Ctrl</kbd> + glisser | Déplacer sans que les fils suivent |
 | <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> | Copier / coller (avec de nouveaux noms) : la copie suit la souris, <kbd>R</kbd> / <kbd>M</kbd> la tournent / la retournent, un clic la pose |
@@ -139,6 +140,15 @@ décoratif** : la simulation l'ignore complètement.
 | <kbd>Suppr</kbd> | Supprimer |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> | Annuler / rétablir |
 | Clic droit sur un composant | Menu des actions (tourner, propriétés, supprimer…) |
+
+### Composants en diagonale
+
+Pour dessiner un schéma comme dans le cours, par exemple un **pont de Graetz** avec ses quatre
+diodes en losange, <kbd>Maj+R</kbd> tourne les composants à deux broches (résistance, diode,
+condensateur, source…) de **45°** à chaque appui. En diagonale, les broches restent sur la grille
+pour que les fils s'y accrochent : le corps du symbole ne change pas, ce sont ses pattes qui
+s'allongent un peu. Les fils, eux, restent horizontaux et verticaux. <kbd>R</kbd> continue
+ensuite par quarts de tour, et l'orientation est gardée dans le fichier enregistré.
 
 ### Ranger le nom et la valeur d'un composant
 

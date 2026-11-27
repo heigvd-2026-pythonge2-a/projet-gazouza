@@ -33,6 +33,7 @@ import {
   renameComponent,
   rotateComponents,
   rotateCw,
+  canTurnDiagonally,
   samePoint,
   segmentsInRect,
   setParam,
@@ -64,6 +65,9 @@ export type Tool =
   | { kind: "paste"; clip: Clip }
   /** Click on the schematic to write a free text there (#123). */
   | { kind: "text" };
+
+/** Why Shift+R did nothing (#161). */
+export const DIAGONAL_NOTICE = "Seuls les composants à deux broches se tournent de 45°.";
 
 /** Content of a free text just placed, selected in the properties panel to be typed over. */
 export const NEW_TEXT = "Texte";
@@ -205,8 +209,11 @@ interface EditorState {
   removeLastBend: () => void;
   /** Drops the wire being drawn. */
   cancelDraft: () => void;
-  /** Rotates the selection, or the component or the copy about to be placed. */
-  rotate: () => void;
+  /**
+   * Rotates the selection, or the component or the copy about to be placed, by a quarter turn,
+   * or by 45 degrees (`step` 45, #161): only the components with two pins turn that way.
+   */
+  rotate: (step?: 45 | 90) => void;
   /** Mirrors the selection, or the component or the copy about to be placed. */
   mirror: () => void;
   deleteSelection: () => void;
@@ -499,16 +506,26 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       s.draft?.returnToSelect ? { draft: null, tool: { kind: "select" } } : { draft: null },
     ),
 
-  rotate: () =>
-    set((s) =>
-      s.tool.kind === "place"
-        ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation) } }
+  rotate: (step = 90) =>
+    set((s) => {
+      if (step === 45) {
+        const diagonal =
+          s.tool.kind === "place"
+            ? [s.tool.type]
+            : s.tool.kind === "select"
+              ? s.doc.components.filter((c) => s.selection.includes(c.id)).map((c) => c.type)
+              : [];
+        if (diagonal.length === 0) return {};
+        if (!diagonal.some(canTurnDiagonally)) return { notice: DIAGONAL_NOTICE };
+      }
+      return s.tool.kind === "place"
+        ? { tool: { ...s.tool, rotation: rotateCw(s.tool.rotation, step) } }
         : s.tool.kind === "paste"
           ? { tool: { ...s.tool, clip: turnClip(s.tool.clip, clipAnchor(s.tool.clip), "rotate") } }
           : s.selection.length > 0
-            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection)), s.selection))
-            : {},
-    ),
+            ? change(s, turned(rotateComponents(s.doc, new Set(s.selection), step), s.selection))
+            : {};
+    }),
 
   mirror: () =>
     set((s) =>

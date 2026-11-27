@@ -97,7 +97,7 @@ describe("parseDoc rejects invalid files", () => {
         const [first, ...rest] = d.components as object[];
         return { ...d, components: [{ ...first, ...patch }, ...rest] };
       });
-    expectInvalid(patchFirst({ rotation: 45 }), /rotation invalide/);
+    expectInvalid(patchFirst({ rotation: 30 }), /rotation invalide/);
     expectInvalid(patchFirst({ position: { x: 0.5, y: 0 } }), /position invalide/);
     expectInvalid(patchFirst({ params: { dc: 10 } }), /paramètre dc invalide/);
   });
