@@ -11,7 +11,7 @@ d'un cours ou d'un laboratoire sans les redessiner.
 Clique sur le bouton **Importer un schéma LTspice (.asc)** de la barre d'outils (groupe
 Fichier) et choisis le fichier, ou fais-le simplement glisser depuis l'Explorateur Windows et
 dépose-le sur le schéma. Si le schéma ouvert a des modifications non enregistrées, Psice te
-demande d'abord confirmation.
+propose de l'enregistrer d'abord.
 
 Le circuit s'ouvre comme un **nouveau schéma non enregistré**, avec l'analyse du fichier déjà
 réglée dans la barre d'outils : tu peux cliquer sur **Simuler** tout de suite. Si une partie du
