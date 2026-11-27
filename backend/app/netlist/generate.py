@@ -18,6 +18,23 @@ from app.netlist.writer import analysis_line, component_line
 LINE_BREAKS = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 
 
+def upgrade_params(schematic: Schematic) -> Schematic:
+    """Files saved before #165 kept the delay of a sine in `delay` (shared with the pulse): it
+    becomes `sin_delay`, so these files still simulate as before."""
+    old = [
+        c
+        for c in schematic.components
+        if c.params.get("waveform") == "sin" and "delay" in c.params and "sin_delay" not in c.params
+    ]
+    if not old:
+        return schematic
+    upgraded = {c.id: c.model_copy(update={"params": {**c.params, "sin_delay": c.params["delay"]}})
+                for c in old}  # fmt: skip
+    return schematic.model_copy(
+        update={"components": [upgraded.get(c.id, c) for c in schematic.components]}
+    )
+
+
 def header(title: str | None) -> str:
     """The first line of the netlist ('* Circuit RC'), always on a single line."""
     return "* " + (LINE_BREAKS.sub(" ", title or "").strip() or "Psice")
@@ -51,6 +68,7 @@ def generate_netlist(
     error, `netlist` is empty.
     """
     library = get_library() if library is None else library
+    schematic = upgrade_params(schematic)
 
     report = check_structure(schematic, analysis, library)
     if report.blocking:

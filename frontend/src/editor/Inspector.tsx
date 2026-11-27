@@ -2,6 +2,7 @@ import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
 
 import {
   TEXT_MAX_LENGTH,
+  choiceValue,
   getDef,
   nameProblem,
   netNameProblem,
@@ -170,8 +171,9 @@ function ComponentProperties({ component: c }: { component: PlacedComponent }) {
           />
         )}
         {params.map((p) => {
-          // A choice missing from an older file (a label's direction) shows its default.
-          const value = c.params[p.name] ?? (p.kind === "choice" ? p.default : "");
+          // A choice missing from an older file (a label's direction) shows the value used.
+          const value =
+            p.kind === "choice" ? choiceValue(def, c.params, p) : (c.params[p.name] ?? "");
           return (
             <Field
               key={p.name}

@@ -107,8 +107,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -182,6 +181,17 @@
         "label": "Fréquence",
         "unit": "Hz",
         "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
         "kind": "value",
         "options": [],
         "waveforms": [
@@ -315,9 +325,13 @@
         "name": "direction",
         "label": "Direction",
         "unit": "",
-        "default": "none",
+        "default": "auto",
         "kind": "choice",
         "options": [
+          {
+            "value": "auto",
+            "label": "Automatique"
+          },
           {
             "value": "none",
             "label": "Aucune"
@@ -696,8 +710,7 @@
         "kind": "value",
         "options": [],
         "waveforms": [
-          "pulse",
-          "sin"
+          "pulse"
         ]
       },
       {
@@ -771,6 +784,17 @@
         "label": "Fréquence",
         "unit": "Hz",
         "default": "1k",
+        "kind": "value",
+        "options": [],
+        "waveforms": [
+          "sin"
+        ]
+      },
+      {
+        "name": "sin_delay",
+        "label": "Retard",
+        "unit": "s",
+        "default": "0",
         "kind": "value",
         "options": [],
         "waveforms": [

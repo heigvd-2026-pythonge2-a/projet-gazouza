@@ -35,6 +35,24 @@ describe("serializeDoc / parseDoc", () => {
     expect(parseDoc(serializeDoc(doc))).toEqual(doc);
   });
 
+  it("moves the delay of a sine saved before #165 to sin_delay", () => {
+    const withParams = (params: Record<string, string>) =>
+      fileWith((doc) => {
+        const components = doc.components as { type: string; params: object }[];
+        const source = components.find((c) => c.type === "voltage_source")!;
+        source.params = params;
+        return doc;
+      });
+    const sourceOf = (text: string) =>
+      parseDoc(text).components.find((c) => c.type === "voltage_source")!.params;
+    const sine = { waveform: "sin", offset: "0", amplitude: "1", frequency: "50" };
+    expect(sourceOf(withParams({ ...sine, delay: "1m" })).sin_delay).toBe("1m");
+    // Saved after #165: `delay` is the pulse's, the sine keeps its own.
+    expect(sourceOf(withParams({ ...sine, delay: "1m", sin_delay: "2m" })).sin_delay).toBe("2m");
+    // A pulse is left as it is.
+    expect(sourceOf(withParams({ waveform: "pulse", delay: "1m" })).sin_delay).toBeUndefined();
+  });
+
   it("writes readable JSON ending with a newline", () => {
     const text = serializeDoc(emptyDoc());
     expect(text.endsWith("\n")).toBe(true);

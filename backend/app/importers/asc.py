@@ -202,7 +202,7 @@ def _label_name(name: str, taken: set[str]) -> str:
 FUNCTION = re.compile(r"(?P<kind>\w+)\s*\((?P<args>[^)]*)\)", re.IGNORECASE)
 WAVEFORM_ARGS = {
     "pulse": ("1", "2", "delay", "rise", "fall", "width", "period"),
-    "sin": ("offset", "amplitude", "frequency", "delay", "damping", "phase"),
+    "sin": ("offset", "amplitude", "frequency", "sin_delay", "damping", "phase"),
 }
 
 

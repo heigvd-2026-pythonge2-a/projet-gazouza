@@ -46,12 +46,13 @@ Les majuscules ne comptent pas : `Out` et `out` désignent le même nœud.
 
 La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
 
-| Direction        | Drapeau                                                    |
-| ---------------- | ---------------------------------------------------------- |
-| Aucune           | Rectangle                                                  |
-| Entrée           | Pointe vers la broche : le signal entre dans le circuit    |
-| Sortie           | Pointe à l'opposé de la broche : le signal sort du circuit |
-| Bidirectionnelle | Pointe des deux côtés                                      |
+| Direction                | Drapeau                                                                 |
+| ------------------------ | ----------------------------------------------------------------------- |
+| Automatique (par défaut) | Déduite du circuit par Psice ; en attendant, rectangle comme « Aucune » |
+| Aucune                   | Rectangle                                                               |
+| Entrée                   | Pointe vers la broche : le signal entre dans le circuit                 |
+| Sortie                   | Pointe à l'opposé de la broche : le signal sort du circuit              |
+| Bidirectionnelle         | Pointe des deux côtés                                                   |
 
 Le drapeau se place tout seul **du côté opposé au fil** (ou au composant) branché sur l'étiquette,
 pour que son nom ne cache jamais le fil : l'étiquette tourne autour de sa broche, rien ne se
