@@ -68,6 +68,9 @@ def test_value_with_a_huge_exponent_is_not_a_server_error() -> None:
         errors = response.json()["errors"]
         assert [e["code"] for e in errors] == ["BAD_VALUE"]
         assert errors[0]["targets"] == [{"comp": resistor["id"]}]
+        # The message quotes only the start of the value, not its 5000 digits.
+        assert "« 1e9999999999999999999999999999… »" in errors[0]["message"]
+        assert len(errors[0]["message"]) < 120
 
 
 def test_netlist_rejects_malformed_json() -> None:

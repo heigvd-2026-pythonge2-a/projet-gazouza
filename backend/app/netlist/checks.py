@@ -36,6 +36,7 @@ from app.netlist.values import InvalidValueError, as_mega, has_milli_suffix, par
 LABEL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 AUTOMATIC_NAME = re.compile(r"n\d+", re.IGNORECASE)
 SOURCE_TYPES = ("voltage_source", "current_source")
+MAX_SHOWN = 30  # characters of a typed value quoted in a message
 GROUND_NODE = "0"
 
 # Errors after which the nodes cannot be built safely.
@@ -70,6 +71,12 @@ def describe(comp: Component) -> str:
     if comp.type == "label":
         return f"l'étiquette {comp.params.get('net', '')}".rstrip()
     return comp.name or f"le composant {comp.id}"
+
+
+def shown(value: str) -> str:
+    """A value typed by the student, as quoted in a message: cut after MAX_SHOWN characters, so
+    a value of thousands of characters does not fill the screen (#314)."""
+    return value if len(value) <= MAX_SHOWN else value[:MAX_SHOWN] + "…"
 
 
 def capitalize(text: str) -> str:
@@ -152,14 +159,15 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
         elif param.kind == "choice":
             if value not in {o.value for o in param.options}:
                 report.error(
-                    "BAD_VALUE", f"{who} : « {value} » n'est pas un choix possible.", target
+                    "BAD_VALUE", f"{who} : « {shown(value)} » n'est pas un choix possible.", target
                 )
         elif param.kind == "text":
             if not LABEL_NAME.fullmatch(value) or AUTOMATIC_NAME.fullmatch(value):
                 report.error(
                     "BAD_LABEL_NAME",
-                    f"« {value} » n'est pas un nom de nœud valide : lettres, chiffres et _, en "
-                    "commençant par une lettre, et pas n1, n2… (réservés aux noms automatiques).",
+                    f"« {shown(value)} » n'est pas un nom de nœud valide : lettres, chiffres et "
+                    "_, en commençant par une lettre, et pas n1, n2… (réservés aux noms "
+                    "automatiques).",
                     target,
                 )
         else:
@@ -168,7 +176,8 @@ def _check_params(report: Report, comp: Component, ctype: ComponentType) -> None
             except InvalidValueError:
                 report.error(
                     "BAD_VALUE",
-                    f"{who} : « {value} » n'est pas une valeur valide pour « {param.label} ».",
+                    f"{who} : « {shown(value)} » n'est pas une valeur valide pour "
+                    f"« {param.label} ».",
                     target,
                 )
                 continue
