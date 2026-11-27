@@ -78,14 +78,70 @@ function WireIcon() {
   );
 }
 
-const gridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 };
+/**
+ * Narrowest tile, in pixels: the panel shows as many columns as fit (#331), two at its default
+ * width as before, three or more when it is widened.
+ */
+export const TILE_MIN_WIDTH = 54;
+
+const gridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN_WIDTH}px, 1fr))`,
+  gap: 6,
+};
 
 const groupTitleStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  width: "100%",
   margin: "10px 0 4px",
+  padding: 0,
+  border: "none",
+  background: "none",
+  font: "inherit",
   fontSize: 11,
   fontWeight: 600,
   color: UI.muted,
+  textAlign: "left",
+  cursor: "pointer",
 };
+
+/** Where the folded groups of the palette are kept between launches (#331). */
+export const COLLAPSED_GROUPS_KEY = "psice.palette.collapsed";
+
+/** The groups folded last time (unreadable: none). */
+function loadCollapsed(): Set<string> {
+  try {
+    const saved: unknown = JSON.parse(window.localStorage.getItem(COLLAPSED_GROUPS_KEY) ?? "[]");
+    return new Set(Array.isArray(saved) ? saved.filter((g) => typeof g === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed(groups: ReadonlySet<string>) {
+  try {
+    window.localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...groups]));
+  } catch {
+    // Storage full or refused: the groups stay folded until the window closes.
+  }
+}
+
+/** Chevron of a group title: pointing down when the group is open, right when it is folded. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width={10}
+      height={10}
+      viewBox="0 0 10 10"
+      aria-hidden
+      style={{ transform: open ? "rotate(90deg)" : undefined, transition: "transform 0.1s" }}
+    >
+      <polyline points="3,1 7,5 3,9" fill="none" stroke="currentColor" strokeWidth={1.5} />
+    </svg>
+  );
+}
 
 const searchStyle: CSSProperties = {
   boxSizing: "border-box",
@@ -106,15 +162,26 @@ const isSearchShortcut = (e: KeyboardEvent) =>
  * Component palette, grouped by category (`category` in the library): one tile per library
  * type, to drag onto the schematic or click. The wire tool closes the "Connexions" group. Keys 1
  * to 9 pick the tiles in order (see `paletteLayout`). The search field above (Ctrl+F) narrows it
- * to the components whose name matches (#276); Enter picks the first one.
+ * to the components whose name matches (#276); Enter picks the first one. A click on the title
+ * of a group folds it or opens it again, and the folded groups are remembered (#331); while
+ * searching, every group with a result is open. The digit keys keep their tiles, folded or not.
  */
 export function Palette() {
   const tool = useEditorStore((s) => s.tool);
   const startPlacing = useEditorStore((s) => s.startPlacing);
   const startWiring = useEditorStore((s) => s.startWiring);
   const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
   const searchRef = useRef<HTMLInputElement>(null);
   const groups = searchPalette(paletteLayout(), query);
+  const searching = query.trim() !== "";
+
+  const toggleGroup = (id: string) => {
+    const next = new Set(collapsed);
+    if (!next.delete(id)) next.add(id);
+    setCollapsed(next);
+    saveCollapsed(next);
+  };
 
   const pick = (entry: PaletteEntry) => {
     if (entry.kind === "wire") startWiring();
@@ -176,37 +243,53 @@ export function Palette() {
           Aucun composant
         </p>
       )}
-      {groups.map((group) => (
-        <section key={group.id} aria-label={group.label}>
-          <h4 style={groupTitleStyle}>{group.label}</h4>
-          <div style={gridStyle}>
-            {group.entries.map(({ entry, shortcut }) =>
-              entry.kind === "wire" ? (
-                <Tile
-                  key="wire"
-                  label={WIRE_LABEL}
-                  active={tool.kind === "wire"}
-                  onClick={startWiring}
-                  shortcut={shortcut}
-                >
-                  <WireIcon />
-                </Tile>
-              ) : (
-                <Tile
-                  key={entry.def.type}
-                  label={entry.def.label}
-                  active={tool.kind === "place" && tool.type === entry.def.type}
-                  onClick={() => startPlacing(entry.def.type)}
-                  dragType={entry.def.type}
-                  shortcut={shortcut}
-                >
-                  <SymbolIcon def={entry.def} />
-                </Tile>
-              ),
-            )}
-          </div>
-        </section>
-      ))}
+      {groups.map((group) => {
+        const open = searching || !collapsed.has(group.id);
+        const panel = `palette-group-${group.id}`;
+        return (
+          <section key={group.id} aria-label={group.label}>
+            <h4 style={{ margin: 0 }}>
+              <button
+                type="button"
+                style={groupTitleStyle}
+                aria-expanded={open}
+                aria-controls={panel}
+                title={open ? "Replier ce groupe" : "Déplier ce groupe"}
+                onClick={() => toggleGroup(group.id)}
+              >
+                <Chevron open={open} />
+                {group.label}
+              </button>
+            </h4>
+            <div id={panel} style={{ ...gridStyle, display: open ? "grid" : "none" }}>
+              {group.entries.map(({ entry, shortcut }) =>
+                entry.kind === "wire" ? (
+                  <Tile
+                    key="wire"
+                    label={WIRE_LABEL}
+                    active={tool.kind === "wire"}
+                    onClick={startWiring}
+                    shortcut={shortcut}
+                  >
+                    <WireIcon />
+                  </Tile>
+                ) : (
+                  <Tile
+                    key={entry.def.type}
+                    label={entry.def.label}
+                    active={tool.kind === "place" && tool.type === entry.def.type}
+                    onClick={() => startPlacing(entry.def.type)}
+                    dragType={entry.def.type}
+                    shortcut={shortcut}
+                  >
+                    <SymbolIcon def={entry.def} />
+                  </Tile>
+                ),
+              )}
+            </div>
+          </section>
+        );
+      })}
       <p style={{ fontSize: 12, color: UI.muted, marginTop: 8 }}>Glisser sur le schéma</p>
     </aside>
   );

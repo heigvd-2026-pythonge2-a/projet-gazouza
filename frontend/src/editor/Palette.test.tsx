@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { editorState, resetEditorStore } from "../test/editorStore";
-import { DRAG_TYPE, Palette } from "./Palette";
+import { COLLAPSED_GROUPS_KEY, DRAG_TYPE, Palette, TILE_MIN_WIDTH } from "./Palette";
+import { entryForKey } from "./paletteLayout";
 
 beforeEach(resetEditorStore);
 
@@ -72,5 +73,76 @@ describe("Palette", () => {
     render(<Palette />);
     await user.keyboard("{Control>}f{/Control}");
     expect(screen.getByRole("searchbox")).toHaveFocus();
+  });
+});
+
+describe("folding the groups of the palette (#331)", () => {
+  beforeEach(() => window.localStorage.removeItem(COLLAPSED_GROUPS_KEY));
+
+  const header = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name}$`) });
+
+  it("folds a group with a click on its title, and opens it again", async () => {
+    const user = userEvent.setup();
+    render(<Palette />);
+    expect(header("Passifs")).toHaveAttribute("aria-expanded", "true");
+    await user.click(header("Passifs"));
+    expect(header("Passifs")).toHaveAttribute("aria-expanded", "false");
+    // Hidden by its style: an inline `display` would win over the `hidden` attribute.
+    const panel = document.getElementById(header("Passifs").getAttribute("aria-controls")!);
+    expect(panel).toHaveStyle({ display: "none" });
+    expect(screen.queryByRole("button", { name: /Résistance/ })).toBeNull();
+    // The other groups stay open.
+    expect(tile("Fil")).toBeInTheDocument();
+    await user.click(header("Passifs"));
+    expect(tile("Résistance")).toBeInTheDocument();
+  });
+
+  it("works from the keyboard", async () => {
+    const user = userEvent.setup();
+    render(<Palette />);
+    header("Sources").focus();
+    await user.keyboard("{Enter}");
+    expect(header("Sources")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("remembers the folded groups after a restart", async () => {
+    const user = userEvent.setup();
+    const first = render(<Palette />);
+    await user.click(header("Passifs"));
+    first.unmount();
+    render(<Palette />);
+    expect(header("Passifs")).toHaveAttribute("aria-expanded", "false");
+    expect(header("Sources")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("ignores a stored value it cannot read", () => {
+    window.localStorage.setItem(COLLAPSED_GROUPS_KEY, "{pas du json");
+    render(<Palette />);
+    expect(header("Passifs")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("shows the results of a search even in a folded group", async () => {
+    const user = userEvent.setup();
+    render(<Palette />);
+    await user.click(header("Passifs"));
+    await user.type(screen.getByRole("searchbox"), "condens");
+    expect(tile("Condensateur")).toBeInTheDocument();
+    await user.clear(screen.getByRole("searchbox"));
+    expect(screen.queryByRole("button", { name: /Condensateur/ })).toBeNull();
+  });
+
+  it("keeps the digit keys on the same tools, folded or not", async () => {
+    const user = userEvent.setup();
+    render(<Palette />);
+    await user.click(header("Passifs"));
+    expect(entryForKey("1")).toMatchObject({ kind: "place", def: { type: "resistor" } });
+  });
+
+  it("fits as many columns as the panel's width allows", () => {
+    render(<Palette />);
+    const grid = tile("Résistance").parentElement!;
+    expect(grid.style.gridTemplateColumns).toBe(
+      `repeat(auto-fill, minmax(${TILE_MIN_WIDTH}px, 1fr))`,
+    );
   });
 });
