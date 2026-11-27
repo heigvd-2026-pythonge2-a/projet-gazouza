@@ -30,6 +30,7 @@ DiagnosticCode = Literal[
     "WIRE_DANGLING",
     "JUNCTION_DANGLING",
     "MILLI_SUFFIX",
+    "SHORTED_COMPONENT",
     # After the simulation (Damien): a LED that would burn out
     "LED_OVERCURRENT",
     "LED_REVERSE_VOLTAGE",
