@@ -42,6 +42,11 @@ interface EditorPart {
   category: Category;
   /** Drawing in grid units, at rotation 0. */
   symbol: SymbolShape[];
+  /**
+   * Pins that produce a signal (the terminals of a source, the output of an op-amp): a node
+   * label on their node points out of it when the direction is automatic (#295).
+   */
+  drivers?: readonly string[];
 }
 
 export interface ComponentDef extends EditorPart {
@@ -227,6 +232,7 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "voltage_source",
     category: "source",
+    drivers: ["+", "-"],
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -239,6 +245,7 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
   {
     type: "current_source",
     category: "source",
+    drivers: ["+", "-"],
     symbol: [
       ...leads(1),
       { kind: "circle", x: 0, y: 0, radius: 1 },
@@ -303,10 +310,11 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
       { kind: "line", points: [0, -0.2, -0.35, 0, 0, 0.2] },
     ],
   },
-  { type: "opamp", category: "amplifier", symbol: OPAMP_BODY },
+  { type: "opamp", category: "amplifier", drivers: ["out"], symbol: OPAMP_BODY },
   {
     type: "opamp_real",
     category: "amplifier",
+    drivers: ["out"],
     // Supply pins V+ (top) and V- (bottom), drawn to the triangle's edges.
     symbol: [
       ...OPAMP_BODY,
@@ -327,7 +335,7 @@ export function setLibrary(components: readonly LibraryComponent[]): void {
     }
   }
   const defs = new Map<string, ComponentDef>();
-  for (const { type, category, symbol } of EDITOR_PARTS) {
+  for (const { type, category, symbol, drivers } of EDITOR_PARTS) {
     const c = byType.get(type);
     if (!c) continue;
     defs.set(type, {
@@ -342,6 +350,7 @@ export function setLibrary(components: readonly LibraryComponent[]): void {
       })),
       category,
       symbol,
+      ...(drivers ? { drivers } : {}),
     });
   }
   library = defs;
@@ -406,11 +415,15 @@ export function choiceValue(def: ComponentDef, params: Record<string, string>, p
 
 /**
  * Drawing of a placed component: the symbol of its type, except for a label, whose flag follows
- * its direction (absent or unknown: no direction, as in files saved before it existed; "auto" is
- * drawn as "none" until the editor works the direction out, #295), and for a switch or a push
- * button, drawn open or closed by its state (absent or unknown: open).
+ * its direction (absent or unknown: no direction, as in files saved before it existed; "auto":
+ * `autoDirection`, worked out from the circuit by `autoLabelDirections`, #295), and for a switch
+ * or a push button, drawn open or closed by its state (absent or unknown: open).
  */
-export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
+export function symbolOf(
+  def: ComponentDef,
+  params: Record<string, string>,
+  autoDirection: string = "none",
+): SymbolShape[] {
   if (def.type === "switch" || def.type === "push_button") {
     const states: Readonly<Record<string, SymbolShape[] | undefined>> = SWITCH_SYMBOLS[def.type];
     return states[params.state ?? "SW_OPEN"] ?? def.symbol;
@@ -418,7 +431,7 @@ export function symbolOf(def: ComponentDef, params: Record<string, string>): Sym
   if (def.type !== "label") return def.symbol;
   const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
   const direction = params.direction ?? "none";
-  return flags[direction === "auto" ? "none" : direction] ?? def.symbol;
+  return flags[direction === "auto" ? autoDirection : direction] ?? def.symbol;
 }
 
 export interface Bounds {

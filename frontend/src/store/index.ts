@@ -6,6 +6,7 @@ export * from "./diagnostics";
 export * from "./document";
 export * from "./editorStore";
 export * from "./fileFormat";
+export * from "./labelDirections";
 export * from "./library";
 export * from "./nodes";
 export * from "./routing";
