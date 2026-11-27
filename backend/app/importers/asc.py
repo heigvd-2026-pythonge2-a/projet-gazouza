@@ -22,6 +22,7 @@ from app.importers.asc_symbols import (
     find_symbol,
     parse_orientation,
     place,
+    turned_over,
 )
 from app.models import (
     AcAnalysis,
@@ -112,6 +113,8 @@ def _components(asc: AscFile, result: AscImport) -> list[_Placed]:
             pins[pin] = (symbol.x + ox, symbol.y + oy)
         center_x = sum(x for x, _ in pins.values()) / len(pins)
         center_y = sum(y for _, y in pins.values()) / len(pins)
+        if definition.flipped:  # the pins stay where LTspice puts them, the drawing turns
+            rotation, mirror = turned_over(rotation, mirror)
 
         prefix = PREFIXES[definition.psice_type]
         taken = file_names | {p.component.name for p in placed}
@@ -238,6 +241,8 @@ def _values(
             f"{name} : l'ampli-op LTspice « {symbol.name.split(chr(92))[-1]} » est remplacé par "
             "le modèle générique Psice OA_GENERIC."
         )
+    elif definition.psice_type in TRANSISTOR_MODELS:
+        params["model"] = _transistor_model(definition.psice_type, value, name, result)
     elif definition.value_param == "model":
         params["model"] = _diode_model(definition.psice_type, value, name, result)
     elif definition.value_param is not None:
@@ -303,11 +308,33 @@ def _has_ac(attributes: dict[str, str]) -> bool:
     return re.search(r"\bAC\s+\S+", text, re.IGNORECASE) is not None
 
 
-PSICE_DIODE_MODELS = {
-    "diode": {"D_SIGNAL", "D_RECT"},
-    "zener": {"D_Z3V3", "D_Z5V1", "D_Z12"},
-    "led": {"D_LED_RED", "D_LED_GREEN"},
-}
+def _models(psice_type: str) -> set[str]:
+    """The models offered by the library for a type (its `model` choice)."""
+    entry = get_library()[psice_type]
+    return {o.value for p in entry.params if p.name == "model" for o in p.options}
+
+
+# LED colour named in an LTspice model -> Psice model. Red when no colour is recognised.
+LED_COLOURS = {
+    "GREEN": "D_LED_GREEN", "VERT": "D_LED_GREEN",
+    "YELLOW": "D_LED_YELLOW", "JAUNE": "D_LED_YELLOW", "AMBER": "D_LED_YELLOW",
+    "BLUE": "D_LED_BLUE", "BLEU": "D_LED_BLUE",
+    "WHITE": "D_LED_WHITE", "BLANC": "D_LED_WHITE",
+}  # fmt: skip
+
+# Psice has one generic model per transistor type (#140).
+TRANSISTOR_MODELS = {"npn": "Q_NPN_GP", "pnp": "Q_PNP_GP", "nmos": "M_NMOS_GP"}
+
+
+def _transistor_model(psice_type: str, ltspice_model: str, name: str, result: AscImport) -> str:
+    """The generic Psice model, with a warning unless the file already names it."""
+    chosen = TRANSISTOR_MODELS[psice_type]
+    if ltspice_model.upper() != chosen:
+        result.warnings.append(
+            f"{name} : le modèle LTspice « {ltspice_model or '(aucun)'} » est remplacé par le "
+            f"modèle générique Psice {chosen}."
+        )
+    return chosen
 
 
 def _diode_model(psice_type: str, ltspice_model: str, name: str, result: AscImport) -> str:
@@ -316,10 +343,11 @@ def _diode_model(psice_type: str, ltspice_model: str, name: str, result: AscImpo
     if psice_type == "zener":
         chosen = "D_Z3V3" if "3V3" in upper else "D_Z12" if "12" in upper else "D_Z5V1"
     elif psice_type == "led":
-        chosen = "D_LED_GREEN" if "GREEN" in upper or "VERT" in upper else "D_LED_RED"
+        colours = (model for word, model in LED_COLOURS.items() if word in upper)
+        chosen = next(colours, "D_LED_RED")
     else:
         chosen = "D_RECT" if re.search(r"400[1-7]|RECT", upper) else "D_SIGNAL"
-    if upper in PSICE_DIODE_MODELS[psice_type]:  # already a Psice model: keep it, no warning
+    if upper in _models(psice_type):  # already a Psice model: keep it, no warning
         return upper
     result.warnings.append(
         f"{name} : le modèle LTspice « {ltspice_model or '(aucun)'} » est remplacé par le "
