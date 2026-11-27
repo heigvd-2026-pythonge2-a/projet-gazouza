@@ -6,15 +6,17 @@
 // that was opened or saved before, like a desktop app. Elsewhere (Firefox…) Open uses a file input
 // and Save downloads the file.
 
+import { ApiError, importAsc, type ImportResult } from "../api/client";
 import {
   DEFAULT_FILE_NAME,
   FileFormatError,
   isUnsaved,
   parseDoc,
+  readDoc,
   serializeDoc,
   useEditorStore,
 } from "../store";
-import { exampleContent } from "./examples";
+import { analysisSettings, exampleContent } from "./examples";
 import { exportImage as renderImage, type ImageFormat, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
@@ -26,6 +28,11 @@ export interface PickerType {
 /** File types of the schematic files. */
 const PICKER_TYPES: PickerType[] = [
   { description: "Schéma Psice", accept: { "application/json": [".json"] } },
+];
+
+/** File types of the LTspice schematics (#225). */
+const ASC_TYPES: PickerType[] = [
+  { description: "Schéma LTspice", accept: { "application/octet-stream": [".asc"] } },
 ];
 
 /** File type of an exported image, by format. */
@@ -136,6 +143,114 @@ export function openFile() {
   input.click();
 }
 
+/**
+ * The text of an LTspice schematic. LTspice writes UTF-16 LE (with or without its byte order
+ * mark) or 8-bit text, UTF-8 for recent versions and Windows-1252 for older ones.
+ */
+export async function decodeAsc(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  // No mark: an ASCII first character followed by a zero byte ("V\0e\0r\0…") is UTF-16 LE.
+  if (bytes.length > 1 && bytes[0] !== 0 && bytes[1] === 0) {
+    return new TextDecoder("utf-16le").decode(bytes);
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/** The messages of a list of diagnostics, one per line, for a message box. */
+const bulletList = (diagnostics: { message: string }[]) =>
+  diagnostics.map((d) => `• ${d.message}`).join("\n");
+
+/**
+ * Opens what the backend made of an LTspice schematic: a new unsaved document (saving it asks
+ * where, the `.asc` file is never overwritten), with the analysis of the file if it has one.
+ * What was left out or adapted is listed to the user.
+ */
+function openImported(result: ImportResult) {
+  const errors = result.errors ?? [];
+  const warnings = result.warnings ?? [];
+  if (!result.schematic) {
+    window.alert(
+      errors.length > 0
+        ? `Ce fichier LTspice n'a pas pu être importé :\n${bulletList(errors)}`
+        : "Ce fichier LTspice n'a pas pu être importé.",
+    );
+    return;
+  }
+  const { components = [], junctions = [], wires = [], texts = [] } = result.schematic;
+  let doc;
+  try {
+    doc = readDoc({
+      components,
+      junctions,
+      texts,
+      wires: wires.map((w) => ({ ...w, points: w.points ?? [] })),
+    });
+  } catch (error: unknown) {
+    window.alert(
+      error instanceof FileFormatError
+        ? `Le schéma importé ne peut pas être ouvert : ${error.message}`
+        : "Le schéma importé ne peut pas être ouvert.",
+    );
+    return;
+  }
+  const store = useEditorStore.getState();
+  store.openDocument(doc, true);
+  if (result.analysis) store.setAnalysis(analysisSettings(result.analysis));
+  currentFile = null;
+  if (warnings.length > 0) {
+    window.alert(`Schéma LTspice importé, avec ces remarques :\n${bulletList(warnings)}`);
+  }
+}
+
+/** Sends an LTspice schematic to the backend and opens the result (#225). */
+async function importContent(file: File) {
+  let result: ImportResult;
+  try {
+    const title = file.name.replace(/\.asc$/i, "");
+    result = await importAsc({ text: await decodeAsc(file), title });
+  } catch (error: unknown) {
+    window.alert(
+      error instanceof ApiError
+        ? `Impossible d'importer ce fichier LTspice : ${error.message}`
+        : "Impossible de lire ce fichier.",
+    );
+    return;
+  }
+  openImported(result);
+}
+
+/** Lets the user pick an LTspice schematic (`.asc`) and imports it (#225). */
+export function importLtspice() {
+  if (!canDiscardChanges()) return;
+  const api = pickers();
+  if (api) {
+    api
+      .showOpenFilePicker({ types: ASC_TYPES })
+      .then(async (handles) => {
+        const handle = handles[0];
+        if (handle) await importContent(await handle.getFile());
+      })
+      .catch((error: unknown) => {
+        if (!isCancel(error)) window.alert("Impossible d'ouvrir ce fichier.");
+      });
+    return;
+  }
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".asc";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) void importContent(file);
+  });
+  input.click();
+}
+
 /** What a dropped file is, by its name: a schematic, an LTspice schematic, or something else. */
 export function droppedFileKind(name: string): "schematic" | "ltspice" | "other" {
   const lower = name.toLowerCase();
@@ -147,20 +262,18 @@ export function droppedFileKind(name: string): "schematic" | "ltspice" | "other"
 /**
  * Opens a file dropped on the window (#277), like Ctrl+O: the same question first if there are
  * unsaved changes. With its `handle` (WebView2, Chrome), Ctrl+S then writes back to that file.
- * An LTspice `.asc` file or any other file is refused with a message.
+ * An LTspice `.asc` file is imported (#225); any other file is refused with a message.
  */
 export async function openDroppedFile(file: File, handle: FileSystemFileHandle | null = null) {
   switch (droppedFileKind(file.name)) {
     case "ltspice":
-      window.alert(
-        "L'import des schémas LTspice (.asc) n'est pas encore possible depuis l'éditeur. " +
-          "Psice ouvre ici les schémas .psice.json.",
-      );
+      if (!canDiscardChanges()) return;
+      await importContent(file);
       return;
     case "other":
       window.alert(
         `« ${file.name} » n'est pas un schéma Psice. ` +
-          "Déposez un fichier .psice.json pour l'ouvrir.",
+          "Déposez un fichier .psice.json, ou un schéma LTspice .asc, pour l'ouvrir.",
       );
       return;
     case "schematic":

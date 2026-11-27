@@ -5,6 +5,7 @@ import {
   exportFormat,
   exportImage,
   exportTransparent,
+  importLtspice,
   newFile,
   openExample,
   openFile,
@@ -17,8 +18,6 @@ import { EXAMPLES, type Example } from "./examples";
 import { exportNetlist } from "./simulationActions";
 import { COLORS, UI } from "./theme";
 import { fitView, zoomIn, zoomOut, type ImageFormat } from "./viewCommands";
-
-const SOON = "Bientôt disponible";
 
 /** Outline icons drawn on a 16×16 grid, in the button's text colour. */
 const ICONS = {
@@ -458,7 +457,11 @@ export function EditorToolbar() {
           onClick={() => saveFile()}
         />
         <ToolButton label="Enregistrer sous… (Ctrl+Maj+S)" icon="saveAs" onClick={saveFileAs} />
-        <ToolButton label={`Importer un fichier LTspice (.asc) — ${SOON}`} icon="import" disabled />
+        <ToolButton
+          label="Importer un schéma LTspice (.asc)"
+          icon="import"
+          onClick={importLtspice}
+        />
         <ExportButton />
         <ToolButton
           label="Exporter la netlist SPICE (.cir), avec l'analyse choisie"

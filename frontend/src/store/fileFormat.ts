@@ -130,7 +130,14 @@ export function parseDoc(text: string): EditorDoc {
   }
   if (!isObject(data) || data.format !== FORMAT) return fail("format inconnu");
   if (data.version !== VERSION) return fail(`version ${String(data.version)} non prise en charge`);
-  const raw = data.doc;
+  return readDoc(data.doc);
+}
+
+/**
+ * Checks the content of a schematic (`doc` of a file, or a schematic of the contract with all its
+ * lists) and keeps what the editor knows of it. Throws `FileFormatError` if it is not valid.
+ */
+export function readDoc(raw: unknown): EditorDoc {
   if (
     !isObject(raw) ||
     !Array.isArray(raw.components) ||

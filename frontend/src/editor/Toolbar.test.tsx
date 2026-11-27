@@ -28,7 +28,7 @@ describe("EditorToolbar", () => {
     ]) {
       expect(button(name)).toBeDisabled();
     }
-    expect(button(/^Importer un fichier LTspice/)).toBeDisabled();
+    expect(button(/^Importer un schéma LTspice/)).toBeEnabled();
     expect(button("Nouveau schéma (Ctrl+N)")).toBeEnabled();
   });
 
