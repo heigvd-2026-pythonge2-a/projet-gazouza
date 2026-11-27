@@ -94,3 +94,15 @@ nœud ou les composants en cause.
 | `NO_CONVERGENCE`      | ngspice n'arrive pas à trouver de solution (circuit non linéaire difficile, valeurs extrêmes).                                                                                                                                                | Vérifie les valeurs, réduis la durée ou le pas de la simulation.                                                                                         |
 | `SIMULATION_TIMEOUT`  | La simulation a dépassé le délai maximal et a été arrêtée.                                                                                                                                                                                    | Réduis la durée simulée ou augmente le pas maximal.                                                                                                      |
 | `SIMULATION_FAILED`   | Tout autre problème. Le message brut de ngspice est ajouté à la fin. Aussi avant de lancer la simulation, si elle produirait plus de 200 000 points (durée trop longue pour le pas maximal, balayage trop fin) : le message dit quoi changer. | Lis le message ; si tu penses que c'est un bug de Psice, [ouvre une issue](https://github.com/heigvd-2026-pythonge2-a/projet-gazouza/issues/new/choose). |
+
+## Import d'un fichier LTspice
+
+Ces messages apparaissent quand tu importes un fichier `.asc` (voir
+[Import LTspice](/projet-gazouza/guide/import-ltspice/)). Seul un fichier illisible bloque l'import : le reste est
+importé, et chaque adaptation est signalée.
+
+| Code                | Ce que ça veut dire                                                                                                                              | Que faire                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `IMPORT_UNREADABLE` | Erreur : le fichier n'est pas un schéma LTspice lisible (autre type de fichier, fichier trop gros, ligne incomplète). Aucun schéma n'est ouvert. | Vérifie que c'est bien le `.asc` enregistré par LTspice, puis réessaie.            |
+| `IMPORT_SKIPPED`    | Avertissement : une partie du fichier est laissée de côté (composant que Psice ne connaît pas, orientation inconnue…).                           | Ajoute à la main un composant équivalent de la palette, ou supprime ce qui manque. |
+| `IMPORT_CHANGED`    | Avertissement : une partie est adaptée (nœud renommé, modèle de diode remplacé, analyse en trop ignorée…).                                       | Relis le message et vérifie que l'adaptation te convient.                          |
