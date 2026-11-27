@@ -497,7 +497,7 @@ def test_successful_run_executes_in_isolated_tempdir_with_create_no_window(
     assert result.errors == []
     assert result.warnings == netlist_result.warnings
     assert [t.name for t in result.traces] == ["v(in)", "v(out)", "i(V1)", "i(R1)", "i(R2)"]
-    assert recorded["cmd"] == [str(fake_exe), "-b", "circuit.cir", "-r", "output.raw"]
+    assert recorded["cmd"] == [str(fake_exe), "-n", "-b", "circuit.cir", "-r", "output.raw"]
     assert recorded["stdin"] is subprocess.DEVNULL
     assert recorded["timeout"] == DEFAULT_TIMEOUT_SECONDS
     assert recorded["env"]["SPICE_ASCIIRAWFILE"] == "1"
@@ -3231,3 +3231,87 @@ def test_ngspice_explicit_save_excludes_subckt_and_sense_nodes_and_supports_100k
     assert res_dc_asc.errors == []
     assert res_dc_asc.axis is not None
     assert res_dc_asc.axis.values == pytest.approx([-5.0, -2.5, 0.0, 2.5, 5.0])
+
+
+def test_tran_analysis_points_validation_and_directive() -> None:
+    base_netlist = NetlistResult(
+        netlist="* rc\nV1 in 0 DC 5\nR1 in out 1k\nC1 out 0 100n\n.end\n",
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "c1", "R1": "c2", "C1": "c3"},
+    )
+    prep_points = prepare_netlist(base_netlist, TranAnalysis(stop_time=0.005, points=500))
+    assert ".tran 1e-05 0.005 0 1e-05" in prep_points.splitlines()
+
+    prep_both = prepare_netlist(
+        base_netlist,
+        TranAnalysis(stop_time=0.005, points=200, max_step=1e-5),
+    )
+    assert ".tran 1e-05 0.005 0 1e-05" in prep_both.splitlines()
+
+    invalid_points = TranAnalysis.model_construct(kind="tran", stop_time=0.005, points=0)
+    res_invalid = run_simulation(base_netlist, invalid_points)
+    assert len(res_invalid.errors) == 1
+    assert res_invalid.errors[0].code == "SIMULATION_FAILED"
+    assert "nombre de points" in res_invalid.errors[0].message
+
+
+def test_switch_current_measurement_prepares_sense_source() -> None:
+    switch_netlist = NetlistResult(
+        netlist=(
+            "* switch\n"
+            "V1 in 0 5\n"
+            "S1 in out 0 0 SW_CLOSED\n"
+            "R1 out 0 1k\n"
+            ".model SW_CLOSED SW(Vt=-0.5 Ron=1m Roff=1G)\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "v1", "S1": "s1", "R1": "r1"},
+    )
+    for analysis in (OpAnalysis(), TranAnalysis(stop_time=1e-3)):
+        prepared = prepare_netlist(switch_netlist, analysis)
+        lines = prepared.splitlines()
+        assert "V__psice_sense_s1 in __psice_sense_s1 DC 0" in lines
+        assert "S1 __psice_sense_s1 out 0 0 SW_CLOSED" in lines
+        assert ".save v(in) v(out) i(v1) i(v__psice_sense_s1) @r1[i]" in lines
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not _has_ngspice(), reason="ngspice binary not found in backend/vendor/ngspice")
+def test_ngspice_switch_current_in_op_and_tran() -> None:
+    closed_netlist = NetlistResult(
+        netlist=(
+            "* closed switch\n"
+            "V1 in 0 5\n"
+            "S1 in out 0 0 SW_CLOSED\n"
+            "R1 out 0 1k\n"
+            ".model SW_CLOSED SW(Vt=-0.5 Ron=1m Roff=1G)\n"
+            ".op\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "v1", "S1": "s1", "R1": "r1"},
+    )
+    res_op = run_simulation(closed_netlist, OpAnalysis())
+    assert res_op.errors == []
+    op_traces = {t.name: t for t in res_op.traces}
+    assert op_traces["i(S1)"].values[0] == pytest.approx(5e-3, rel=1e-4)
+    assert op_traces["i(S1)"].values[0] == pytest.approx(op_traces["i(R1)"].values[0], rel=1e-6)
+
+    open_netlist = NetlistResult(
+        netlist=(
+            "* open switch\n"
+            "V1 in 0 5\n"
+            "S1 in out 0 0 SW_OPEN\n"
+            "R1 out 0 1k\n"
+            ".model SW_OPEN SW(Vt=0.5 Ron=1m Roff=1G)\n"
+            ".tran 1m 5m\n"
+            ".end\n"
+        ),
+        nets={"in": ["w1"], "out": ["w2"], "0": ["w3"]},
+        components={"V1": "v1", "S1": "s1", "R1": "r1"},
+    )
+    res_tran = run_simulation(open_netlist, TranAnalysis(stop_time=5e-3))
+    assert res_tran.errors == []
+    tran_traces = {t.name: t for t in res_tran.traces}
+    assert tran_traces["i(S1)"].values[-1] == pytest.approx(5e-9, rel=1e-3)
