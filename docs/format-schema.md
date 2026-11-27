@@ -367,7 +367,7 @@ produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 | `WIRE_DANGLING` | avertissement | « Le fil w4 a un bout qui n'est relié à rien. » | le fil |
 | `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
 | `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
-| `LED_OVERCURRENT` | avertissement | « La LED D1 reçoit 120 mA : elle grillerait (max ~30 mA). Ajoutez une résistance en série. » | la LED |
+| `LED_OVERCURRENT` | avertissement | « La LED D1 reçoit 120 mA : elle grillerait (max ~30 mA). Ajoute une résistance en série. » | la LED |
 | `LED_REVERSE_VOLTAGE` | avertissement | « La LED D1 est soumise à 9 V en inverse : elle grillerait (max ~5 V). » | la LED |
 
 Une broche non reliée est une **erreur** (et non un avertissement) pour une raison
