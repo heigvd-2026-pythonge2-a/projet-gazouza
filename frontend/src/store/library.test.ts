@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryComponent } from "../api/client";
 import {
   LABEL_FLAGS,
+  choiceValue,
   getDef,
   isLibraryLoaded,
   loadLibrary,
@@ -183,8 +184,10 @@ describe("label direction", () => {
   it("draws the flag of the label's direction, with no direction when absent or unknown", () => {
     setLibrary(fixtureLibrary());
     const label = getDef("label");
-    expect(label.params.find((p) => p.name === "direction")?.default).toBe("none");
+    expect(label.params.find((p) => p.name === "direction")?.default).toBe("auto");
     expect(symbolOf(label, { net: "out" })).toBe(LABEL_FLAGS.none);
+    // Automatic is drawn without a direction until the editor works it out (#295).
+    expect(symbolOf(label, { net: "out", direction: "auto" })).toBe(LABEL_FLAGS.none);
     expect(symbolOf(label, { net: "out", direction: "output" })).toBe(LABEL_FLAGS.output);
     expect(symbolOf(label, { net: "out", direction: "up" })).toBe(label.symbol);
     expect(symbolOf(getDef("resistor"), { direction: "output" })).toBe(getDef("resistor").symbol);
@@ -194,13 +197,28 @@ describe("label direction", () => {
     setLibrary(fixtureLibrary());
     const label = getDef("label");
     const options = label.params.find((p) => p.name === "direction")?.options ?? [];
-    expect(options.map((o) => o.value).sort()).toEqual(Object.keys(LABEL_FLAGS).sort());
+    expect(options.map((o) => o.value).sort()).toEqual(
+      ["auto", ...Object.keys(LABEL_FLAGS)].sort(),
+    );
     for (const { value } of options) {
       const symbol = symbolOf(label, { direction: value });
       expect(symbolBounds({ ...label, symbol }), value).toEqual(symbolBounds(label));
       const [first] = symbol;
       expect(first?.kind === "line" && first.points.slice(0, 2), value).toEqual([0, 0]);
     }
+  });
+});
+
+describe("choiceValue", () => {
+  it("is the value set, else none for an old label, else the default", () => {
+    setLibrary(fixtureLibrary());
+    const label = getDef("label");
+    const direction = label.params.find((p) => p.name === "direction")!;
+    expect(choiceValue(label, { direction: "output" }, direction)).toBe("output");
+    expect(choiceValue(label, { net: "out" }, direction)).toBe("none");
+    const diode = getDef("diode");
+    const model = diode.params.find((p) => p.kind === "choice")!;
+    expect(choiceValue(diode, {}, model)).toBe(model.default);
   });
 });
 
