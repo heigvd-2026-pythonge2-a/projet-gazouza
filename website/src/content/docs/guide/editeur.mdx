@@ -221,8 +221,8 @@ Les schémas sont enregistrés dans des fichiers **`.psice.json`** : du JSON lis
 
 Pour ouvrir un schéma plus vite qu'avec **Ouvrir** (<kbd>Ctrl+O</kbd>), fais glisser son fichier
 `.psice.json` depuis l'Explorateur Windows et dépose-le sur le schéma : un cadre « Déposer pour
-ouvrir le schéma » montre où le lâcher. Comme avec **Ouvrir**, Psice te demande d'abord
-confirmation si tu as des modifications non enregistrées. Un schéma LTspice `.asc` déposé est
+ouvrir le schéma » montre où le lâcher. Comme avec **Ouvrir**, Psice te demande quoi faire des
+modifications non enregistrées. Un schéma LTspice `.asc` déposé est
 importé, comme avec le bouton **Importer** (voir [Import LTspice](/projet-gazouza/guide/import-ltspice/)).
 Un autre type de fichier est refusé avec un message.
 
@@ -240,9 +240,13 @@ image : tout le circuit, sans la grille ni la sélection, cadré sur le circuit.
 Le fond est blanc par défaut ; coche **Fond transparent** pour poser l'image sur n'importe quel
 fond (pour les deux formats). Psice retient tes choix pour les exports suivants.
 
-Psice te demande confirmation avant de fermer ou d'ouvrir un autre schéma si tu as des
-modifications non enregistrées : à la fermeture de la fenêtre, tu peux annuler, fermer sans
-enregistrer, ou **Enregistrer et fermer** en un seul clic. Et si un panneau rencontre une erreur
+Si tu as des modifications non enregistrées, Psice te pose la question avant de les perdre : en
+fermant la fenêtre, avec **Nouveau**, **Ouvrir**, **Exemples**, **Importer** ou en déposant un
+fichier. Tu peux **annuler**, continuer **sans enregistrer** (« Ouvrir sans enregistrer »…), ou
+**enregistrer puis continuer** en un seul clic (« Enregistrer et ouvrir », « Enregistrer et
+fermer »…). Si l'enregistrement n'a pas lieu (tu fermes la fenêtre « Enregistrer sous »), rien
+n'est perdu : la question reste affichée. Pour **Ouvrir** et **Importer**, tu choisis d'abord le
+fichier, puis Psice pose la question. Et si un panneau rencontre une erreur
 inattendue, il te propose d'enregistrer une **copie de secours** (`schema-recupere.psice.json`)
 pour ne rien perdre.
 

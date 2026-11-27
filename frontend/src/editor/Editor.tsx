@@ -224,7 +224,7 @@ function useKeyboardShortcuts() {
         else if (key === "v") s.paste();
         else if (key === "d")
           s.duplicate(); // also keeps the browser from adding a bookmark
-        else if (key === "n") newFile();
+        else if (key === "n") void newFile();
         else if (key === "o") openFile();
         else if (key === "s" && e.shiftKey) saveFileAs();
         else if (key === "s") saveFile();

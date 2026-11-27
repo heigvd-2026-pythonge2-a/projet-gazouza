@@ -115,7 +115,7 @@ export function EmptyCanvasHint() {
                   type="button"
                   title={example.description}
                   style={{ ...buttonStyle, textAlign: "left" }}
-                  onClick={() => openExample(example.name)}
+                  onClick={() => void openExample(example.name)}
                 >
                   {example.title}
                 </button>

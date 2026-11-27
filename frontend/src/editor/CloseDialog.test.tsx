@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
 import { CloseDialog } from "./CloseDialog";
 import { saveFile } from "./fileActions";
+import { answerUnsavedQuestion, askBeforeDroppingChanges, NATIVE_QUESTION } from "./unsavedDialog";
 
 vi.mock("./fileActions", () => ({ saveFile: vi.fn() }));
 
@@ -113,6 +114,28 @@ describe("CloseDialog", () => {
     expect(await second).toBe(true);
   });
 
+  it("asks with the words of the action, and goes on once saved (#332)", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    save.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    let answer!: Promise<boolean>;
+    act(() => {
+      answer = askBeforeDroppingChanges("open");
+    });
+    expect(screen.getByRole("alertdialog", { name: "Ouvrir un schéma" })).toBeTruthy();
+    expect(button("Ouvrir sans enregistrer")).toBeTruthy();
+
+    // The save dialog was closed: the schematic stays, and so does the question.
+    await userEvent.click(button("Enregistrer et ouvrir"));
+    expect(await pending(answer)).toBe(true);
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    await userEvent.click(button("Enregistrer et ouvrir"));
+    expect(await answer).toBe(true);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
   it("is only offered while the editor is shown", async () => {
     const view = render(<CloseDialog />);
     dropComponent("resistor");
@@ -120,5 +143,35 @@ describe("CloseDialog", () => {
     view.unmount();
     expect(await answer).toBe(false);
     expect(window.psiceRequestClose).toBeUndefined();
+  });
+
+  it("shows while the schematic is hidden, the results taking the whole window", () => {
+    render(
+      <div style={{ display: "none" }} data-testid="schematic">
+        <CloseDialog />
+      </div>,
+    );
+    dropComponent("resistor");
+    act(() => void askBeforeDroppingChanges("new"));
+    const dialog = screen.getByRole("alertdialog", { name: "Nouveau schéma" });
+    expect(dialog).toBeVisible();
+    expect(screen.getByTestId("schematic")).not.toContainElement(dialog);
+    act(() => answerUnsavedQuestion(false));
+  });
+
+  it("asks with the browser's confirmation when no dialog is shown (crashed schematic)", async () => {
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    dropComponent("resistor");
+    expect(await askBeforeDroppingChanges("new")).toBe(true);
+    expect(confirm).toHaveBeenCalledWith(NATIVE_QUESTION);
+
+    // Once a dialog has come and gone, the same.
+    render(<CloseDialog />).unmount();
+    confirm.mockReturnValue(false);
+    expect(await askBeforeDroppingChanges("open")).toBe(false);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    vi.unstubAllGlobals();
   });
 });

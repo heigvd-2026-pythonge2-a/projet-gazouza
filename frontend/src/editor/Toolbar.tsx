@@ -343,7 +343,7 @@ function ExamplesButton() {
 
   const choose = (name: string) => {
     setOpen(false);
-    openExample(name);
+    void openExample(name);
   };
 
   return (
@@ -443,7 +443,7 @@ export function EditorToolbar() {
   return (
     <>
       <Group label="Fichier">
-        <ToolButton label="Nouveau schéma (Ctrl+N)" icon="new" onClick={newFile} />
+        <ToolButton label="Nouveau schéma (Ctrl+N)" icon="new" onClick={() => void newFile()} />
         <ToolButton label="Ouvrir un schéma (Ctrl+O)" icon="open" onClick={openFile} />
         <ExamplesButton />
         <ToolButton

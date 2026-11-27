@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useThemeStore } from "../store";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
+import { CloseDialog } from "./CloseDialog";
 import { EXPORT_FORMAT_KEY, TRANSPARENT_EXPORT_KEY } from "./fileActions";
 import { EditorToolbar } from "./Toolbar";
 import { registerViewCommands } from "./viewCommands";
@@ -74,19 +75,25 @@ describe("EditorToolbar", () => {
     expect(button(/modifications non enregistrées/)).toBeInTheDocument();
   });
 
-  it("asks before dropping unsaved changes on New", async () => {
+  it("asks before dropping unsaved changes on New, in the Psice dialog (#332)", async () => {
     const user = userEvent.setup();
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    render(<EditorToolbar />);
+    render(
+      <>
+        <EditorToolbar />
+        <CloseDialog />
+      </>,
+    );
     act(() => void dropComponent("resistor"));
 
     await user.click(button("Nouveau schéma (Ctrl+N)"));
-    expect(confirm).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alertdialog", { name: "Nouveau schéma" })).toBeInTheDocument();
+    await user.click(button("Annuler"));
     expect(editorState().doc.components).toHaveLength(1);
 
-    confirm.mockReturnValue(true);
     await user.click(button("Nouveau schéma (Ctrl+N)"));
+    await user.click(button("Créer sans enregistrer"));
     expect(editorState().doc.components).toEqual([]);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
   it("exports on a white background unless the transparent box is checked, and keeps it", async () => {
@@ -153,19 +160,24 @@ describe("EditorToolbar", () => {
 
   it("opens an example with its analysis, after asking about unsaved changes", async () => {
     const user = userEvent.setup();
-    render(<EditorToolbar />);
+    render(
+      <>
+        <EditorToolbar />
+        <CloseDialog />
+      </>,
+    );
     act(() => void dropComponent("resistor"));
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
 
     await user.click(button("Ouvrir un exemple prêt à simuler"));
     await user.click(screen.getByRole("menuitem", { name: /^Filtre passe-bas RC/ }));
-    expect(confirm).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alertdialog", { name: "Ouvrir un exemple" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     expect(editorState().doc.components.map((c) => c.type)).toEqual(["resistor"]);
     expect(screen.queryByRole("menu")).toBeNull();
 
-    confirm.mockReturnValue(true);
     await user.click(button("Ouvrir un exemple prêt à simuler"));
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await user.click(button("Ouvrir sans enregistrer"));
     expect(editorState().doc.components.some((c) => c.type === "capacitor")).toBe(true);
     expect(editorState().analysis).toMatchObject({ kind: "ac", acStop: "100k" });
   });
