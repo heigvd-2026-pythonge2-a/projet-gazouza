@@ -284,3 +284,31 @@ describe("mainParam", () => {
     expect(mainParam(source, { waveform: "sin" })?.name).toBe("offset");
   });
 });
+
+describe("emitter arrows of the bipolar transistors (#337)", () => {
+  /** Tip of the arrow, and the middle of its head (between the tip and its back). */
+  function arrowOf(type: "npn" | "pnp") {
+    const shapes = getDef(type).symbol;
+    const arrow = shapes[shapes.length - 1]!;
+    if (arrow.kind !== "line") throw new Error("not a line");
+    const [x1, y1, tx, ty, x2, y2] = arrow.points as number[];
+    const back = { x: (x1! + x2!) / 2, y: (y1! + y2!) / 2 };
+    return { tip: { x: tx!, y: ty! }, middle: { x: (tx! + back.x) / 2, y: (ty! + back.y) / 2 } };
+  }
+
+  it("sits in the middle of the emitter line on both, mirrored", () => {
+    const npn = arrowOf("npn");
+    const pnp = arrowOf("pnp");
+    // The emitter goes from (-0.5, ±0.4) to (1, ±1.2): its middle is (0.25, ±0.8).
+    expect(npn.middle.x).toBeCloseTo(0.25, 2);
+    expect(npn.middle.y).toBeCloseTo(0.8, 2);
+    expect(pnp.middle.x).toBeCloseTo(0.25, 2);
+    expect(pnp.middle.y).toBeCloseTo(-0.8, 2);
+  });
+
+  it("points out of the NPN and into the PNP", () => {
+    // NPN: the tip is past the middle, towards the emitter pin; PNP: before it, towards the base.
+    expect(arrowOf("npn").tip.x).toBeGreaterThan(0.25);
+    expect(arrowOf("pnp").tip.x).toBeLessThan(0.25);
+  });
+});
