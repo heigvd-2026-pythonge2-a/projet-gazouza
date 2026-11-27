@@ -26,7 +26,7 @@
     { "name": "fall", "label": "Temps de descente", "unit": "s", "default": "1n", "waveforms": ["pulse"] },
     { "name": "width", "label": "Durée haute", "unit": "s", "default": "1m", "waveforms": ["pulse"] },
     { "name": "period", "label": "Période", "unit": "s", "default": "2m", "waveforms": ["pulse"] },
-    { "name": "offset", "label": "Décalage", "unit": "A", "default": "0", "waveforms": ["sin"] },
+    { "name": "offset", "label": "Offset", "unit": "A", "default": "0", "waveforms": ["sin"] },
     { "name": "amplitude", "label": "Amplitude", "unit": "A", "default": "1m", "waveforms": ["sin"] },
     { "name": "frequency", "label": "Fréquence", "unit": "Hz", "default": "1k", "waveforms": ["sin"] },
     { "name": "sin_delay", "label": "Retard", "unit": "s", "default": "0", "waveforms": ["sin"] },

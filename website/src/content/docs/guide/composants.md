@@ -72,7 +72,7 @@ paramètres de celle que tu as choisie.
 | ------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | **Continue**  | Tension (ou courant) continue                                                                | Alimentation, polarisation                |
 | **Impulsion** | Valeur basse, valeur haute, retard, temps de montée, temps de descente, durée haute, période | Échelon, signal carré, réponse indicielle |
-| **Sinusoïde** | Décalage, amplitude, fréquence, retard, amortissement, phase                                 | Signal alternatif, redressement           |
+| **Sinusoïde** | Offset (décalage continu), amplitude, fréquence, retard, amortissement, phase                | Signal alternatif, redressement           |
 
 :::note[Analyse fréquentielle]
 Il n'y a pas d'amplitude « AC » à régler sur la source. Pour une analyse `.ac`, tu choisis la
