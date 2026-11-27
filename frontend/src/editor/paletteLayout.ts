@@ -28,6 +28,57 @@ export function paletteLayout(): PaletteGroup[] {
 export const shortcutKey = (position: number): string | undefined =>
   position < 9 ? String(position + 1) : undefined;
 
+/** A palette entry with its digit key, numbered in the whole palette (not in a search result). */
+export interface NumberedEntry {
+  entry: PaletteEntry;
+  shortcut?: string;
+}
+
+/** A palette group as shown, possibly narrowed by a search. */
+export interface ShownGroup {
+  id: Category;
+  label: string;
+  entries: NumberedEntry[];
+}
+
+/** Lower case without accents, so that "resist" finds "Résistance". */
+export const foldText = (text: string): string =>
+  text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/** Label of the wire tool in the palette. */
+export const WIRE_LABEL = "Fil";
+
+/** Texts a search can match for an entry: its label, type, designator and category. */
+function searchTexts(entry: PaletteEntry, groupLabel: string): string[] {
+  const own =
+    entry.kind === "wire"
+      ? [WIRE_LABEL, "wire"]
+      : [entry.def.label, entry.def.type, entry.def.prefix ?? ""];
+  return [...own, groupLabel].map(foldText);
+}
+
+/**
+ * The palette narrowed to the entries matching `query` (#276): each word of the query must be in
+ * the label, type, designator or category of the entry, case and accents ignored. Groups left
+ * empty are dropped. Digit keys stay those of the whole palette, as the keyboard uses them.
+ */
+export function searchPalette(groups: PaletteGroup[], query: string): ShownGroup[] {
+  const words = foldText(query).split(/\s+/).filter(Boolean);
+  let position = 0;
+  return groups
+    .map((g) => ({
+      id: g.id,
+      label: g.label,
+      entries: g.entries
+        .map((entry) => ({ entry, shortcut: shortcutKey(position++) }))
+        .filter(({ entry }) => {
+          const texts = searchTexts(entry, g.label);
+          return words.every((w) => texts.some((t) => t.includes(w)));
+        }),
+    }))
+    .filter((g) => g.entries.length > 0);
+}
+
 /** Palette entry chosen by a digit key ("1" to "9"), in the order the palette shows them. */
 export function entryForKey(key: string): PaletteEntry | undefined {
   const entries = paletteLayout().flatMap((g) => g.entries);

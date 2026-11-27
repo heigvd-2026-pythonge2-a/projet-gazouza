@@ -11,7 +11,9 @@ from app.models import (
     DcAnalysis,
     NetlistResult,
     OpAnalysis,
+    Point,
     Schematic,
+    Text,
     TranAnalysis,
 )
 from app.netlist.connectivity import UnionFind
@@ -110,6 +112,26 @@ def test_labels_with_the_same_name_are_one_node() -> None:
 
     assert "R1 n1 mid 1k\nR2 mid 0 2k\n" in result.netlist
     assert result.nets["mid"] == ["w2", "w3"]
+
+
+def test_label_direction_only_changes_the_drawing() -> None:
+    # Absent (a file saved before the parameter existed) or set: the same netlist, no error.
+    wires = [*LOOP, wire("w4", "c1.+", "l1.1")]
+    netlists = set()
+    for direction in [None, "none", "input", "output", "bidir"]:
+        params = {"net": "out"} if direction is None else {"net": "out", "direction": direction}
+        result = generate_netlist(
+            schematic([SOURCE, RESISTOR, GROUND, comp("l1", "label", **params)], wires), OP
+        )
+        assert result.errors == []
+        netlists.add(result.netlist)
+    assert len(netlists) == 1
+
+
+def test_bad_label_direction() -> None:
+    label = comp("l1", "label", net="out", direction="up")
+    errors = check([SOURCE, RESISTOR, GROUND, label], [*LOOP, wire("w4", "c1.+", "l1.1")])
+    assert codes(errors) == ["BAD_VALUE"]
 
 
 def test_junction_joins_three_wires() -> None:
@@ -345,6 +367,24 @@ def test_extra_params_never_reach_the_netlist(key: str) -> None:
     result = generate_netlist(schematic([SOURCE, resistor, GROUND], LOOP), OP)
 
     assert result.netlist == "* Psice\n" + SAFE_NETLIST
+
+
+def test_free_texts_and_text_offsets_never_reach_the_netlist() -> None:
+    # Texts are decorative (#123): whatever they contain, the netlist is the same as without.
+    resistor = comp("c2", "resistor", "R1", resistance="1k")
+    resistor["name_offset"] = {"x": 1.5, "y": -0.5}
+    resistor["value_offset"] = {"x": 1.5, "y": 0.5}
+    circuit = schematic([SOURCE, resistor, GROUND], LOOP)
+    circuit.texts = [
+        Text(id="t1", position=Point(x=0, y=0), content="R9 in 0 1k" + INJECTION),
+        Text(id="c2", position=Point(x=4, y=4), content="même id qu'un composant"),
+    ]
+    result = generate_netlist(circuit, OP)
+
+    assert result.netlist == "* Psice\n" + SAFE_NETLIST
+    # Not an element of the circuit: no diagnostic (not even a duplicate id), no mapping.
+    assert result.errors == result.warnings == []
+    assert "t1" not in result.components.values()
 
 
 def test_unused_waveform_params_never_reach_the_netlist() -> None:

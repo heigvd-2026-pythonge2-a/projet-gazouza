@@ -46,10 +46,18 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Flèches", action: "Déplacer la sélection d'un pas" },
       { keys: "R", action: "Tourner" },
       { keys: "M", action: "Miroir" },
+      {
+        keys: "Glisser un nom ou une valeur",
+        action: "Déplacer ce texte seul (demi-case, près de son composant)",
+      },
+      { keys: "O", action: "Replacer automatiquement les textes de la sélection" },
       { keys: "Suppr", action: "Supprimer" },
       { keys: "Ctrl+C / Ctrl+V", action: "Copier / coller (avec de nouveaux noms)" },
       { keys: "Ctrl+D", action: "Dupliquer la sélection" },
-      { keys: "Clic (après coller ou dupliquer)", action: "Poser la copie qui suit la souris" },
+      {
+        keys: "Clic (après coller ou dupliquer)",
+        action: "Poser la copie qui suit la souris (R / M avant : la tourner / la retourner)",
+      },
       { keys: "Ctrl+Z / Ctrl+Y", action: "Annuler / rétablir" },
       { keys: "Double-clic sur un composant", action: "Changer sa valeur sur le schéma" },
       { keys: "Clic droit sur un composant", action: "Menu des actions" },
@@ -59,6 +67,9 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: "Composants",
     items: [
       { keys: "1 à 9", action: "Choisir l'un des neuf premiers outils de la palette" },
+      { keys: "Ctrl+F", action: "Rechercher un composant dans la palette" },
+      { keys: "Entrée (recherche)", action: "Choisir le premier composant trouvé" },
+      { keys: "Échap (recherche)", action: "Effacer la recherche" },
       { keys: "Clic (outil composant)", action: "Poser le composant" },
       { keys: "Échap ou clic droit", action: "Arrêter de poser" },
     ],
@@ -70,12 +81,23 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { keys: "Clic (outil fil)", action: "Coude, ou fin du fil sur une broche ou un fil" },
       { keys: "Double-clic (outil fil)", action: "Finir le fil dans le vide" },
       { keys: "Échap (outil fil)", action: "Enlever le dernier coude" },
-      { keys: "Clic sur un fil", action: "Sélectionner un coude ou un tronçon, à glisser" },
+      {
+        keys: "Clic sur un fil",
+        action: "Sélectionner un coude ou un tronçon, à glisser (dans tous les sens)",
+      },
       { keys: "Double-clic sur un fil", action: "Sélectionner le fil entier" },
       {
         keys: "Suppr (coude / tronçon)",
         action: "Supprimer le fil entier / couper le fil à cet endroit",
       },
+    ],
+  },
+  {
+    title: "Texte libre",
+    items: [
+      { keys: "T, puis clic", action: "Poser un texte, à écrire dans les propriétés" },
+      { keys: "Double-clic sur un texte", action: "Modifier son contenu" },
+      { keys: "Ctrl+Entrée / Échap", action: "Valider / annuler la saisie du texte" },
     ],
   },
   {

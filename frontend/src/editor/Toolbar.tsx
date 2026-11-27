@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 
 import { isUnsaved, useEditorStore, useThemeStore } from "../store";
 import {
+  exportFormat,
   exportImage,
   exportTransparent,
   newFile,
@@ -9,12 +10,13 @@ import {
   openFile,
   saveFile,
   saveFileAs,
+  setExportFormat,
   setExportTransparent,
 } from "./fileActions";
 import { EXAMPLES, type Example } from "./examples";
 import { exportNetlist } from "./simulationActions";
 import { COLORS, UI } from "./theme";
-import { fitView, zoomIn, zoomOut } from "./viewCommands";
+import { fitView, zoomIn, zoomOut, type ImageFormat } from "./viewCommands";
 
 const SOON = "Bientôt disponible";
 
@@ -37,6 +39,7 @@ const ICONS = {
   copy: "M5.5 5.5h8v8h-8z M10.5 5.5v-3h-8v8h3",
   paste: "M5 2.5H2.5v12h11v-12H11 M5.5 1.5h5v2.5h-5z",
   duplicate: "M2.5 2.5h8v8h-8z M13.5 5.5v8h-8 M6.5 4.5v4 M4.5 6.5h4",
+  text: "M3 4.5V2.5h10v2 M8 2.5v11 M6 13.5h4",
   zoomIn: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4 M7 5v4",
   zoomOut: "M7 2.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9z M10.2 10.2l3.8 3.8 M5 7h4",
   fit: "M2 5.5V2h3.5 M10.5 2H14v3.5 M14 10.5V14h-3.5 M5.5 14H2v-3.5",
@@ -69,20 +72,23 @@ function ToolButton(props: {
   disabled?: boolean;
   /** Small dot on the button, e.g. unsaved changes on "Enregistrer". */
   badge?: boolean;
+  /** A tool button that is the active tool (shown pressed). */
+  pressed?: boolean;
   /** Set for a button that opens a panel: whether it is open. */
   expanded?: boolean;
   /** What that panel is: a dialog (default) or a menu. */
   popup?: "dialog" | "menu";
   onClick?: () => void;
 }) {
-  const { label, icon, disabled = false, badge = false, expanded, popup = "dialog" } = props;
-  const { onClick } = props;
+  const { label, icon, disabled = false, badge = false, pressed, expanded } = props;
+  const { popup = "dialog", onClick } = props;
   return (
     // The wrapper shows the tooltip even when the button is disabled (no mouse events then).
     <span title={label} style={{ display: "inline-flex", position: "relative" }}>
       <button
         type="button"
         aria-label={label}
+        aria-pressed={pressed}
         disabled={disabled}
         aria-haspopup={expanded === undefined ? undefined : popup}
         aria-expanded={expanded}
@@ -96,7 +102,7 @@ function ToolButton(props: {
           padding: 0,
           border: `1px solid ${UI.border}`,
           borderRadius: 5,
-          background: expanded ? UI.activeBackground : UI.surface,
+          background: pressed || expanded ? UI.activeBackground : UI.surface,
           color: COLORS.text,
           opacity: disabled ? 0.4 : 1,
           cursor: disabled ? "default" : "pointer",
@@ -123,19 +129,31 @@ function ToolButton(props: {
   );
 }
 
+/** The image formats offered by the export panel, with their explanation. */
+const IMAGE_FORMATS: { value: ImageFormat; label: string; help: string }[] = [
+  { value: "png", label: "PNG", help: "Une image à coller partout." },
+  {
+    value: "svg",
+    label: "SVG",
+    help: "Reste net à toutes les tailles, se modifie dans Inkscape ou Word.",
+  },
+];
+
 /**
- * "Exporter" button: opens a small panel with the export options (transparent background, #195)
- * and the button that asks where to save the PNG. Closes on Escape or a press outside it.
+ * "Exporter" button: opens a small panel with the export options (PNG or SVG, #279; transparent
+ * background, #195) and the button that asks where to save the image. Closes on Escape or a press
+ * outside it. Both choices are kept for the next time.
  */
 function ExportButton() {
   const [open, setOpen] = useState(false);
   const [transparent, setTransparent] = useState(exportTransparent);
+  const [format, setFormat] = useState(exportFormat);
   const ref = useRef<HTMLSpanElement>(null);
-  const checkbox = useRef<HTMLInputElement>(null);
+  const chosenFormat = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    checkbox.current?.focus();
+    chosenFormat.current?.focus();
     const outside = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -151,13 +169,13 @@ function ExportButton() {
 
   const run = () => {
     setOpen(false);
-    void exportImage({ transparent });
+    void exportImage({ transparent, format });
   };
 
   return (
     <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
       <ToolButton
-        label="Exporter le schéma en image PNG…"
+        label="Exporter le schéma en image (PNG ou SVG)…"
         icon="export"
         expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -165,7 +183,7 @@ function ExportButton() {
       {open && (
         <div
           role="dialog"
-          aria-label="Exporter en image PNG"
+          aria-label="Exporter en image"
           onKeyDown={onKeyDown}
           style={{
             position: "absolute",
@@ -185,9 +203,35 @@ function ExportButton() {
             color: COLORS.symbol,
           }}
         >
+          <fieldset style={{ margin: 0, padding: 0, border: 0 }}>
+            <legend style={{ padding: 0, marginBottom: 4, fontWeight: 600 }}>Format</legend>
+            {IMAGE_FORMATS.map((f) => (
+              <label
+                key={f.value}
+                style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}
+              >
+                <input
+                  // The focus goes to the format chosen, as arrows then move between formats.
+                  ref={format === f.value ? chosenFormat : undefined}
+                  type="radio"
+                  name="export-format"
+                  value={f.value}
+                  checked={format === f.value}
+                  onChange={() => {
+                    setFormat(f.value);
+                    setExportFormat(f.value);
+                  }}
+                  style={{ margin: "2px 0 0" }}
+                />
+                <span>
+                  {f.label}
+                  <span style={{ display: "block", fontSize: 12, color: UI.muted }}>{f.help}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
           <label style={{ display: "flex", alignItems: "flex-start", gap: 6, cursor: "pointer" }}>
             <input
-              ref={checkbox}
               type="checkbox"
               checked={transparent}
               onChange={(e) => {
@@ -385,13 +429,15 @@ export function EditorToolbar() {
   const canDelete = useEditorStore(
     (s) => s.selection.length > 0 || s.wirePart !== null || s.segments.length > 0,
   );
-  // Turning applies to the selected components, or to the one about to be placed.
+  // Turning applies to the selected components, or to what is about to be placed or pasted.
   const canTurn = useEditorStore(
     (s) =>
       s.tool.kind === "place" ||
+      s.tool.kind === "paste" ||
       s.selection.some((id) => s.doc.components.some((c) => c.id === id)),
   );
   const canPaste = useEditorStore((s) => s.clipboard !== null);
+  const writingText = useEditorStore((s) => s.tool.kind === "text");
   const dark = useThemeStore((t) => t.theme === "dark");
   const s = useEditorStore.getState;
 
@@ -421,6 +467,12 @@ export function EditorToolbar() {
         />
       </Group>
       <Group label="Édition">
+        <ToolButton
+          label="Ajouter un texte sur le schéma (T)"
+          icon="text"
+          pressed={writingText}
+          onClick={() => (writingText ? s().cancel() : s().startText())}
+        />
         <ToolButton
           label="Annuler (Ctrl+Z)"
           icon="undo"

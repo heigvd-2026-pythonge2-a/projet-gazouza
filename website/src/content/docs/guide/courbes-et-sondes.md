@@ -25,9 +25,33 @@ ajoute la courbe au graphique.
 
 :::note[Le signe du courant d'une source]
 En SPICE, le courant d'une source qui **fournit** de l'énergie est négatif (`i(V1) < 0` pour
-une pile qui débite). Le signe affiché par Psice pour les sources est encore à trancher par
-l'équipe.
+une pile qui débite). Psice ne montre pas ce signe : le tableau du `.op` écrit « V1 fournit
+5 mA », et sur le schéma une flèche donne le sens du courant.
 :::
+
+## Les valeurs du `.op` sur le schéma
+
+Après une analyse `.op`, Psice écrit les résultats directement sur le schéma (la case
+**Afficher les valeurs sur le schéma** du panneau Résultats les masque) :
+
+| Ce qui est affiché | Comment le lire |
+|---|---|
+| **Potentiel** d'un nœud (violet) | Tension du nœud par rapport à la masse, écrite sur un de ses fils, ou à côté d'une broche pour un nœud sans fil. |
+| **Flèche de courant** (orange) | Pointe de flèche sur une patte du composant, dans le **sens réel** du courant ; la valeur est donnée sans signe. |
+| **V_CE** d'un transistor bipolaire, **V_DS** d'un MOSFET (violet) | Flèche le long du transistor, du collecteur vers l'émetteur (du drain vers la source), avec la valeur. |
+
+Survole un composant (ou sélectionne-le) pour voir en plus la **tension à ses bornes** : une
+flèche le long du composant, de la borne la plus positive vers l'autre : elle suit la **chute de
+tension**, comme en cours en Suisse. Sur une résistance, elle va dans le même sens que le courant
+(convention récepteur) ; sur une source qui fournit de l'énergie, en sens contraire (convention
+générateur). Pour un transistor, le survol
+ajoute **V_BE** (ou **V_GS**).
+
+Le nom de la tension met toujours la borne la plus positive en premier, pour que la valeur soit
+positive : sur un transistor PNP qui conduit, le collecteur est plus bas que l'émetteur, et Psice
+écrit donc **V_EC** et **V_EB**.
+
+Les valeurs s'écrivent avec la virgule décimale : `4,27 mA`.
 
 ## Lire une courbe
 
@@ -60,7 +84,7 @@ Le cahier des charges prévoit des mesures automatiques sur une courbe :
 ## Export
 
 - Les **courbes** en CSV, pour les retravailler dans un tableur ou en Python.
-- Le **schéma** en PNG, pour un rapport.
+- Le **schéma** en PNG ou en SVG (net à toutes les tailles), pour un rapport.
 - La **netlist** SPICE, pour la comparer avec LTspice ou la simuler ailleurs.
 
 En bonus, une **FFT** pourra afficher le spectre d'une courbe temporelle.

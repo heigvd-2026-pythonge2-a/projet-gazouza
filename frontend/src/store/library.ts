@@ -12,7 +12,8 @@ export type ParamOption = NonNullable<ApiParamDef["options"]>[number];
 export type ParamDef = Required<ApiParamDef>;
 
 export type SymbolShape =
-  | { kind: "line"; points: number[] }
+  /** `tone: "light"`: drawn in the component's own light colour (the arrows of an LED, #294). */
+  | { kind: "line"; points: number[]; tone?: "light" }
   | { kind: "rect"; x: number; y: number; width: number; height: number }
   | { kind: "circle"; x: number; y: number; radius: number }
   /** Arc from `start` to `start + sweep` degrees, clockwise (y axis points down). */
@@ -63,8 +64,8 @@ const DIODE_BAR: SymbolShape = { kind: "line", points: [-0.7, 0.6, 0.7, 0.6] };
 
 /** Arrow pointing away from the diode, for the light of an LED; (x, y) is its tail. */
 const lightArrow = (x: number, y: number): SymbolShape[] => [
-  { kind: "line", points: [x, y, x + 0.6, y - 0.6] },
-  { kind: "line", points: [x + 0.3, y - 0.6, x + 0.6, y - 0.6, x + 0.6, y - 0.3] },
+  { kind: "line", points: [x, y, x + 0.6, y - 0.6], tone: "light" },
+  { kind: "line", points: [x + 0.3, y - 0.6, x + 0.6, y - 0.6, x + 0.6, y - 0.3], tone: "light" },
 ];
 
 // Op-amp: inverting input (-) at the top left, non-inverting (+) at the bottom left, output on
@@ -79,6 +80,18 @@ const OPAMP_BODY: SymbolShape[] = [
   { kind: "line", points: [-0.95, 1, -0.55, 1] },
   { kind: "line", points: [-0.75, 0.8, -0.75, 1.2] },
 ];
+
+/**
+ * Flag of a node label, by direction (its `direction` parameter), pin at (0, 0). All of them fill
+ * the same box (x from 0 to 2, y from -0.5 to 0.5), so the caption and the bounds do not move when
+ * the direction changes. An input points to its pin (the signal comes in), an output away from it.
+ */
+export const LABEL_FLAGS = {
+  none: [{ kind: "line", points: [0, 0, 0, -0.5, 2, -0.5, 2, 0.5, 0, 0.5, 0, 0] }],
+  input: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
+  output: [{ kind: "line", points: [0, 0, 0, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0, 0.5, 0, 0] }],
+  bidir: [{ kind: "line", points: [0, 0, 0.5, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0.5, 0.5, 0, 0] }],
+} as const satisfies Record<string, SymbolShape[]>;
 
 /** Envelope of the transistors (IEC 60617 draws it, and beginners know it from textbooks). */
 const TRANSISTOR_ENVELOPE: SymbolShape = { kind: "circle", x: 0.25, y: 0, radius: 1.2 };
@@ -157,11 +170,7 @@ const EDITOR_PARTS: readonly (EditorPart & { type: string })[] = [
       { kind: "line", points: [-0.8, 0.5, 0.8, 0.5, 0, 1.3, -0.8, 0.5] },
     ],
   },
-  {
-    type: "label",
-    category: "connection",
-    symbol: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
-  },
+  { type: "label", category: "connection", symbol: LABEL_FLAGS.none },
   { type: "diode", category: "semiconductor", symbol: [...DIODE_BODY, DIODE_BAR] },
   {
     type: "zener",
@@ -293,6 +302,16 @@ export function visibleParams(def: ComponentDef, params: Record<string, string>)
 export function mainParam(def: ComponentDef, params: Record<string, string>): ParamDef | null {
   const shown = visibleParams(def, params);
   return shown.find((p) => p.kind === "value") ?? shown.find((p) => p.kind === "text") ?? null;
+}
+
+/**
+ * Drawing of a placed component: the symbol of its type, except for a label, whose flag follows
+ * its direction (absent or unknown: no direction, as in files saved before it existed).
+ */
+export function symbolOf(def: ComponentDef, params: Record<string, string>): SymbolShape[] {
+  if (def.type !== "label") return def.symbol;
+  const flags: Readonly<Record<string, SymbolShape[] | undefined>> = LABEL_FLAGS;
+  return flags[params.direction ?? "none"] ?? def.symbol;
 }
 
 export interface Bounds {

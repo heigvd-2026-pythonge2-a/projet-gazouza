@@ -12,7 +12,8 @@ Les règles complètes sont dans
 
 1. **Partir d'une issue.** Cherche l'issue ouverte qui couvre ta tâche
    (`gh issue list --state open --search "mots-clés"`). S'il n'y en a pas, crée-la avec le bon
-   modèle, sans doublon.
+   modèle, sans doublon, et **assigne-la** à qui fera le travail (voir
+   [Assignation](#assignation)).
 2. **Créer une branche** `type/description-courte` depuis `main`, par exemple
    `feat/netlist-resistor` ou `fix/plot-zoom`. Jamais de push direct sur `main`. Dès qu'on
    commence, on passe l'issue au statut **In progress** (menu « Status » de l'issue, ou la
@@ -49,6 +50,7 @@ Les règles complètes sont dans
 | Formatage | ruff (Python) et Prettier (TypeScript) : on lance l'outil, on ne discute pas le style |
 | Fins de ligne | LF partout, sauf `.ps1` / `.bat` (géré par `.gitattributes`) |
 | Unités | Nombres en SI (`float`) dans le contrat ; suffixes SPICE seulement pour les saisies utilisateur |
+| Releases | Un tag `vX.Y.Z` poussé sur `main` publie l'application Windows dans une release ; le workflow lancé à la main ne fait que tester le build (voir [Construire l'application Windows](/projet-gazouza/developpeurs/environnement/#construire-lapplication-windows)) |
 
 ## Labels
 
@@ -71,9 +73,24 @@ l'objectif, pas par la date). Chaque tâche prévue d'un jalon a son issue dès 
 sinon le pourcentage d'avancement est faux. Voir la
 [feuille de route](/projet-gazouza/projet/feuille-de-route/).
 
+## Assignation
+
+Toute issue est assignée dès sa création à la ou aux personnes qui feront le travail : par
+défaut le propriétaire du module concerné (voir
+[Architecture](/projet-gazouza/developpeurs/architecture/#qui-possède-quoi)). Une issue qui touche
+plusieurs modules est assignée à chaque propriétaire concerné, et une question à qui doit y
+répondre. Si quelqu'un d'autre reprend la tâche, on change l'assignation.
+
+| Personne | Login GitHub |
+|---|---|
+| Noé Guenin | `Guenin04` |
+| Noémi Voélin | `VOELINNOEMI` |
+| Damien Bignens | `Bignensdamien` |
+| Antoine Bezençon | `AntoineBezencon` |
+
 ## Modèles
 
 - **Issues** : Bug, Fonctionnalité, Contrat d'API, Tâche technique et Question. Ils posent le
-  label `type:` ; le label `area:` s'ajoute à la main.
+  label `type:` ; le label `area:`, la milestone et l'assignation s'ajoutent à la main.
 - **PR** : le modèle pré-remplit le résumé, l'issue liée, le module touché, la façon de tester et
   la checklist de relecture.

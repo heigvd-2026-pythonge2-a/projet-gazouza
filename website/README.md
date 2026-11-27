@@ -22,7 +22,7 @@ pnpm preview     # prévisualise le build localement
 ```
 website/
 ├── public/
-│   └── favicon.svg        icône du site (copie de assets/brand/psice-icon.svg)
+│   └── favicon.svg        icône du site (copie de assets/brand/psice-icon-small.svg)
 ├── src/
 │   ├── assets/            logo (clair et sombre)
 │   ├── components/        composants Astro de la page d'accueil (aperçu, feuille de route, équipe)

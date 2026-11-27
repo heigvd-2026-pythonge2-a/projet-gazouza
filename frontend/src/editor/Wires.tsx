@@ -4,7 +4,7 @@ import { Circle, Group, Line, Rect } from "react-konva";
 
 import {
   anchorAt,
-  endPosition,
+  connectionDots,
   routeThrough,
   routeTo,
   wirePartPoints,
@@ -24,25 +24,6 @@ const HANDLE = 8;
 
 const flat = (points: readonly GridPoint[]) => points.flatMap((p) => [p.x * GRID, p.y * GRID]);
 
-/** Points where a dot is drawn: junctions, and pins that two or more wires attach to. */
-function dotPositions(doc: EditorDoc): { id: string; position: GridPoint }[] {
-  const pins = new Map<string, { count: number; position: GridPoint }>();
-  for (const w of doc.wires) {
-    for (const end of [w.from, w.to]) {
-      if (!("comp" in end)) continue;
-      const key = `pin-${end.comp}-${end.pin}`;
-      const entry = pins.get(key) ?? { count: 0, position: endPosition(doc, end) };
-      pins.set(key, { ...entry, count: entry.count + 1 });
-    }
-  }
-  return [
-    ...doc.junctions.map((j) => ({ id: j.id, position: j.position })),
-    ...[...pins]
-      .filter(([, pin]) => pin.count >= 2)
-      .map(([id, pin]) => ({ id, position: pin.position })),
-  ];
-}
-
 interface WiresProps {
   doc: EditorDoc;
   selection: readonly string[];
@@ -56,9 +37,11 @@ interface WiresProps {
   onWirePress?: (id: string, e: KonvaEventObject<MouseEvent>) => void;
   /** Double click on a wire. */
   onWireDoubleClick?: (id: string) => void;
+  /** The pointer enters a wire (its id) or leaves it (null). */
+  onWireHover?: (id: string | null) => void;
 }
 
-/** Wires of the document, and the dots of their junctions. */
+/** Wires of the document, and the connection dots (see `connectionDots`). */
 export function Wires({
   doc,
   selection,
@@ -67,6 +50,7 @@ export function Wires({
   onSelect,
   onWirePress,
   onWireDoubleClick,
+  onWireHover,
 }: WiresProps) {
   const colors = useCanvasColors();
   const color = (id: string) => (selection.includes(id) ? colors.selected : colors.wire);
@@ -95,6 +79,8 @@ export function Wires({
           onDblClick={(e) => {
             if (e.evt.button === 0) onWireDoubleClick?.(w.id);
           }}
+          onMouseEnter={() => onWireHover?.(w.id)}
+          onMouseLeave={() => onWireHover?.(null)}
         />
       ))}
       {segments.map((seg) => {
@@ -119,7 +105,7 @@ export function Wires({
           listening={false}
         />
       )}
-      {dotPositions(doc).map((d) => (
+      {connectionDots(doc).map((d) => (
         <Circle
           key={d.id}
           x={d.position.x * GRID}
@@ -127,7 +113,7 @@ export function Wires({
           radius={DOT_RADIUS}
           fill={color(d.id)}
           hitStrokeWidth={WIRE_HIT}
-          listening={onSelect !== undefined && !d.id.startsWith("pin-")}
+          listening={onSelect !== undefined && d.junction !== undefined}
           onMouseDown={press(d.id)}
         />
       ))}

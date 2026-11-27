@@ -91,6 +91,28 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   utilise `--milestone "<titre exact>"` (liste : `gh api repos/{owner}/{repo}/milestones`).
   En cas de doute entre deux jalons, demande à l'humain. Chaque tâche prévue d'un jalon a son
   issue dans la milestone dès le début du jalon, sinon le pourcentage d'avancement est faux.
+- **Assignation** : toute issue est assignée dès sa création à la ou aux personnes qui feront
+  le travail. Par défaut, c'est le propriétaire du module concerné (tableau « Qui possède
+  quoi ») ; si l'issue touche plusieurs modules, assigne chaque propriétaire concerné, et une
+  question va à qui doit y répondre. Logins GitHub (aussi dans
+  [`.github/CODEOWNERS`](.github/CODEOWNERS)) : Noé Guenin `Guenin04`, Noémi Voélin
+  `VOELINNOEMI`, Damien Bignens `Bignensdamien`, Antoine Bezençon `AntoineBezencon`. Avec
+  `gh` : `gh issue create --assignee <login>`, ou `gh issue edit <N> --add-assignee <login>`
+  (`--remove-assignee` si quelqu'un d'autre reprend la tâche). En cas de doute (`area: shared`,
+  tâche d'équipe), demande à l'humain.
+- **Releases** : le workflow [`release.yml`](.github/workflows/release.yml) construit
+  l'application Windows sur un runner Windows (`build.ps1 -Verify`, qui lance aussi le
+  `--self-check` du zip). Il ne tourne ni sur les PR ni sur `main`, seulement :
+  - **lancé à la main** (onglet Actions, « Application Windows », « Run workflow ») : il garde
+    l'application comme artefact du workflow et ne publie rien. C'est le moyen de tester le
+    build avant une livraison ou après un changement de `build.ps1` ;
+  - **sur un tag `vX.Y.Z`** poussé (SemVer, `0.x` avant la livraison finale) : il publie
+    `Psice.zip` dans la release GitHub du tag. Un suffixe (`v1.0.0-rc.1`) en fait une
+    pré-version. Le tag se pose sur un commit de `main` dont la CI est verte
+    (`git tag v0.2.0 origin/main ; git push origin v0.2.0`).
+
+  Une release est publique dès que le tag est poussé : annonce-la à l'équipe avant, et ne pousse
+  jamais de tag sans l'accord explicite de l'humain.
 - **Partir des issues ouvertes** : avant de commencer une tâche, cherche une issue ouverte qui
   la couvre (`gh issue list --state open --search "<mots-clés>"`, ou
   `gh issue list --milestone "<titre>"`). Si elle existe, travaille dessus : mentionne-la à
@@ -122,7 +144,7 @@ ce qu'il décrit, mets la page à jour **dans la même PR** :
   - issues : `.github/ISSUE_TEMPLATE/` (`1-bug.yml`, `2-feature.yml`, `3-contract.yml`,
     `4-task.yml`, `5-question.yml`). Ce sont des formulaires : avec `gh issue create`,
     reprends leurs champs comme titres `###` dans le corps et pose toi-même les labels
-    indiqués dans le modèle, plus le label `area:` ;
+    indiqués dans le modèle, plus le label `area:`, la milestone et l'assignation ;
   - PR : `.github/pull_request_template.md`. Avec `gh pr create --body-file`, pars d'une
     copie de ce fichier, coche la checklist honnêtement (ne coche pas ce qui n'a pas été
     vérifié) et lie l'issue avec `Closes #N`.
@@ -145,6 +167,7 @@ uv run python scripts/export_openapi.py       # régénérer shared/openapi.json
 pnpm install
 pnpm dev                                      # http://localhost:5173 (proxy /api -> 8000)
 pnpm test                                     # tests unitaires (vitest)
+pnpm test:coverage                            # tests + couverture (rapport dans coverage/)
 pnpm lint ; pnpm format                       # lint + formatage
 pnpm build                                    # vérification de types + build
 pnpm build:demo                               # démo en ligne du site (website/public/demo/)

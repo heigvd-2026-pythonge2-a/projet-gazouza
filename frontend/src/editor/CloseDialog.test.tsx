@@ -1,0 +1,124 @@
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
+import { CloseDialog } from "./CloseDialog";
+import { saveFile } from "./fileActions";
+
+vi.mock("./fileActions", () => ({ saveFile: vi.fn() }));
+
+const save = vi.mocked(saveFile);
+
+beforeEach(() => {
+  resetEditorStore();
+  save.mockReset();
+});
+
+/** What the launcher does when the window is about to close. */
+function requestClose(): Promise<boolean> {
+  let answer!: Promise<boolean>;
+  act(() => {
+    answer = window.psiceRequestClose!();
+  });
+  return answer;
+}
+
+/** Tells whether `promise` is still waiting for an answer. */
+async function pending(promise: Promise<unknown>): Promise<boolean> {
+  const waiting = Symbol();
+  return (await Promise.race([promise, Promise.resolve(waiting)])) === waiting;
+}
+
+const button = (name: string) => screen.getByRole("button", { name });
+
+describe("CloseDialog", () => {
+  it("lets the window close at once when everything is saved", async () => {
+    render(<CloseDialog />);
+    expect(await requestClose()).toBe(true);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("offers to cancel, close without saving, or save and close", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    const answer = requestClose();
+    expect(screen.getByRole("alertdialog", { name: "Fermer Psice" })).toBeTruthy();
+    expect(button("Enregistrer et fermer")).toBe(document.activeElement);
+    expect(await pending(answer)).toBe(true);
+
+    await userEvent.click(button("Annuler"));
+    expect(await answer).toBe(false);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    const again = requestClose();
+    await userEvent.click(button("Fermer sans enregistrer"));
+    expect(await again).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("closes only once the schematic is saved", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    let saved: (ok: boolean) => void = () => {};
+    save.mockImplementation(() => new Promise((r) => (saved = r)));
+    const answer = requestClose();
+
+    await userEvent.click(button("Enregistrer et fermer"));
+    expect(save).toHaveBeenCalledOnce();
+    expect(await pending(answer)).toBe(true);
+    expect(button("Annuler")).toHaveProperty("disabled", true);
+
+    await act(async () => saved(true));
+    expect(await answer).toBe(true);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("stays open when the save does not happen", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    save.mockResolvedValue(false); // file dialog closed or write error
+    const answer = requestClose();
+
+    await userEvent.click(button("Enregistrer et fermer"));
+    expect(await pending(answer)).toBe(true);
+    expect(button("Annuler")).toHaveProperty("disabled", false);
+
+    await userEvent.click(button("Annuler"));
+    expect(await answer).toBe(false);
+  });
+
+  it("cancels with Escape, without reaching the editor's shortcuts", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    const editorKeys = vi.fn();
+    window.addEventListener("keydown", editorKeys);
+    const answer = requestClose();
+
+    await userEvent.keyboard("{Delete}{Escape}");
+    expect(await answer).toBe(false);
+    expect(editorKeys).not.toHaveBeenCalled();
+    expect(editorState().doc.components).toHaveLength(1);
+    window.removeEventListener("keydown", editorKeys);
+  });
+
+  it("answers a second request with the same dialog", async () => {
+    render(<CloseDialog />);
+    dropComponent("resistor");
+    const first = requestClose();
+    const second = requestClose();
+    expect(screen.getAllByRole("alertdialog")).toHaveLength(1);
+    await userEvent.click(button("Fermer sans enregistrer"));
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+  });
+
+  it("is only offered while the editor is shown", async () => {
+    const view = render(<CloseDialog />);
+    dropComponent("resistor");
+    const answer = requestClose();
+    view.unmount();
+    expect(await answer).toBe(false);
+    expect(window.psiceRequestClose).toBeUndefined();
+  });
+});

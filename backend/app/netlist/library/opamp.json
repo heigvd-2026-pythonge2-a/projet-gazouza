@@ -1,0 +1,23 @@
+{
+  "type": "opamp",
+  "label": "Ampli-op idéal",
+  "prefix": "X",
+  "pins": [
+    { "name": "+", "x": -2, "y": 1 },
+    { "name": "-", "x": -2, "y": -1 },
+    { "name": "out", "x": 2, "y": 0 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Modèle",
+      "default": "OA_IDEAL",
+      "kind": "choice",
+      "options": [{ "value": "OA_IDEAL", "label": "Idéal (gain 10⁶, sans limite)" }]
+    }
+  ],
+  "spice": "{name} {pin:+} {pin:-} {pin:out} {model}",
+  "models": {
+    "OA_IDEAL": ".subckt OA_IDEAL inp inn out\nRin inp inn 1e12\nE1 out 0 inp inn 1e6\n.ends OA_IDEAL"
+  }
+}

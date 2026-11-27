@@ -15,7 +15,7 @@ import {
   useEditorStore,
 } from "../store";
 import { exampleContent } from "./examples";
-import { exportImage as renderImage, type ImageOptions } from "./viewCommands";
+import { exportImage as renderImage, type ImageFormat, type ImageOptions } from "./viewCommands";
 
 /** A file type offered by the system file dialogs. */
 export interface PickerType {
@@ -28,11 +28,17 @@ const PICKER_TYPES: PickerType[] = [
   { description: "Schéma Psice", accept: { "application/json": [".json"] } },
 ];
 
-/** File type of an exported image. */
-const PNG_TYPES: PickerType[] = [{ description: "Image PNG", accept: { "image/png": [".png"] } }];
+/** File type of an exported image, by format. */
+const IMAGE_TYPES: Record<ImageFormat, PickerType[]> = {
+  png: [{ description: "Image PNG", accept: { "image/png": [".png"] } }],
+  svg: [{ description: "Image SVG", accept: { "image/svg+xml": [".svg"] } }],
+};
 
-/** Name proposed for an exported image. */
-export const IMAGE_FILE_NAME = "schema.png";
+/** Name proposed for an exported image, by format. */
+export const IMAGE_FILE_NAMES: Record<ImageFormat, string> = {
+  png: "schema.png",
+  svg: "schema.svg",
+};
 
 /** The parts of the File System Access API used here (not in TypeScript's DOM types yet). */
 interface FilePickers {
@@ -57,8 +63,8 @@ const pickers = (): FilePickers | null =>
  */
 let currentFile: { name: string; handle: FileSystemFileHandle | null } | null = null;
 
-/** True while a save is being written (a second Ctrl+S then does nothing). */
-let saving = false;
+/** The save being written, if any (a second Ctrl+S then waits for it instead of saving again). */
+let saving: Promise<boolean> | null = null;
 
 /** The user closed a file dialog without choosing a file. */
 const isCancel = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
@@ -130,6 +136,39 @@ export function openFile() {
   input.click();
 }
 
+/** What a dropped file is, by its name: a schematic, an LTspice schematic, or something else. */
+export function droppedFileKind(name: string): "schematic" | "ltspice" | "other" {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".json")) return "schematic";
+  if (lower.endsWith(".asc")) return "ltspice";
+  return "other";
+}
+
+/**
+ * Opens a file dropped on the window (#277), like Ctrl+O: the same question first if there are
+ * unsaved changes. With its `handle` (WebView2, Chrome), Ctrl+S then writes back to that file.
+ * An LTspice `.asc` file or any other file is refused with a message.
+ */
+export async function openDroppedFile(file: File, handle: FileSystemFileHandle | null = null) {
+  switch (droppedFileKind(file.name)) {
+    case "ltspice":
+      window.alert(
+        "L'import des schémas LTspice (.asc) n'est pas encore possible depuis l'éditeur. " +
+          "Psice ouvre ici les schémas .psice.json.",
+      );
+      return;
+    case "other":
+      window.alert(
+        `« ${file.name} » n'est pas un schéma Psice. ` +
+          "Déposez un fichier .psice.json pour l'ouvrir.",
+      );
+      return;
+    case "schematic":
+      if (!canDiscardChanges()) return;
+      await openContent(file, handle);
+  }
+}
+
 /** Writes `content` into the file of `handle`, replacing what it held. */
 async function write(handle: FileSystemFileHandle, content: string | Blob) {
   const writable = await handle.createWritable();
@@ -183,10 +222,13 @@ export function saveRescueCopy() {
  * Saves the schematic, even without changes (its file may have been deleted meanwhile, #94). The
  * first time, or with `askWhere` (Save as), asks where (system dialog); then writes to the same
  * file. If that file cannot be written any more, asks for another one.
+ *
+ * Resolves to true once the schematic is written, false if the user closed the file dialog or the
+ * file could not be written (the user is told). A call during a save waits for that save.
  */
-export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
+export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}): Promise<boolean> {
   const s = useEditorStore.getState();
-  if (saving) return;
+  if (saving) return saving;
   const doc = s.doc;
   const content = serializeDoc(doc);
   const api = pickers();
@@ -195,15 +237,14 @@ export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
     download(name, content);
     currentFile = { name, handle: null };
     s.markSaved(doc);
-    return;
+    return Promise.resolve(true);
   }
-  saving = true;
   const pick = () =>
     api.showSaveFilePicker({
       types: PICKER_TYPES,
       suggestedName: currentFile?.name ?? DEFAULT_FILE_NAME,
     });
-  void (async () => {
+  saving = (async () => {
     try {
       let handle = askWhere ? null : (currentFile?.handle ?? null);
       if (handle) {
@@ -220,12 +261,15 @@ export function saveFile({ askWhere = false }: { askWhere?: boolean } = {}) {
       }
       currentFile = { name: handle.name, handle };
       useEditorStore.getState().markSaved(doc);
+      return true;
     } catch (error: unknown) {
       if (!isCancel(error)) window.alert("Impossible d'enregistrer le schéma dans ce fichier.");
+      return false;
     } finally {
-      saving = false;
+      saving = null;
     }
   })();
+  return saving;
 }
 
 /** Saves the schematic in a file chosen by the user (Ctrl+Shift+S). */
@@ -267,9 +311,31 @@ export function setExportTransparent(transparent: boolean) {
   }
 }
 
+/** localStorage key of the last format chosen for the image export. */
+export const EXPORT_FORMAT_KEY = "psice.export.format";
+
+/** Last format chosen for the image export (PNG by default). */
+export function exportFormat(): ImageFormat {
+  try {
+    return window.localStorage.getItem(EXPORT_FORMAT_KEY) === "svg" ? "svg" : "png";
+  } catch {
+    return "png";
+  }
+}
+
+/** Remembers the image format for the next exports. */
+export function setExportFormat(format: ImageFormat) {
+  try {
+    window.localStorage.setItem(EXPORT_FORMAT_KEY, format);
+  } catch {
+    // Storage blocked: the choice is simply not kept.
+  }
+}
+
 /**
- * Exports the schematic as a PNG image, to put in a report (#112): the whole circuit, without the
- * grid nor the selection, on a white background, or a transparent one if asked (#195).
+ * Exports the schematic as an image, to put in a report: the whole circuit, without the grid nor
+ * the selection, on a white background, or a transparent one if asked (#195). PNG (#112) by
+ * default, or SVG, which stays sharp at any size (#279).
  */
 export async function exportImage(options: ImageOptions = { transparent: false }) {
   if (useEditorStore.getState().doc.components.length === 0) {
@@ -281,5 +347,6 @@ export async function exportImage(options: ImageOptions = { transparent: false }
     window.alert("Impossible de créer l'image du schéma.");
     return;
   }
-  await saveNewFile(IMAGE_FILE_NAME, image, PNG_TYPES);
+  const format = options.format ?? "png";
+  await saveNewFile(IMAGE_FILE_NAMES[format], image, IMAGE_TYPES[format]);
 }

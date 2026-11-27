@@ -1,0 +1,26 @@
+{
+  "type": "led",
+  "label": "LED",
+  "prefix": "D",
+  "pins": [
+    { "name": "A", "x": 0, "y": -2 },
+    { "name": "K", "x": 0, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Couleur",
+      "default": "D_LED_RED",
+      "kind": "choice",
+      "options": [
+        { "value": "D_LED_RED", "label": "Rouge" },
+        { "value": "D_LED_GREEN", "label": "Verte" }
+      ]
+    }
+  ],
+  "spice": "{name} {pin:A} {pin:K} {model}",
+  "models": {
+    "D_LED_RED": ".model D_LED_RED D(Is=1e-19 N=1.8 Rs=2.5 Cjo=20p BV=5 IBV=10u)",
+    "D_LED_GREEN": ".model D_LED_GREEN D(Is=1e-22 N=2 Rs=3 Cjo=20p BV=5 IBV=10u)"
+  }
+}

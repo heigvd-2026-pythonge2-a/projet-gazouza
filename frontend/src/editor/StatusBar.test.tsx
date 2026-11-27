@@ -33,6 +33,29 @@ describe("StatusBar", () => {
     expect(screen.getByText("3 broches non connectées")).toBeInTheDocument();
   });
 
+  it("says why a wire was not added, until the next change (#257)", () => {
+    render(<StatusBar />);
+    act(() => {
+      dropComponent("resistor", { x: 0, y: 0 });
+      dropComponent("resistor", { x: 4, y: 0 });
+      editorState().startWiring();
+      for (const [x, y] of [
+        [0, 2],
+        [4, 2],
+        [1, 2],
+        [1, 4],
+        [3, 4],
+        [3, 2],
+      ] as const) {
+        editorState().wireClick({ x, y });
+      }
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(/déjà reliés par des fils/);
+    act(() => editorState().setTool({ kind: "select" }));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText(/Clic : sélectionner/)).toBeInTheDocument();
+  });
+
   it("opens and closes the shortcuts with the button, the ? key and Escape", async () => {
     const user = userEvent.setup();
     render(<StatusBar />);

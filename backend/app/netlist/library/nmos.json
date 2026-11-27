@@ -1,0 +1,23 @@
+{
+  "type": "nmos",
+  "label": "MOSFET canal N",
+  "prefix": "M",
+  "pins": [
+    { "name": "D", "x": 1, "y": -2 },
+    { "name": "G", "x": -2, "y": 0 },
+    { "name": "S", "x": 1, "y": 2 }
+  ],
+  "params": [
+    {
+      "name": "model",
+      "label": "Modèle",
+      "default": "M_NMOS_GP",
+      "kind": "choice",
+      "options": [{ "value": "M_NMOS_GP", "label": "Usage général (type 2N7000, seuil 2 V)" }]
+    }
+  ],
+  "spice": "{name} {pin:D} {pin:G} {pin:S} {pin:S} {model}",
+  "models": {
+    "M_NMOS_GP": ".model M_NMOS_GP NMOS(Level=1 Vto=2 Kp=0.1 Lambda=0.01 Rd=1 Rs=0.5 Cgso=50p Cgdo=10p Cbd=20p)"
+  }
+}

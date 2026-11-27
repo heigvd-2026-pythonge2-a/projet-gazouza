@@ -10,7 +10,7 @@ beforeEach(resetEditorStore);
 describe("Inspector", () => {
   it("explains what to do when nothing is selected", () => {
     render(<Inspector />);
-    expect(screen.getByText(/Sélectionne un composant/)).toBeInTheDocument();
+    expect(screen.getByText(/Sélectionnez un composant/)).toBeInTheDocument();
   });
 
   it("counts several selected items, and says a wire has no properties", () => {
@@ -54,6 +54,32 @@ describe("Inspector", () => {
     act(() => editorState().undo());
     expect(editorState().doc.components[0]!.params.resistance).toBe("1k");
     expect(field).toHaveValue("1k");
+  });
+
+  it("edits the content of a selected text over several lines", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      editorState().startText();
+      editorState().placeText({ x: 0, y: 0 });
+    });
+    render(<Inspector />);
+    expect(screen.getByRole("heading")).toHaveTextContent("Texte");
+    const field = screen.getByLabelText("Contenu");
+
+    await user.clear(field);
+    await user.type(field, "Entrée{Enter}10 V");
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
+    expect(field).toHaveFocus();
+
+    // Ctrl+Enter keeps it and leaves the field.
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(field).not.toHaveFocus();
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
+
+    // Escape takes back what was just typed.
+    await user.type(field, "!");
+    await user.keyboard("{Escape}");
+    expect(editorState().doc.texts[0]!.content).toBe("Entrée\n10 V");
   });
 
   it("Escape takes back what was typed, Enter keeps it; both leave the field", async () => {

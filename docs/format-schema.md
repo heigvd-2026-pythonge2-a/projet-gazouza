@@ -39,7 +39,8 @@ du schéma (`SimulationRequest`, clé `kind`, nombres en unités SI).
   "title": "Circuit RC",
   "components": [ ... ],
   "junctions": [ ... ],
-  "wires": [ ... ]
+  "wires": [ ... ],
+  "texts": [ ... ]
 }
 ```
 
@@ -50,11 +51,12 @@ du schéma (`SimulationRequest`, clé `kind`, nombres en unités SI).
 | `components` | Les composants posés, y compris masses et étiquettes. |
 | `junctions` | Les points où des fils se rejoignent hors d'une broche (un « T »). |
 | `wires` | Les fils. |
+| `texts` | Facultatif. Le texte libre, décoratif (section 4). |
 
 L'**analyse** n'est pas dans le schéma : elle est envoyée à côté (section 6).
 
 **Clés inconnues** : une clé que le format ne connaît pas (dans le schéma, un composant, une
-jonction ou un fil) est **ignorée**, sans erreur. C'est voulu : un fichier enregistré par une
+jonction, un fil ou un texte) est **ignorée**, sans erreur. C'est voulu : un fichier enregistré par une
 version plus récente de l'éditeur (avec des métadonnées d'affichage en plus) s'ouvre quand même.
 Seules les extrémités de fil et les cibles d'erreur refusent les clés en trop, car c'est ce qui
 garantit qu'elles n'ont qu'une seule forme.
@@ -82,9 +84,18 @@ garantit qu'elles n'ont qu'une seule forme.
 | `rotation` | `0`, `90`, `180` ou `270`, sens horaire. |
 | `mirror` | `true` ou `false`. |
 | `params` | Valeurs **telles que l'utilisateur les tape** : `"10k"`, `"1u"`, `"5m"`. **Méga s'écrit `Meg`** (`M` = milli). |
+| `name_offset` | Facultatif. Position du nom (ou du nom de nœud d'une étiquette) **placée à la main**. Absent : placement automatique. |
+| `value_offset` | Facultatif. Position de la valeur placée à la main. Absent : placement automatique. |
 
 **Miroir et rotation** : le miroir est horizontal (`x → −x`) et s'applique **avant** la rotation.
 L'éditeur et l'import `.asc` utilisent la même règle.
+
+**Position des textes d'un composant** (`name_offset`, `value_offset`) : `{ "x": 1.5, "y": -0.5 }`,
+en unités de grille (**nombres décimaux**, l'éditeur aimante sur une demi-case). C'est la position
+du **centre** du texte par rapport au composant, dans le **repère du composant**, avant miroir et
+rotation : un texte déplacé à la main tourne avec son composant et reste du même côté, mais il est
+toujours dessiné à l'horizontale. « Replacer les textes automatiquement » supprime le champ. La
+netlist ignore ces deux champs.
 
 **Paramètres par défaut** : dès qu'un composant est placé, l'éditeur écrit **tous** les `default`
 de la bibliothèque dans `params`. Le fichier est donc toujours complet, et `MISSING_PARAM` ne se
@@ -95,7 +106,7 @@ déclenche que si l'utilisateur vide un champ.
 | `type` | Broche | Rôle | Ligne SPICE |
 | --- | --- | --- | --- |
 | `ground` | `1` | Relie son nœud à la masse : le nœud s'appelle `0`. | aucune |
-| `label` | `1` | Donne un nom au nœud : `params.net = "out"`. | aucune |
+| `label` | `1` | Donne un nom au nœud : `params.net = "out"`. `params.direction` (`none`, `input`, `output`, `bidir`) ne change que le dessin ; absent, il vaut `none`. | aucune |
 
 Ces deux types n'ont **pas** de `name` : on peut poser autant de masses qu'on veut, et le nom d'une
 étiquette est uniquement dans `params.net` (pas de doublon).
@@ -104,7 +115,7 @@ Un nom d'étiquette ne contient que des lettres, des chiffres et `_`, commence p
 doit pas ressembler à un nom automatique (`n1`, `n2`…). SPICE ignore la casse : `Out` et `out`
 désignent le même nœud.
 
-## 4. Fils et jonctions
+## 4. Fils, jonctions et texte libre
 
 ### Les extrémités
 
@@ -142,6 +153,17 @@ cet endroit. Trois fils arrivent alors sur la jonction. Le backend ne voit donc 
 « fil sur fil » : tout reste explicite.
 
 Une jonction reliée à moins de 2 fils ne sert à rien : avertissement `JUNCTION_DANGLING`.
+
+### Le texte libre
+
+```json
+{ "id": "t1", "position": { "x": 2, "y": -4 }, "content": "Entrée\n10 V" }
+```
+
+Du texte **purement décoratif** posé sur le schéma (titre, note, « entrée », « sortie »…).
+`position` est le coin haut gauche du texte, sur la grille (entiers). `content` est le texte tel
+que tapé, retours à la ligne compris, 2000 caractères au plus. La netlist **ignore** la liste
+`texts` : aucun nœud, aucune ligne SPICE, aucun diagnostic, quel que soit le contenu.
 
 ## 5. Bibliothèque
 

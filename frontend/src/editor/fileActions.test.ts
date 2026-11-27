@@ -110,8 +110,8 @@ describe("saving with the system file dialogs", () => {
     const views = await import("./viewCommands");
     const image = new Blob(["png"], { type: "image/png" });
     const exportImage = vi.fn(async () => image);
-    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, exportImage });
-    const handle = fakeHandle(f.IMAGE_FILE_NAME);
+    views.registerViewCommands({ zoomIn() {}, zoomOut() {}, fit() {}, show() {}, exportImage });
+    const handle = fakeHandle(f.IMAGE_FILE_NAMES.png);
     const written: unknown[] = [];
     handle.createWritable = async () => ({
       write: async (data: unknown) => void written.push(data),
@@ -133,6 +133,24 @@ describe("saving with the system file dialogs", () => {
 
     await f.exportImage({ transparent: true });
     expect(exportImage).toHaveBeenLastCalledWith({ transparent: true });
+
+    // SVG: its own name and file type.
+    await f.exportImage({ transparent: false, format: "svg" });
+    expect(exportImage).toHaveBeenLastCalledWith({ transparent: false, format: "svg" });
+    expect(showSaveFilePicker).toHaveBeenLastCalledWith({
+      suggestedName: "schema.svg",
+      types: [{ description: "Image SVG", accept: { "image/svg+xml": [".svg"] } }],
+    });
+  });
+
+  it("remembers the image format, PNG by default", async () => {
+    const f = await load();
+    window.localStorage.removeItem(f.EXPORT_FORMAT_KEY);
+    expect(f.exportFormat()).toBe("png");
+    f.setExportFormat("svg");
+    expect(f.exportFormat()).toBe("svg");
+    f.setExportFormat("png");
+    expect(f.exportFormat()).toBe("png");
   });
 
   it("remembers the transparent background choice, white by default", async () => {
@@ -155,6 +173,50 @@ describe("saving with the system file dialogs", () => {
     await Promise.resolve();
     expect(f.isUnsaved(f.state())).toBe(true);
     expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("tells whether the schematic was saved (#238)", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    // Dialog closed: not saved.
+    showSaveFilePicker.mockRejectedValueOnce(abort());
+    expect(await f.saveFile()).toBe(false);
+    expect(f.isUnsaved(f.state())).toBe(true);
+
+    // First save asks where, the next one writes to the same file.
+    expect(await f.saveFile()).toBe(true);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    expect(await f.saveFile()).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(2);
+
+    // The file cannot be written any more, nor the one picked instead: not saved, user told.
+    handle.createWritable = async () => {
+      throw new DOMException("read-only", "NoModificationAllowedError");
+    };
+    f.state().dropComponent("capacitor", { x: 4, y: 0 });
+    expect(await f.saveFile()).toBe(false);
+    expect(alert).toHaveBeenCalledOnce();
+    expect(f.isUnsaved(f.state())).toBe(true);
+  });
+
+  it("waits for the save in progress instead of saving twice", async () => {
+    const f = await load();
+    const handle = fakeHandle("circuit.psice.json");
+    const { showSaveFilePicker } = stubPickers(handle);
+    let pick: (h: typeof handle) => void = () => {};
+    showSaveFilePicker.mockImplementationOnce(() => new Promise((r) => (pick = r)));
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+
+    const first = f.saveFile();
+    const second = f.saveFile();
+    pick(handle);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(showSaveFilePicker).toHaveBeenCalledOnce();
+    expect(handle.written).toHaveLength(1);
   });
 
   it("saves a rescue copy in a new file, without marking the document saved", async () => {
@@ -218,10 +280,55 @@ describe("without the file dialogs (other browsers)", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     f.state().dropComponent("resistor", { x: 0, y: 0 });
 
-    f.saveFile();
+    const saved = f.saveFile();
     expect(click).toHaveBeenCalledOnce();
+    expect(await saved).toBe(true);
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe(f.DEFAULT_FILE_NAME);
     expect(f.isUnsaved(f.state())).toBe(false);
+  });
+});
+
+describe("opening a dropped file (#277)", () => {
+  it("opens a schematic, and saves back to its file when the drop gave its handle", async () => {
+    const f = await load();
+    const handle = fakeHandle("pont.psice.json");
+    const file = new File([f.serializeDoc(fixtureDoc("divider_op"))], "pont.psice.json");
+    await f.openDroppedFile(file, handle as unknown as FileSystemFileHandle);
+    expect(f.state().doc.components.length).toBeGreaterThan(0);
+    expect(f.isUnsaved(f.state())).toBe(false);
+    const { showSaveFilePicker } = stubPickers(fakeHandle("other"));
+    await f.saveFile();
+    expect(handle.written).toHaveLength(1);
+    expect(showSaveFilePicker).not.toHaveBeenCalled();
+  });
+
+  it("asks before dropping unsaved changes", async () => {
+    const f = await load();
+    f.state().dropComponent("resistor", { x: 0, y: 0 });
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    const before = f.state().doc;
+    await f.openDroppedFile(new File(["{}"], "x.psice.json"));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("refuses an LTspice schematic and any other file, with a message", async () => {
+    const f = await load();
+    const before = f.state().doc;
+    await f.openDroppedFile(new File(["Version 4"], "filtre.ASC"));
+    expect(alert).toHaveBeenLastCalledWith(expect.stringMatching(/LTspice \(\.asc\)/));
+    await f.openDroppedFile(new File(["x"], "photo.png"));
+    expect(alert).toHaveBeenLastCalledWith(
+      expect.stringMatching(/« photo\.png » n'est pas un schéma/),
+    );
+    expect(f.state().doc).toBe(before);
+  });
+
+  it("tells why a broken schematic cannot be opened", async () => {
+    const f = await load();
+    await f.openDroppedFile(new File(["not json"], "cassé.json"));
+    expect(alert).toHaveBeenCalledOnce();
   });
 });

@@ -51,6 +51,19 @@ courts-circuits, et les sources prennent leur valeur continue.
 Aucun réglage. C'est l'analyse idéale pour vérifier un diviseur de tension ou la polarisation
 d'un transistor.
 
+Le panneau **Résultats** range les valeurs en groupes :
+
+- **Potentiels des nœuds**, par rapport à la masse. Chaque nœud porte le nom de son étiquette
+  de nœud si tu en as posé une (« out »), sinon celui de sa broche la plus parlante (« Base de
+  Q1 », « Borne + de V1 »), sinon celui des composants qu'il relie (« Entre R1 et C1 ») ;
+- **Tensions aux bornes des transistors** : V_CE et V_BE d'un transistor bipolaire (V_EC et
+  V_EB pour un PNP), V_DS et V_GS d'un MOSFET ;
+- **Courants**. Pour une source de tension, Psice indique le courant qu'elle **fournit** au
+  circuit (« V1 fournit 5 mA »), ou qu'elle reçoit quand elle est rechargée. Pour les autres
+  composants, la valeur est donnée sans signe.
+
+Passe la souris sur une ligne : le nœud ou le composant concerné s'allume sur le schéma.
+
 ```
 .op
 ```

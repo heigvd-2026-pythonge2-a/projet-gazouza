@@ -100,10 +100,13 @@ La CI exige **80 % de couverture** du code Python.
 ```powershell
 cd frontend
 pnpm test                 # tests unitaires (vitest)
+pnpm test:coverage        # tests + taux de couverture (rapport HTML dans coverage/)
 pnpm lint ; pnpm format   # lint + formatage
 pnpm build                # vérification de types + build
 pnpm build:demo           # démo en ligne, construite dans website/public/demo/
 ```
+
+La CI affiche le taux de couverture du frontend dans le résumé du job, sans seuil exigé.
 
 </TabItem>
 <TabItem label="Site web">
@@ -142,8 +145,37 @@ pnpm gen:api                              # → src/api/schema.gen.ts
 ```
 
 Le script compile le frontend, le copie dans le backend, puis lance PyInstaller avec ngspice et
-le frontend inclus. Résultat : `dist/Psice/Psice.exe`, à distribuer sous forme de dossier zippé.
-Aucune installation n'est nécessaire sur la machine cible.
+le frontend inclus. Résultat : `dist/Psice/Psice.exe` et l'archive `dist/Psice.zip`. Aucune
+installation n'est nécessaire sur la machine cible. Avec `-Verify`, le script extrait aussi le
+zip et lance `Psice.exe --self-check` depuis le dossier extrait (frontend, `/api/health`,
+bibliothèque de composants, simulation RC hors ligne et composants .NET de la fenêtre).
+
+Avant ce dernier `--self-check`, le script marque les fichiers extraits comme téléchargés depuis
+Internet, comme le fait Windows pour un zip téléchargé avec un navigateur. .NET refuse alors de
+charger les DLL de pythonnet et de WebView2, sauf si `Psice.exe.config` (copié depuis
+`assets/windows/`) l'autorise. Sans ce fichier, la fenêtre ne s'ouvre pas chez l'utilisateur.
+
+### Le workflow « Application Windows »
+
+Le workflow `release.yml` lance `.\build.ps1 -Verify` sur un runner Windows de GitHub. Il ne
+tourne pas à chaque PR (le build prend plusieurs minutes), seulement :
+
+- **à la main**, depuis l'onglet Actions du dépôt (« Application Windows », puis « Run
+  workflow ») : l'application construite est gardée comme artefact du workflow, sans rien
+  publier. C'est le moyen de vérifier le build avant une livraison ou après un changement de
+  `build.ps1` ;
+- **sur un tag `vX.Y.Z`** (SemVer, `0.x` avant la livraison finale) : le zip est publié dans la
+  release GitHub du tag, toujours sous le nom `Psice.zip`. Un tag avec un suffixe
+  (`v1.0.0-rc.1`) donne une pré-version.
+
+```powershell
+git tag v0.2.0 origin/main
+git push origin v0.2.0
+```
+
+Une release est publique dès que le tag est poussé : on l'annonce à l'équipe avant, et on pose
+le tag sur un commit de `main` dont la CI est verte. La page
+[Installation](/projet-gazouza/demarrer/installation/) pointe vers la dernière release.
 
 ## Le site web
 

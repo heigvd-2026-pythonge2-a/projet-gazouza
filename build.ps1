@@ -29,6 +29,8 @@ $LicenseFile = Join-Path $RepoRoot "LICENSE"
 $ThirdPartyLicensesFile = Join-Path $RepoRoot "THIRD_PARTY_LICENSES.md"
 $NgspiceCopyingFile = Join-Path $NgspiceDir "COPYING"
 $IconFile = Join-Path $RepoRoot "assets\brand\psice.ico"
+# Lets .NET load the pythonnet/WebView2 assemblies of a zip downloaded with a browser.
+$DotNetConfigFile = Join-Path $RepoRoot "assets\windows\Psice.exe.config"
 
 $BuildRoot = Join-Path $RepoRoot "build"
 $WorkRoot = Join-Path $BuildRoot "work"
@@ -113,7 +115,7 @@ if (-not $SkipFrontendBuild) {
     Assert-ToolAvailable -Name "pnpm"
 }
 
-foreach ($requiredPath in @($EntryScript, $LibraryDir, $LicenseFile, $ThirdPartyLicensesFile, $NgspiceCopyingFile)) {
+foreach ($requiredPath in @($EntryScript, $LibraryDir, $LicenseFile, $ThirdPartyLicensesFile, $NgspiceCopyingFile, $DotNetConfigFile)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required source asset not found: $requiredPath"
     }
@@ -217,6 +219,10 @@ Copy-Item -LiteralPath $LicenseFile -Destination (Join-Path $AppDistDir "LICENSE
 Copy-Item -LiteralPath $ThirdPartyLicensesFile -Destination (Join-Path $AppDistDir "THIRD_PARTY_LICENSES.md") -Force
 Copy-Item -LiteralPath $NgspiceCopyingFile -Destination (Join-Path $AppDistDir "COPYING") -Force
 
+# The name must match the executable: .NET reads <exe name>.config next to it.
+Write-Host "==> Copying the .NET configuration (Psice.exe.config)" -ForegroundColor Cyan
+Copy-Item -LiteralPath $DotNetConfigFile -Destination "$ExePath.config" -Force
+
 Write-Host "==> Verifying built executable ($ExePath)" -ForegroundColor Cyan
 Invoke-PsiceSelfCheck -ExecutablePath $ExePath
 
@@ -230,6 +236,12 @@ if (-not $SkipZip) {
             Write-Host "==> Verifying extracted archive offline in $verifyDir" -ForegroundColor Cyan
             New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
             Expand-Archive -LiteralPath $ZipPath -DestinationPath $verifyDir -Force
+            # Expand-Archive does not mark files the way a browser download extracted with
+            # File Explorer does (Mark of the Web), so mark them as coming from the Internet:
+            # .NET refuses to load such assemblies without Psice.exe.config.
+            Get-ChildItem -LiteralPath $verifyDir -Recurse -File | ForEach-Object {
+                Set-Content -LiteralPath $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+            }
             $extractedExe = Join-Path $verifyDir "Psice\Psice.exe"
             Invoke-PsiceSelfCheck -ExecutablePath $extractedExe
         }

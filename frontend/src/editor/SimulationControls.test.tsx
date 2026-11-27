@@ -1,10 +1,14 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SimulationResult } from "../api/client";
 import { analysisSources, toAnalysis } from "../store";
+import { fixtureDoc, fixtureResult } from "../store/testFixtures";
 import { dropComponent, editorState, resetEditorStore } from "../test/editorStore";
-import { SimulationControls } from "./SimulationControls";
+import netlist from "../../../shared/fixtures/divider_op/netlist.json";
+import { SimulationControls, SimulationReport } from "./SimulationControls";
+import { registerViewCommands } from "./viewCommands";
 
 beforeEach(resetEditorStore);
 
@@ -75,5 +79,60 @@ describe("SimulationControls (#222)", () => {
     await user.selectOptions(screen.getByLabelText("Analyse"), "dc");
     expect(screen.getByLabelText("Source balayée")).toBeDisabled();
     expect(analysisOf()).toEqual({ error: expect.stringMatching(/source/) });
+  });
+});
+
+describe("SimulationReport (#253)", () => {
+  it("shows on the schematic what an error points at when it is clicked", async () => {
+    const user = userEvent.setup();
+    const show = vi.fn();
+    const unregister = registerViewCommands({
+      zoomIn() {},
+      zoomOut() {},
+      fit() {},
+      show,
+      exportImage: async () => null,
+    });
+    editorState().openDocument(fixtureDoc("divider_op"));
+    const result = {
+      analysis: "op",
+      traces: [],
+      errors: [
+        {
+          code: "SINGULAR_MATRIX",
+          message: "Le nœud « out » est flottant.",
+          targets: [{ net: "out" }],
+        },
+        { code: "SIMULATION_FAILED", message: "ngspice a échoué." },
+      ],
+    } as SimulationResult;
+    act(() => editorState().setSimulation(result, netlist.nets));
+    render(<SimulationReport />);
+
+    // An error that points at nothing is plain text.
+    expect(screen.queryByRole("button", { name: "ngspice a échoué." })).toBeNull();
+    expect(screen.getByText("ngspice a échoué.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /« out » est flottant/ }));
+    expect(show).toHaveBeenCalledOnce();
+    expect(editorState().selection).toEqual(["w2", "w6"]);
+    unregister();
+  });
+
+  it("names the nodes after the schematic and highlights a hovered line (#292)", async () => {
+    const user = userEvent.setup();
+    editorState().openDocument(fixtureDoc("divider_op"));
+    act(() => editorState().setSimulation(fixtureResult("divider_op"), netlist.nets));
+    render(<SimulationReport />);
+
+    expect(screen.queryByText(/n\d/)).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /Potentiels des nœuds/ })).toBeInTheDocument();
+    const out = screen.getByRole("row", { name: "out 5 V" });
+    await user.hover(out);
+    expect(editorState().reportHighlight).toEqual({ wire: "w2" });
+    await user.hover(screen.getByRole("row", { name: "V1 fournit 5 mA" }));
+    expect(editorState().reportHighlight).toEqual({ component: "c1" });
+    await user.unhover(screen.getByRole("row", { name: "V1 fournit 5 mA" }));
+    expect(editorState().reportHighlight).toBeNull();
   });
 });

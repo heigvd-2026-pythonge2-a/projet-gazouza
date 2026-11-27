@@ -10,7 +10,8 @@ const HINTS: Record<Tool["kind"], string> = {
     "Clic : sélectionner · Glisser : déplacer · R : tourner · Suppr : supprimer · F : ajuster la vue",
   place: "Clic : poser · R : tourner · M : miroir · Échap : arrêter",
   wire: "Clic : coude ou fin du fil · Double-clic : finir dans le vide · Échap : dernier coude",
-  paste: "Clic : poser la copie · Échap ou clic droit : annuler",
+  paste: "Clic : poser la copie · R : tourner · M : miroir · Échap ou clic droit : annuler",
+  text: "Clic : poser un texte, à écrire dans les propriétés · Échap : arrêter",
 };
 
 /** Panel listing every shortcut, above the status bar. Escape or a click outside closes it. */
@@ -109,6 +110,7 @@ export function StatusBar() {
   const selection = useEditorStore((s) => s.selection);
   const wirePart = useEditorStore((s) => s.wirePart);
   const segments = useEditorStore((s) => s.segments.length);
+  const notice = useEditorStore((s) => s.notice);
 
   const unconnected = useMemo(() => unconnectedPins(doc).length, [doc]);
 
@@ -123,7 +125,12 @@ export function StatusBar() {
         : `${items} éléments sélectionnés (tronçons compris)`;
   } else if (selection.length === 1) {
     const c = doc.components.find((x) => x.id === selection[0]);
-    selected = c ? `Sélection : ${c.name ?? c.params.net ?? "masse"}` : "Sélection : fil";
+    const isText = doc.texts.some((t) => t.id === selection[0]);
+    selected = c
+      ? `Sélection : ${c.name ?? c.params.net ?? "masse"}`
+      : isText
+        ? "Sélection : texte"
+        : "Sélection : fil";
   } else if (selection.length > 1) {
     selected = `${selection.length} éléments sélectionnés`;
   }
@@ -145,7 +152,16 @@ export function StatusBar() {
         overflow: "hidden",
       }}
     >
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      {notice ? (
+        <span
+          role="status"
+          style={{ overflow: "hidden", textOverflow: "ellipsis", color: UI.warning }}
+        >
+          {notice}
+        </span>
+      ) : (
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{HINTS[tool.kind]}</span>
+      )}
       <span style={{ marginLeft: "auto" }}>{selected}</span>
       {unconnected > 0 && (
         <span

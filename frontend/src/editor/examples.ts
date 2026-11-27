@@ -68,6 +68,7 @@ export function fixtureDocument(schematic: EditorDoc): EditorDoc {
     components: copy.components,
     junctions: copy.junctions,
     wires: copy.wires.map((w: EditorWire) => ({ ...w, points: w.points ?? [] })),
+    texts: copy.texts ?? [],
   };
 }
 

@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LibraryComponent } from "../api/client";
 import {
+  LABEL_FLAGS,
   getDef,
   isLibraryLoaded,
   loadLibrary,
   mainParam,
   paletteGroups,
   setLibrary,
+  symbolBounds,
+  symbolOf,
 } from "./library";
 import { fixtureLibrary } from "./testFixtures";
 
@@ -34,6 +37,8 @@ describe("setLibrary", () => {
       ["passive", ["resistor", "capacitor", "inductor"]],
       ["source", ["voltage_source", "current_source"]],
       ["connection", ["ground", "label"]],
+      ["semiconductor", ["diode", "zener", "led", "npn", "pnp", "nmos"]],
+      ["amplifier", ["opamp", "opamp_real"]],
     ]);
   });
 
@@ -172,6 +177,31 @@ describe("semiconductor and op-amp symbols", () => {
       }
     },
   );
+});
+
+describe("label direction", () => {
+  it("draws the flag of the label's direction, with no direction when absent or unknown", () => {
+    setLibrary(fixtureLibrary());
+    const label = getDef("label");
+    expect(label.params.find((p) => p.name === "direction")?.default).toBe("none");
+    expect(symbolOf(label, { net: "out" })).toBe(LABEL_FLAGS.none);
+    expect(symbolOf(label, { net: "out", direction: "output" })).toBe(LABEL_FLAGS.output);
+    expect(symbolOf(label, { net: "out", direction: "up" })).toBe(label.symbol);
+    expect(symbolOf(getDef("resistor"), { direction: "output" })).toBe(getDef("resistor").symbol);
+  });
+
+  it("has a flag for every option, starting at the pin and in the same box", () => {
+    setLibrary(fixtureLibrary());
+    const label = getDef("label");
+    const options = label.params.find((p) => p.name === "direction")?.options ?? [];
+    expect(options.map((o) => o.value).sort()).toEqual(Object.keys(LABEL_FLAGS).sort());
+    for (const { value } of options) {
+      const symbol = symbolOf(label, { direction: value });
+      expect(symbolBounds({ ...label, symbol }), value).toEqual(symbolBounds(label));
+      const [first] = symbol;
+      expect(first?.kind === "line" && first.points.slice(0, 2), value).toEqual([0, 0]);
+    }
+  });
 });
 
 describe("loadLibrary", () => {

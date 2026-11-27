@@ -1,13 +1,18 @@
 import type { KonvaEventObject } from "konva/lib/Node";
+import { useRef } from "react";
 import { Circle, Group, Line, Rect, Text } from "react-konva";
 
 import {
+  CAPTION_FONT_SIZE,
+  captionSize,
   getDef,
+  layoutCaptions,
+  ledColor,
   symbolBounds,
-  toWorld,
-  visibleParams,
-  type Bounds,
-  type ComponentDef,
+  symbolOf,
+  type Caption,
+  type CaptionKind,
+  type GridPoint,
   type PlacedComponent,
   type SymbolShape,
 } from "../store";
@@ -15,10 +20,8 @@ import { arcPoints } from "./symbolGeometry";
 import { GRID, useCanvasColors } from "./theme";
 
 const STROKE = 2;
-const TEXT_WIDTH = 80;
-const FONT_SIZE = 12;
-/** Space between the symbol and its caption, in grid units. */
-const CAPTION_GAP = 0.3;
+/** Extra width of a text's box, around its estimated width (the font is not measured). */
+const TEXT_PAD = 8;
 const PIN_SIZE = 0.3;
 /** Clickable area around a pin, larger than its drawn square. */
 const PIN_HIT = 0.8;
@@ -28,8 +31,18 @@ function setCursor(e: KonvaEventObject<MouseEvent>, cursor: string) {
   if (container) container.style.cursor = cursor;
 }
 
-function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }) {
-  const common = { stroke: color, strokeWidth: STROKE, listening: false } as const;
+function SymbolShapeNode({
+  shape,
+  color,
+  lightColor = color,
+}: {
+  shape: SymbolShape;
+  color: string;
+  /** Colour of the lines of `tone: "light"` (the light of an LED). */
+  lightColor?: string;
+}) {
+  const stroke = shape.kind === "line" && shape.tone === "light" ? lightColor : color;
+  const common = { stroke, strokeWidth: STROKE, listening: false } as const;
   switch (shape.kind) {
     case "line":
       return <Line {...common} points={shape.points.map((v) => v * GRID)} lineCap="round" />;
@@ -52,61 +65,79 @@ function SymbolShapeNode({ shape, color }: { shape: SymbolShape; color: string }
   }
 }
 
-/**
- * Text shown next to the component: its name and main value (or the net name for a label).
- * A source that is not DC shows its waveform ("Impulsion"), since one value would mislead.
- */
-function caption(c: PlacedComponent, def: ComponentDef): string | null {
-  if (c.type === "ground") return null;
-  if (c.type === "label") return c.params.net ?? "";
-  const name = c.name ?? "";
-  const waveform = def.params.find((p) => p.name === "waveform");
-  const selected = waveform?.options.find((o) => o.value === c.params.waveform);
-  if (selected && selected.value !== "dc") return `${name}\n${selected.label}`;
-  const main = visibleParams(def, c.params).find((p) => p.kind === "value");
-  const value = main ? (c.params[main.name] ?? "") : "";
-  return value ? `${name}\n${value}${main?.unit ?? ""}` : name;
+/** The texts of a component alone (a ghost, a preview): placed as if nothing were around. */
+function standaloneCaptions(c: PlacedComponent): Caption[] {
+  return layoutCaptions({ components: [c], wires: [], junctions: [], texts: [] }).get(c.id) ?? [];
 }
 
-interface CaptionBox {
-  /** Top-left corner of the text box, in pixels relative to the component position. */
-  x: number;
-  y: number;
-  align: "left" | "center" | "right";
+interface CaptionTextProps {
+  caption: Caption;
+  /** Position of the component, in grid units: the text is drawn relative to it. */
+  origin: GridPoint;
+  color: string;
+  draggable: boolean;
+  /** While dragging: where the text would land (null: nowhere free, it stays). */
+  onDrag?: (kind: CaptionKind, centre: GridPoint) => GridPoint | null;
+  onMove?: (kind: CaptionKind, centre: GridPoint) => void;
 }
 
 /**
- * Where to draw the caption so it never covers the symbol, its pins or its marks ("+", arrow).
- * The symbol bounds are turned like the symbol first; the caption then goes right of a vertical
- * symbol (centred on it) or centred above a horizontal one.
+ * The name or the value of a component, always upright. It is dragged on its own: its drag
+ * events are kept from the component's group, which would move the component.
  */
-function captionPlacement(c: PlacedComponent, bounds: Bounds, text: string): CaptionBox {
-  const origin = { ...c, position: { x: 0, y: 0 } };
-  const a = toWorld(bounds.min, origin);
-  const b = toWorld(bounds.max, origin);
-  const min = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
-  const max = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) };
-  const height = text.split("\n").length * FONT_SIZE;
+function CaptionText({ caption, origin, color, draggable, onDrag, onMove }: CaptionTextProps) {
+  const width = captionSize(caption.text).width * GRID + TEXT_PAD;
+  const height = CAPTION_FONT_SIZE * GRID;
+  // Top-left corner of the text box for a text centred on `centre`, and back.
+  const corner = (centre: GridPoint) => ({
+    x: (centre.x - origin.x) * GRID - width / 2,
+    y: (centre.y - origin.y) * GRID - height / 2,
+  });
+  const centreOf = (x: number, y: number) => ({
+    x: origin.x + (x + width / 2) / GRID,
+    y: origin.y + (y + height / 2) / GRID,
+  });
+  const at = corner(caption.centre);
+  // Last place the text could land during the drag (where it was, at first).
+  const landing = useRef(caption.centre);
 
-  if (c.type === "label") {
-    // A label's net name follows the flag's tip, wherever the flag points.
-    const tip = toWorld({ x: bounds.max.x + 0.3, y: 0 }, origin);
-    const right = tip.x >= -0.01;
-    return {
-      x: tip.x * GRID - (right ? 0 : TEXT_WIDTH),
-      y: tip.y * GRID - height / 2,
-      align: right ? "left" : "right",
-    };
-  }
-  const centre = { x: ((min.x + max.x) / 2) * GRID, y: ((min.y + max.y) / 2) * GRID };
-  if (max.y - min.y >= max.x - min.x) {
-    return { x: (max.x + CAPTION_GAP) * GRID, y: centre.y - height / 2, align: "left" };
-  }
-  return {
-    x: centre.x - TEXT_WIDTH / 2,
-    y: (min.y - CAPTION_GAP) * GRID - height,
-    align: "center",
-  };
+  return (
+    <Text
+      text={caption.text}
+      x={at.x}
+      y={at.y}
+      width={width}
+      height={height}
+      align="center"
+      verticalAlign="middle"
+      wrap="none"
+      fontSize={height}
+      fill={color}
+      listening={draggable}
+      draggable={draggable}
+      onMouseEnter={(e) => setCursor(e, "move")}
+      onMouseLeave={(e) => setCursor(e, "")}
+      onDragStart={(e) => {
+        e.cancelBubble = true;
+        landing.current = caption.centre;
+      }}
+      onDragMove={(e) => {
+        e.cancelBubble = true;
+        const node = e.target;
+        const centre = onDrag?.(caption.kind, centreOf(node.x(), node.y())) ?? landing.current;
+        landing.current = centre;
+        node.position(corner(centre));
+      }}
+      onDragEnd={(e) => {
+        e.cancelBubble = true;
+        const node = e.target;
+        const centre = onDrag?.(caption.kind, centreOf(node.x(), node.y())) ?? landing.current;
+        // Back onto its place even if the store value does not change.
+        node.position(corner(centre));
+        onMove?.(caption.kind, centre);
+      }}
+    />
+  );
 }
 
 interface ComponentSymbolProps {
@@ -126,18 +157,28 @@ interface ComponentSymbolProps {
   onMove?: (position: { x: number; y: number }, detach: boolean) => void;
   /** Left press on a pin. When set, the pins are clickable (and do not start a drag). */
   onPinMouseDown?: (pin: string) => void;
+  /** The pointer enters a clickable pin (its name) or leaves it (null). */
+  onPinHover?: (pin: string | null) => void;
   /** Left double-click on the component (not on one of its clickable pins). */
   onDoubleClick?: () => void;
+  /** The pointer enters the component (`true`) or leaves it (`false`). */
+  onHover?: (over: boolean) => void;
   /**
    * Pins whose square is drawn: by default all of them. On the schematic, only the unconnected
    * ones, so a connected pin does not leave a square behind.
    */
   markedPins?: ReadonlySet<string>;
+  /** Where its name and value are drawn (`layoutCaptions`). Default: as if alone. */
+  captions?: Caption[];
+  /** While a text is dragged: where it would land, or null if nowhere free nearby. */
+  onCaptionDrag?: (kind: CaptionKind, centre: GridPoint) => GridPoint | null;
+  /** End of a text's drag: where it landed. When set, the texts can be dragged. */
+  onCaptionMove?: (kind: CaptionKind, centre: GridPoint) => void;
 }
 
 /**
  * A placed component. The outer group only translates (and is what gets dragged); the inner
- * group applies mirror then rotation, so the caption stays upright and readable.
+ * group applies mirror then rotation, so the texts stay upright and readable.
  */
 export function ComponentSymbol({
   component: c,
@@ -149,8 +190,13 @@ export function ComponentSymbol({
   onDrag,
   onMove,
   onPinMouseDown,
+  onPinHover,
   onDoubleClick,
+  onHover,
   markedPins,
+  captions,
+  onCaptionDrag,
+  onCaptionMove,
 }: ComponentSymbolProps) {
   const colors = useCanvasColors();
   const def = getDef(c.type);
@@ -158,8 +204,7 @@ export function ComponentSymbol({
   const bounds = symbolBounds(def);
   const pad = 0.3;
 
-  const text = caption(c, def);
-  const textBox = text === null ? null : captionPlacement(c, bounds, text);
+  const texts = captions ?? standaloneCaptions(c);
 
   const snap = (v: number) => Math.round(v / GRID) * GRID;
 
@@ -177,6 +222,8 @@ export function ComponentSymbol({
       onDblClick={(e) => {
         if (e.evt.button === 0) onDoubleClick?.();
       }}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
       onDragMove={(e) => {
         const node = e.target;
         node.position({ x: snap(node.x()), y: snap(node.y()) });
@@ -205,8 +252,13 @@ export function ComponentSymbol({
           strokeWidth={selected ? 1 : 0}
           dash={[4, 4]}
         />
-        {def.symbol.map((shape, i) => (
-          <SymbolShapeNode key={i} shape={shape} color={color} />
+        {symbolOf(def, c.params).map((shape, i) => (
+          <SymbolShapeNode
+            key={i}
+            shape={shape}
+            color={color}
+            lightColor={c.type === "led" && !selected ? ledColor(c.params) : color}
+          />
         ))}
         {def.pins
           .filter((pin) => !markedPins || markedPins.has(pin.name))
@@ -231,8 +283,14 @@ export function ComponentSymbol({
               width={PIN_HIT * GRID}
               height={PIN_HIT * GRID}
               fill="rgba(0,0,0,0)"
-              onMouseEnter={(e) => setCursor(e, "crosshair")}
-              onMouseLeave={(e) => setCursor(e, "")}
+              onMouseEnter={(e) => {
+                setCursor(e, "crosshair");
+                onPinHover?.(pin.name);
+              }}
+              onMouseLeave={(e) => {
+                setCursor(e, "");
+                onPinHover?.(null);
+              }}
               onMouseDown={(e) => {
                 if (e.evt.button !== 0) return;
                 // Keep the press from reaching the group, which would select and drag it.
@@ -243,18 +301,18 @@ export function ComponentSymbol({
             />
           ))}
       </Group>
-      {text !== null && textBox !== null && (
-        <Text
-          text={text}
-          x={textBox.x}
-          y={textBox.y}
-          width={TEXT_WIDTH}
-          align={textBox.align}
-          fontSize={FONT_SIZE}
-          fill={selected ? colors.selected : colors.text}
-          listening={false}
+      {texts.map((caption) => (
+        <CaptionText
+          key={caption.kind}
+          caption={caption}
+          origin={c.position}
+          // A text moved by hand that something now covers is shown, without blocking.
+          color={selected ? colors.selected : caption.overlapping ? colors.danger : colors.text}
+          draggable={draggable && !ghost && onCaptionMove !== undefined}
+          onDrag={onCaptionDrag}
+          onMove={onCaptionMove}
         />
-      )}
+      ))}
     </Group>
   );
 }

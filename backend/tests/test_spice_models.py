@@ -319,3 +319,81 @@ def test_subckt_with_param_with_real_ngspice(analysis: OpAnalysis | TranAnalysis
     assert result.errors == []
     output = next(t for t in result.traces if t.name == "v(out)").values
     assert output[-1] == pytest.approx(-10, rel=1e-3)  # gain -R2/R1
+
+
+# --- The real diodes of the library (#106) --------------------------------------------------
+
+
+def diode_voltage(diode_type: str, model: str, volts: float, *, reverse: bool = False) -> float:
+    """Voltage across a diode fed by `volts` through 1 kOhm, anode up (or reversed)."""
+    top, bottom = ("K", "A") if reverse else ("A", "K")
+    circuit = Schematic.model_validate(
+        {
+            "components": [
+                part("v", "voltage_source", "V1", waveform="dc", dc=str(volts)),
+                part("r", "resistor", "R1", resistance="1k"),
+                part("g", "ground"),
+                part("d1", diode_type, "D1", model=model),
+            ],
+            "wires": [
+                wire("w1", "v.+", "r.1"),
+                wire("w2", "v.-", "g.1"),
+                wire("w3", "r.2", f"d1.{top}"),
+                wire("w4", f"d1.{bottom}", "g.1"),
+            ],
+        }
+    )
+    result = run_simulation(generate_netlist(circuit, OpAnalysis()), OpAnalysis())
+    assert result.errors == []
+    return next(t for t in result.traces if t.name == "v(n2)").values[0]
+
+
+@pytest.mark.parametrize(
+    ("diode_type", "model"),
+    [
+        ("diode", "D_SIGNAL"),
+        ("diode", "D_RECT"),
+        ("zener", "D_Z3V3"),
+        ("zener", "D_Z5V1"),
+        ("zener", "D_Z12"),
+        ("led", "D_LED_RED"),
+        ("led", "D_LED_GREEN"),
+    ],
+)
+def test_library_diode_netlist(diode_type: str, model: str) -> None:
+    circuit = diode_circuit(part("d1", diode_type, "D1", model=model))
+    netlist = generate_netlist(circuit, OpAnalysis()).netlist
+    assert f"D1 n2 0 {model}\n" in netlist
+    assert netlist.count(f".model {model} D(") == 1
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+@pytest.mark.parametrize(
+    ("diode_type", "model", "low", "high"),
+    [
+        ("diode", "D_SIGNAL", 0.55, 0.75),  # silicon: about 0.65 V
+        ("diode", "D_RECT", 0.55, 0.75),
+        ("led", "D_LED_RED", 1.6, 2.0),  # red LED: about 1.8 V
+        ("led", "D_LED_GREEN", 2.0, 2.6),  # green LED: more than red
+    ],
+)
+def test_library_diode_forward_voltage(
+    diode_type: str, model: str, low: float, high: float
+) -> None:
+    assert low < diode_voltage(diode_type, model, 5) < high
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+@pytest.mark.parametrize(("model", "zener", "supply"), [("D_Z3V3", 3.3, 10), ("D_Z5V1", 5.1, 10),
+                                                        ("D_Z12", 12, 20)])  # fmt: skip
+def test_zener_limits_the_voltage(model: str, zener: float, supply: float) -> None:
+    assert diode_voltage("zener", model, supply, reverse=True) == pytest.approx(zener, abs=0.1)
+
+
+@pytest.mark.ngspice
+@pytest.mark.skipif(not has_ngspice(), reason="ngspice is not available")
+def test_rectifier_diode_blocks_in_reverse() -> None:
+    # Reversed, the diode carries no current: the whole 50 V stays across it.
+    assert diode_voltage("diode", "D_RECT", 50, reverse=True) == pytest.approx(50, abs=0.01)

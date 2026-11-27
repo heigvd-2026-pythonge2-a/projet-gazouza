@@ -416,7 +416,7 @@ def test_on_window_closing_prompts_french_dialog_when_unsaved(
     window = MagicMock()
     window.native = None
     window.events._pywebviewready.is_set.return_value = True
-    window.evaluate_js.return_value = True
+    window.evaluate_js.side_effect = lambda script, **_kw: script == launcher.UNSAVED_CHANGES_JS
     window.create_confirmation_dialog.return_value = dialog_choice
 
     assert launcher.on_window_closing(window) is expected_close
@@ -468,12 +468,131 @@ def test_on_window_closing_allows_close_when_confirmation_dialog_fails(
     window = MagicMock()
     window.native = None
     window.events._pywebviewready.is_set.return_value = True
-    window.evaluate_js.return_value = True
+    window.evaluate_js.side_effect = lambda script, **_kw: script == launcher.UNSAVED_CHANGES_JS
     window.create_confirmation_dialog.side_effect = RuntimeError("dialog error")
 
     with caplog.at_level("ERROR"):
         assert launcher.on_window_closing(window) is True
     assert "Failed to show unsaved changes confirmation dialog" in caplog.text
+
+
+def test_on_window_closing_delegates_to_psice_request_close_and_destroys_without_guard() -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    destroy_results: list[bool] = []
+
+    class _FakeWindow:
+        native = None
+        events = SimpleNamespace(_pywebviewready=SimpleNamespace(is_set=lambda: True))
+        create_confirmation_dialog = MagicMock()
+
+        def evaluate_js(
+            self, script: str, callback: Callable[[object], None] | None = None
+        ) -> object:
+            if script == launcher.UNSAVED_CHANGES_JS:
+                return True
+            if script == launcher.CLOSE_REQUEST_CHECK_JS:
+                return True
+            if script == launcher.CLOSE_REQUEST_JS:
+                assert callback is not None
+                captured_callbacks.append(callback)
+                return True
+            raise AssertionError(f"Unexpected JS: {script}")
+
+        def destroy(self) -> None:
+            # Simulate pywebview FormClosing firing on destroy while psiceHasUnsavedChanges() is
+            # still true (e.g. after "Fermer sans enregistrer").
+            destroy_results.append(launcher.on_window_closing(self))
+
+    window = _FakeWindow()
+    assert launcher.on_window_closing(window) is False
+    window.create_confirmation_dialog.assert_not_called()
+    assert len(captured_callbacks) == 1
+
+    # Duplicate close clicks while the page dialog is open must be ignored cleanly.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+
+    captured_callbacks[0](True)
+    assert destroy_results == [True]
+    # Bypass flag is consumed once, so a later close check runs normally.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 2
+    captured_callbacks[1](False)
+
+
+@pytest.mark.parametrize("decision", [False, None, {"message": "rejected"}])
+def test_on_window_closing_psice_request_close_cancel_or_error_keeps_window_open(
+    decision: object,
+) -> None:
+    captured_callbacks: list[Callable[[object], None]] = []
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
+
+    def fake_eval(script: str, callback: Callable[[object], None] | None = None) -> object:
+        if script in (launcher.UNSAVED_CHANGES_JS, launcher.CLOSE_REQUEST_CHECK_JS):
+            return True
+        if script == launcher.CLOSE_REQUEST_JS:
+            assert callback is not None
+            captured_callbacks.append(callback)
+            return "true"
+        raise AssertionError(f"Unexpected JS: {script}")
+
+    window.evaluate_js.side_effect = fake_eval
+
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 1
+
+    captured_callbacks[0](decision)
+    window.destroy.assert_not_called()
+    window.create_confirmation_dialog.assert_not_called()
+
+    # Pending state is cleared, so closing again prompts a new dialog request.
+    assert launcher.on_window_closing(window) is False
+    assert len(captured_callbacks) == 2
+    captured_callbacks[1](False)
+
+
+@pytest.mark.parametrize("bad_start", [None, False, RuntimeError("eval failed")])
+def test_on_window_closing_falls_back_if_request_close_fails_to_start(
+    bad_start: object,
+) -> None:
+    window = MagicMock()
+    window.native = None
+    window.events._pywebviewready.is_set.return_value = True
+    window.create_confirmation_dialog.return_value = True
+
+    def fake_eval(script: str, callback: Callable[[object], None] | None = None) -> object:
+        if script in (launcher.UNSAVED_CHANGES_JS, launcher.CLOSE_REQUEST_CHECK_JS):
+            return True
+        if script == launcher.CLOSE_REQUEST_JS:
+            assert callback is not None
+            if isinstance(bad_start, Exception):
+                raise bad_start
+            return bad_start
+        raise AssertionError(f"Unexpected JS: {script}")
+
+    window.evaluate_js.side_effect = fake_eval
+
+    assert launcher.on_window_closing(window) is True
+    window.create_confirmation_dialog.assert_called_once_with(
+        "Psice",
+        "Le schéma contient des modifications non enregistrées. Fermer quand même ?",
+    )
+    assert id(window) not in launcher._pending_async_close_windows
+
+
+def test_force_close_window_clears_bypass_and_logs_on_destroy_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    window = MagicMock()
+    window.destroy.side_effect = RuntimeError("destroy failed")
+
+    with caplog.at_level("ERROR"):
+        launcher._force_close_window(window)
+
+    assert "Failed to destroy window after close confirmation" in caplog.text
+    assert id(window) not in launcher._bypass_close_guard_windows
 
 
 def test_has_unsaved_changes_timeout_and_winforms_do_events(
@@ -1438,6 +1557,7 @@ def test_run_self_check_success_and_cli(
     _touch(fake_ngspice)
 
     monkeypatch.setattr(launcher, "locate_ngspice", lambda: fake_ngspice)
+    monkeypatch.setattr(launcher, "_verify_desktop_runtime", lambda: "ok")
     monkeypatch.setattr(
         launcher,
         "run_simulation",
@@ -1462,6 +1582,7 @@ def test_run_self_check_success_and_cli(
     assert "Self-check OK:" in out
     assert "rc_points=2" in out
     assert "v_out_final=4.9663V" in out
+    assert "desktop_runtime=ok" in out
 
     # Windowed mode with sys.stdout=None completes cleanly without crashing.
     monkeypatch.setattr(sys, "stdout", None)
@@ -1543,6 +1664,43 @@ def test_run_self_check_auto_resolves_frontend_and_validates_failures(
     # CLI returns exit code 1 when self-check fails at runtime.
     assert launcher.main(["--self-check", "--frontend-dist", str(tmp_path / "missing")]) == 1
     assert "Erreur :" in capsys.readouterr().err
+
+
+def test_verify_desktop_runtime_skips_outside_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_called(_name: str) -> object:
+        raise AssertionError("the Windows backend must not be imported outside Windows")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(launcher.importlib, "import_module", fail_if_called)
+    assert launcher._verify_desktop_runtime() == "skipped"
+
+
+def test_verify_desktop_runtime_imports_the_windows_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    imported: list[str] = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", imported.append)
+    assert launcher._verify_desktop_runtime() == "ok"
+    assert imported == ["webview.platforms.edgechromium"]
+
+
+def test_verify_desktop_runtime_reports_blocked_assemblies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def blocked(_name: str) -> object:
+        raise RuntimeError("Failed to resolve Python.Runtime.Loader.Initialize")
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(launcher.importlib, "import_module", blocked)
+    with pytest.raises(RuntimeError, match=r"\.NET.*Python\.Runtime\.Loader") as exc_info:
+        launcher._verify_desktop_runtime()
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="pywebview's .NET backend is Windows-only")
+def test_verify_desktop_runtime_loads_real_assemblies() -> None:
+    assert launcher._verify_desktop_runtime() == "ok"
 
 
 def test_verify_launcher_app_detects_broken_routes(tmp_path: Path) -> None:
