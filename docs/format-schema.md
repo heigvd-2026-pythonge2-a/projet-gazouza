@@ -410,6 +410,7 @@ produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 | `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
 | `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
 | `SHORTED_COMPONENT` | avertissement | « R1 est court-circuité : toutes ses broches sont reliées au même nœud (n3), il n'a aucun effet. » | le composant et le nœud |
+| `TRAN_STEP_TOO_LARGE` | avertissement | « V1 (sinusoïde de 1 kHz) : un point toutes les 100 µs, la courbe sera mal dessinée. Demande au moins 2 000 points. » (`.tran` seulement : pas plus grand que 1/20 de la période d'une sinusoïde, ou que 1/10 de la durée haute ou basse d'une impulsion) | la source |
 | `LED_OVERCURRENT` | avertissement | « La LED D1 reçoit 120 mA : elle grillerait (max ~30 mA). Ajoute une résistance en série. » | la LED |
 | `LED_REVERSE_VOLTAGE` | avertissement | « La LED D1 est soumise à 9 V en inverse : elle grillerait (max ~5 V). » | la LED |
 

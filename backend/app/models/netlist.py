@@ -31,6 +31,7 @@ DiagnosticCode = Literal[
     "JUNCTION_DANGLING",
     "MILLI_SUFFIX",
     "SHORTED_COMPONENT",
+    "TRAN_STEP_TOO_LARGE",
     # After the simulation (Damien): a LED that would burn out
     "LED_OVERCURRENT",
     "LED_REVERSE_VOLTAGE",

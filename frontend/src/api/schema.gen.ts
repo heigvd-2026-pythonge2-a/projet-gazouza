@@ -261,6 +261,7 @@ export interface components {
         | "JUNCTION_DANGLING"
         | "MILLI_SUFFIX"
         | "SHORTED_COMPONENT"
+        | "TRAN_STEP_TOO_LARGE"
         | "LED_OVERCURRENT"
         | "LED_REVERSE_VOLTAGE"
         | "SINGULAR_MATRIX"
