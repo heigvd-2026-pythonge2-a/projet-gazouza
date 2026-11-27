@@ -394,22 +394,22 @@ produites par `engines/` (Antoine) dans `SimulationResult.errors`.
 | --- | --- | --- | --- |
 | `NO_GROUND` | erreur | « Le circuit n'a pas de masse. » | aucune |
 | `PIN_NOT_CONNECTED` | erreur | « La broche 2 de R1 n'est reliée à rien. » | la broche |
-| `MISSING_NAME` | erreur | « Un composant n'a pas de nom. » | le composant |
+| `MISSING_NAME` | erreur | « Un composant « Résistance » n'a pas de nom. » | le composant |
 | `DUPLICATE_ID` | erreur | « Deux éléments ont le même identifiant c2. » (composants, jonctions et fils partagent les mêmes ids) | les éléments |
-| `DUPLICATE_NAME` | erreur | « Deux composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
-| `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour une résistance. » | le composant |
-| `BAD_VALUE` | erreur | « R1 : la résistance « 1kk » n'est pas une valeur valide. » | le composant |
-| `MISSING_PARAM` | erreur | « R1 : la résistance n'est pas renseignée. » | le composant |
+| `DUPLICATE_NAME` | erreur | « Plusieurs composants s'appellent R1. » (masses et étiquettes non concernées) | les composants |
+| `BAD_PREFIX` | erreur | « C1 n'est pas un nom valide pour « Résistance » : il doit commencer par R et ne contenir que des lettres, des chiffres et _. » | le composant |
+| `BAD_VALUE` | erreur | « R1 : « 1kk » n'est pas une valeur valide pour « Résistance ». » (pour un choix : « … n'est pas un choix possible. ») | le composant |
+| `MISSING_PARAM` | erreur | « R1 : « Résistance » n'est pas renseigné. » | le composant |
 | `UNKNOWN_TYPE` | erreur | « Le type « triode » n'existe pas dans la bibliothèque. » | le composant |
-| `UNKNOWN_ENDPOINT` | erreur | « Le fil w3 est accroché à un composant, une broche ou une jonction qui n'existe pas. » | le fil |
-| `LABEL_CONFLICT` | erreur | « Le nœud porte deux noms : in et out. » | les étiquettes |
+| `UNKNOWN_ENDPOINT` | erreur | « Le fil w3 est accroché à un composant ou une broche qui n'existe pas. » (ou « … à une jonction qui n'existe pas. ») | le fil |
+| `LABEL_CONFLICT` | erreur | « Le nœud porte plusieurs noms : in et out. » | les étiquettes |
 | `LABEL_ON_GROUND` | erreur | « L'étiquette out est reliée à la masse. » | l'étiquette |
-| `BAD_LABEL_NAME` | erreur | « « 2out » n'est pas un nom de nœud valide. » | l'étiquette |
-| `AC_SOURCE_NOT_FOUND` | erreur | « La source d'entrée de l'analyse AC n'existe pas. » | aucune |
-| `DC_SOURCE_NOT_FOUND` | erreur | « La source balayée n'existe pas. » | aucune |
+| `BAD_LABEL_NAME` | erreur | « « 2out » n'est pas un nom de nœud valide : lettres, chiffres et _, en commençant par une lettre, et pas n1, n2… (réservés aux noms automatiques). » | l'étiquette |
+| `AC_SOURCE_NOT_FOUND` | erreur | « La source d'entrée de l'analyse AC n'existe pas ou n'est pas une source. » | aucune |
+| `DC_SOURCE_NOT_FOUND` | erreur | « La source balayée n'existe pas ou n'est pas une source. » | aucune |
 | `WIRE_DANGLING` | avertissement | « Le fil w4 a un bout qui n'est relié à rien. » | le fil |
 | `JUNCTION_DANGLING` | avertissement | « La jonction j1 est reliée à moins de 2 fils. » | la jonction |
-| `MILLI_SUFFIX` | avertissement | « R1 : « 1M » vaut 1 milliohm. Pour un mégohm, écris « 1Meg ». » | le composant |
+| `MILLI_SUFFIX` | avertissement | « R1 : « 1M » se lit « milli » en SPICE. Pour « méga », écris « 1Meg ». » | le composant |
 | `SHORTED_COMPONENT` | avertissement | « R1 est court-circuité : toutes ses broches sont reliées au même nœud (n3), il n'a aucun effet. » | le composant et le nœud |
 | `LED_OVERCURRENT` | avertissement | « La LED D1 reçoit 120 mA : elle grillerait (max ~30 mA). Ajoute une résistance en série. » | la LED |
 | `LED_REVERSE_VOLTAGE` | avertissement | « La LED D1 est soumise à 9 V en inverse : elle grillerait (max ~5 V). » | la LED |
