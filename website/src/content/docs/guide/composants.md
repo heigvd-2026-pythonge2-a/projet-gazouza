@@ -44,6 +44,9 @@ même sans fil dessiné entre eux.
 Un nom d'étiquette ne contient que des lettres, des chiffres et `_`, et commence par une lettre.
 Les majuscules ne comptent pas : `Out` et `out` désignent le même nœud.
 
+L'étiquette se dessine comme un **drapeau rose**, rempli, pour qu'on ne la prenne pas pour une
+résistance (un rectangle vide). Son nom est écrit à côté de la pointe.
+
 La **direction** (panneau Propriétés) change seulement la forme du drapeau, pas la simulation :
 
 | Direction | Drapeau |

@@ -12,8 +12,11 @@ export type ParamOption = NonNullable<ApiParamDef["options"]>[number];
 export type ParamDef = Required<ApiParamDef>;
 
 export type SymbolShape =
-  /** `tone: "light"`: drawn in the component's own light colour (the arrows of an LED, #294). */
-  | { kind: "line"; points: number[]; tone?: "light" }
+  /**
+   * `tone: "light"`: drawn in the component's own light colour (the arrows of an LED, #294).
+   * `filled`: a closed outline, filled (the flag of a label, #324).
+   */
+  | { kind: "line"; points: number[]; tone?: "light"; filled?: true }
   | { kind: "rect"; x: number; y: number; width: number; height: number }
   | { kind: "circle"; x: number; y: number; radius: number }
   /** Arc from `start` to `start + sweep` degrees, clockwise (y axis points down). */
@@ -85,12 +88,28 @@ const OPAMP_BODY: SymbolShape[] = [
  * Flag of a node label, by direction (its `direction` parameter), pin at (0, 0). All of them fill
  * the same box (x from 0 to 2, y from -0.5 to 0.5), so the caption and the bounds do not move when
  * the direction changes. An input points to its pin (the signal comes in), an output away from it.
+ * They are filled (in the label colours of the theme), so the plain one is not taken for the
+ * outline of a resistor (#324).
  */
 export const LABEL_FLAGS = {
-  none: [{ kind: "line", points: [0, 0, 0, -0.5, 2, -0.5, 2, 0.5, 0, 0.5, 0, 0] }],
-  input: [{ kind: "line", points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] }],
-  output: [{ kind: "line", points: [0, 0, 0, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0, 0.5, 0, 0] }],
-  bidir: [{ kind: "line", points: [0, 0, 0.5, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0.5, 0.5, 0, 0] }],
+  none: [{ kind: "line", filled: true, points: [0, 0, 0, -0.5, 2, -0.5, 2, 0.5, 0, 0.5, 0, 0] }],
+  input: [
+    { kind: "line", filled: true, points: [0, 0, 0.5, -0.5, 2, -0.5, 2, 0.5, 0.5, 0.5, 0, 0] },
+  ],
+  output: [
+    {
+      kind: "line",
+      filled: true,
+      points: [0, 0, 0, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0, 0.5, 0, 0],
+    },
+  ],
+  bidir: [
+    {
+      kind: "line",
+      filled: true,
+      points: [0, 0, 0.5, -0.5, 1.5, -0.5, 2, 0, 1.5, 0.5, 0.5, 0.5, 0, 0],
+    },
+  ],
 } as const satisfies Record<string, SymbolShape[]>;
 
 /** Envelope of the transistors (IEC 60617 draws it, and beginners know it from textbooks). */

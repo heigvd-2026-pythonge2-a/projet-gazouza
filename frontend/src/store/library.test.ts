@@ -202,6 +202,27 @@ describe("label direction", () => {
       expect(first?.kind === "line" && first.points.slice(0, 2), value).toEqual([0, 0]);
     }
   });
+
+  it("fills every flag, a closed outline, and no other symbol (#324)", () => {
+    setLibrary(fixtureLibrary());
+    for (const [direction, flag] of Object.entries(LABEL_FLAGS)) {
+      for (const shape of flag) {
+        expect(shape.kind === "line" && shape.filled, direction).toBe(true);
+        const { points } = shape;
+        expect(points.slice(-2), direction).toEqual(points.slice(0, 2));
+      }
+    }
+    const others = paletteGroups()
+      .flatMap((g) => g.defs)
+      .filter((d) => d.type !== "label");
+    expect(others.length).toBeGreaterThan(0);
+    for (const def of others) {
+      expect(
+        def.symbol.some((s) => s.kind === "line" && s.filled),
+        def.type,
+      ).toBe(false);
+    }
+  });
 });
 
 describe("loadLibrary", () => {
